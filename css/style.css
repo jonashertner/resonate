@@ -58,7 +58,23 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html, body { height: 100%; overscroll-behavior: none; }
+/* iOS Safari lays fixed elements out against a viewport that runs underneath
+   its floating toolbar, so anything anchored to the bottom is buried. dvh is
+   the visible height, and every full-screen surface is sized by it. */
+:root { --app-h: 100vh; --chrome-gap: 0px; }
+@supports (height: 100dvh) {
+  /* what the browser's own chrome is covering: the gap between the layout
+     viewport a fixed element sees and the part of it you can actually look at */
+  :root { --app-h: 100dvh; --chrome-gap: calc(100vh - 100dvh); }
+}
+
+html, body {
+  height: var(--app-h);
+  width: 100%;
+  overscroll-behavior: none;
+}
+/* nothing may drift sideways: the page itself never scrolls */
+html { overflow: hidden; }
 
 body {
   font-family: var(--font);
@@ -68,6 +84,9 @@ body {
   background: var(--field);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  position: fixed;
+  inset: 0;
+  height: var(--app-h);
 }
 
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
@@ -87,7 +106,7 @@ a { color: inherit; }
 
 /* ---------- the field ---------- */
 
-.app { position: fixed; inset: 0; }
+.app { position: fixed; inset: 0; height: var(--app-h); }
 
 #map { position: absolute; inset: 0; background: var(--field); z-index: 0; }
 .leaflet-container { font: inherit; background: var(--field); }
@@ -114,7 +133,7 @@ a { color: inherit; }
 
 body.dropping::after {
   content: "drop the photo. the field will place it";
-  position: fixed; inset: 0; z-index: 200;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 200;
   display: grid; place-items: center;
   background: var(--scrim);
   font-size: clamp(20px, 3vw, 34px);
@@ -126,7 +145,7 @@ body.dropping::after {
 /* ---------- corner marks ---------- */
 
 .fm {
-  position: fixed; z-index: 20;
+  position: absolute; z-index: 20;
   appearance: none;
   color: var(--ink);
   font-family: var(--font);
@@ -302,7 +321,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .add-confirm {
   position: fixed; z-index: 35;
   left: 22px; right: 22px;
-  bottom: calc(env(safe-area-inset-bottom) + 64px);
+  bottom: calc(var(--chrome-gap) + env(safe-area-inset-bottom) + 64px);
   display: flex; gap: 14px; align-items: baseline;
   text-align: left;
   font-size: clamp(16px, 2.2vw, 22px);
@@ -315,7 +334,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- the command line ---------- */
 
 .cmd {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 50;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0 clamp(20px, 7vw, 120px) 14vh;
   background: linear-gradient(180deg, transparent, var(--field) 72%);
@@ -362,7 +381,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- the index: a summoned poster ---------- */
 
 .index {
-  position: fixed; inset: 0; z-index: 40;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 40;
   overflow-y: auto; overscroll-behavior: contain;
   background: color-mix(in oklab, var(--field) 96%, transparent);
   padding: clamp(20px, 5vw, 72px);
@@ -521,7 +540,8 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- the plate ---------- */
 
 .plate {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 30;
+  position: fixed; top: 0; right: 0; z-index: 30;
+  height: var(--app-h);
   width: min(460px, 92vw);
   overflow-y: auto; overscroll-behavior: contain;
   padding: clamp(24px, 4vh, 56px) clamp(20px, 2.5vw, 44px) 48px 120px;
@@ -630,7 +650,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- posters (census · kept · voices · keys) ---------- */
 
 .poster {
-  position: fixed; inset: 0; z-index: 45;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 45;
   overflow-y: auto; overscroll-behavior: contain;
   background: color-mix(in oklab, var(--field) 97%, transparent);
   padding: clamp(20px, 5vw, 72px);
@@ -710,7 +730,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- the resonance report ---------- */
 
 .report {
-  position: fixed; inset: 0; z-index: 60;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 60;
   overflow-y: auto; overscroll-behavior: contain;
   background: color-mix(in oklab, var(--field) 96%, transparent);
   padding: clamp(20px, 6vw, 90px);
@@ -815,7 +835,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- toast ---------- */
 
 .toast {
-  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: calc(var(--chrome-gap) + 60px); left: 50%; transform: translateX(-50%);
   z-index: 1200;
   font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--ink);
@@ -895,7 +915,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .edit-tags:hover { color: var(--ink); }
 
 .name-ask {
-  position: fixed; inset: 0; z-index: 90;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 90;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0 clamp(20px, 7vw, 120px) 18vh;
   background: linear-gradient(180deg, transparent, var(--field) 70%);
@@ -923,7 +943,7 @@ body.greet .fm-word { animation: word-pulse 1.8s ease-in-out 3; }
 
 /* ---------- the first evening ---------- */
 #intro {
-  position: fixed; inset: 0; z-index: 2000;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 2000;
   background: #17100d;
   cursor: pointer;
 }
@@ -1028,7 +1048,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 .intro-skip:hover { border-color: rgba(247, 242, 232, 0.8); background: rgba(10, 7, 5, 0.55); }
 
 .threshold {
-  position: fixed; inset: 0; z-index: 240;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 240;
   display: flex; flex-direction: column; justify-content: center;
   gap: 14px;
   padding: max(28px, env(safe-area-inset-top)) clamp(24px, 7vw, 108px) max(28px, env(safe-area-inset-bottom));
