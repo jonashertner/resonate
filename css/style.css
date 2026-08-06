@@ -1282,3 +1282,31 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   box-shadow: 0 0 0 1px var(--edge);
 }
 .visit-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--counter); }
+
+
+/* ---------- the mark on the film ---------- */
+/* It sits where the hero wordmark sits, at the same size and letterspacing, so
+   the dissolve turns the evening into a field beneath a word that never moves.
+   White here, ink there: the letters appear to change colour, not to vanish. */
+.intro-mark {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  font-family: var(--font);
+  font-size: clamp(40px, 12.5vw, 132px);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variation-settings: 'wght' 600;
+  color: #f7f2ea;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 2px 40px rgba(8, 5, 3, 0.55), 0 0 90px rgba(8, 5, 3, 0.35);
+  animation: mark-in 1600ms var(--e-enter) 300ms both;
+}
+.intro-mark-word {
+  border-bottom: max(1.5px, 0.045em) solid rgba(247, 242, 234, 0.62);
+  padding-bottom: 0.25em;
+}
+@keyframes mark-in { from { opacity: 0; } }
+#intro.brief .intro-mark { animation-duration: 500ms; animation-delay: 0ms; }
+@media (prefers-reduced-motion: reduce) { .intro-mark { animation: none; } }

@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf40';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf40';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf40';
-import * as mapView from './map.js?v=rf40';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf40';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf40';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf40';
-import { exifGPS } from './exif.js?v=rf40';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf41';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf41';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf41';
+import * as mapView from './map.js?v=rf41';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf41';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf41';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf41';
+import { exifGPS } from './exif.js?v=rf41';
 
 // ---------- helpers ----------
 
