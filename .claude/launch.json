@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "resonate",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5178", "--bind", "127.0.0.1"],
+      "port": 5178,
+      "autoPort": false
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Resonate — a personal atlas</title>
+<meta name="description" content="Save the places that resonate with you. A beautiful, local-first personal atlas: tags, notes, photos, and shareable maps — no account required.">
+<meta name="theme-color" content="#EFEAE0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1620" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500;1,6..72,600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="boot">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-rings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" class="fill"/><path d="M12 5.6c3.6 0 6.4 2.9 6.4 6.4 0 3.6-2.9 6.4-6.4 6.4-3.6 0-6.4-2.9-6.4-6.4 0-3.6 2.9-6.4 6.4-6.4z" opacity=".55"/><path d="M12 2.4c5.3 0 9.6 4.3 9.6 9.6s-4.3 9.6-9.6 9.6S2.4 17.3 2.4 12 6.7 2.4 12 2.4z" opacity=".28"/></symbol>
+    <symbol id="i-stats" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4"/><path d="M12 2v2.4M12 19.6V22M22 12h-2.4M4.4 12H2M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7M19.1 19.1l-1.7-1.7M6.6 6.6L4.9 4.9"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6z"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3.4M12 18.6V22M22 12h-3.4M5.4 12H2"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.5 19L8.5 12l7-7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-7 0-6M9 7V4h6v3"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4"/><path d="M15.8 8.2l-2.2 5.4-5.4 2.2 2.2-5.4z"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8.2A1.8 1.8 0 0 1 4.8 6.4h2.6L9.5 4h5l2.1 2.4h2.6A1.8 1.8 0 0 1 21 8.2v9A1.8 1.8 0 0 1 19.2 19H4.8A1.8 1.8 0 0 1 3 17.2z"/><circle cx="12" cy="12.4" r="3.4"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M10.6 13.4a4 4 0 0 0 5.7.4l3-3a4 4 0 1 0-5.7-5.7l-1.2 1.2"/><path d="M13.4 10.6a4 4 0 0 0-5.7-.4l-3 3a4 4 0 1 0 5.7 5.7l1.2-1.2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4"/><path d="M2.6 12h18.8M12 2.6c2.7 2.6 4 6 4 9.4s-1.3 6.8-4 9.4c-2.7-2.6-4-6-4-9.4s1.3-6.8 4-9.4z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M4 19.5h16"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M4 19.5h16"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 15l6-6M7.5 12.5l-2 2a3.5 3.5 0 1 0 5 5l2-2M16.5 11.5l2-2a3.5 3.5 0 1 0-5-5l-2 2"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+    <symbol id="i-frame" viewBox="0 0 24 24"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15"/><circle cx="12" cy="12" r="2.2"/></symbol>
+  </defs>
+</svg>
+
+<div id="app" class="app">
+  <div id="map" aria-label="Map of your saved places"></div>
+
+  <!-- neat-line frame with live graticule -->
+  <div class="sheet-frame" id="sheetFrame" aria-hidden="true">
+    <div class="gticks gticks-top"></div>
+    <div class="gticks gticks-bottom"></div>
+    <div class="gticks gticks-left"></div>
+    <div class="gticks gticks-right"></div>
+  </div>
+
+  <!-- plate band: sheet marginalia -->
+  <div class="sheet-band" id="sheetBand">
+    <span class="band-title sc-head">Resonate — A Personal Atlas</span>
+    <span class="band-scale">
+      <svg class="north" width="10" height="26" viewBox="0 0 12 30" aria-hidden="true">
+        <text x="6" y="7" text-anchor="middle">N</text>
+        <path d="M6 29V10" class="n-line"/>
+        <path d="M6 10L2.8 17.5 6 15.6z" class="n-fill"/>
+        <path d="M6 10l3.2 7.5L6 15.6z" class="n-out"/>
+      </svg>
+      <span class="scale-wrap">
+        <span class="scale-bar" id="scaleBar"><i></i><i></i><i></i><i></i></span>
+        <span class="scale-label mono" id="scaleLabel"></span>
+      </span>
+    </span>
+    <span class="band-right">
+      <span class="band-coords mono" id="coordsReadout"></span>
+      <span class="band-attrib mono">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OSM</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></span>
+    </span>
+  </div>
+
+  <!-- top-right instruments -->
+  <div class="map-actions" role="toolbar" aria-label="Map tools">
+    <button class="icon-btn" id="btnShare" title="Share this map" aria-label="Share this map"><svg><use href="#i-share"/></svg></button>
+    <button class="icon-btn" id="btnStats" title="The census" aria-label="Statistics"><svg><use href="#i-stats"/></svg></button>
+    <button class="icon-btn" id="btnTheme" title="Day / night chart" aria-label="Toggle light or dark theme"><svg class="theme-sun"><use href="#i-sun"/></svg><svg class="theme-moon"><use href="#i-moon"/></svg></button>
+    <button class="icon-btn" id="btnSettings" title="Colophon" aria-label="Settings"><svg><use href="#i-gear"/></svg></button>
+  </div>
+
+  <!-- bottom-right navigation -->
+  <div class="map-nav" role="toolbar" aria-label="Map navigation">
+    <button class="icon-btn" id="btnZoomIn" title="Zoom in" aria-label="Zoom in"><svg><use href="#i-zoom-in"/></svg></button>
+    <button class="icon-btn" id="btnZoomOut" title="Zoom out" aria-label="Zoom out"><svg><use href="#i-zoom-out"/></svg></button>
+    <button class="icon-btn" id="btnFitAll" title="Frame my places" aria-label="Frame all my places on the map"><svg><use href="#i-frame"/></svg></button>
+    <button class="icon-btn" id="btnLocate" title="Go to my location" aria-label="Go to my location"><svg><use href="#i-locate"/></svg></button>
+  </div>
+
+  <!-- the index page -->
+  <aside class="rail" id="rail">
+    <header class="rail-head">
+      <div class="masthead">
+        <div class="mast-agency">
+          <span class="sc-head">Resonate · A Personal Atlas</span>
+          <span class="data data-sm" id="placeCount"></span>
+        </div>
+        <h1 class="mast-title">Index of Places</h1>
+        <div class="scotch" aria-hidden="true"></div>
+      </div>
+      <button class="catalogue-slot" id="btnSearch" aria-label="Search or add a place">
+        <span>Search, or add anywhere on Earth…</span>
+        <kbd class="data data-sm">⌘K</kbd>
+      </button>
+      <div class="ix-filters" id="filterChips" aria-label="Filter by tag"></div>
+      <div class="ix-toolbar">
+        <div class="ix-status" id="statusSeg" role="tablist" aria-label="Filter by status">
+          <button data-status="all" class="ix-filter active" role="tab">All</button>
+          <button data-status="visited" class="ix-filter" role="tab">Been</button>
+          <button data-status="wishlist" class="ix-filter" role="tab">Want to go</button>
+        </div>
+        <label class="arranged">
+          <span class="arranged-label sc-head" id="arrangedLabel">By newest ▾</span>
+          <select id="sortSelect" aria-label="Sort places">
+            <option value="recent">Newest</option>
+            <option value="name">A – Z</option>
+            <option value="distance">Nearest</option>
+            <option value="rating">Top rated</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <div class="rail-body" id="railBody">
+      <div id="listView" class="list" role="list"></div>
+      <div id="detailView" class="detail" hidden></div>
+    </div>
+    <button class="rail-handle" id="railHandle" aria-label="Expand or collapse the panel"><span></span></button>
+  </aside>
+
+  <!-- floating add (mobile) -->
+  <button class="fab" id="fabAdd" aria-label="Add a place"><svg><use href="#i-plus"/></svg></button>
+</div>
+
+<!-- gazetteer slip (command palette) -->
+<div class="overlay palette-overlay" id="paletteOverlay" hidden>
+  <div class="palette sheet" role="dialog" aria-modal="true" aria-label="Search or add a place">
+    <div class="palette-input-row">
+      <input id="paletteInput" type="text" placeholder="Anywhere on Earth…" autocomplete="off" spellcheck="false">
+      <kbd class="data data-sm">esc</kbd>
+    </div>
+    <div class="palette-results" id="paletteResults"></div>
+    <div class="palette-foot mono">↑↓ navigate · ↵ open or add · gazetteer by OpenStreetMap</div>
+  </div>
+</div>
+
+<!-- the census (stats) -->
+<div class="overlay modal-overlay" id="statsOverlay" hidden>
+  <div class="modal sheet" role="dialog" aria-modal="true" aria-label="Statistics">
+    <header class="modal-head">
+      <span class="eyebrow sc-head">The Census</span>
+      <h2 class="mast-title">The story so far</h2>
+      <div class="scotch" aria-hidden="true"></div>
+      <button class="icon-btn modal-x" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body" id="statsBody"></div>
+  </div>
+</div>
+
+<!-- the colophon (settings) -->
+<div class="overlay modal-overlay" id="settingsOverlay" hidden>
+  <div class="modal sheet" role="dialog" aria-modal="true" aria-label="Settings">
+    <header class="modal-head">
+      <span class="eyebrow sc-head">Colophon</span>
+      <h2 class="mast-title">How this atlas is kept</h2>
+      <div class="scotch" aria-hidden="true"></div>
+      <button class="icon-btn modal-x" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body" id="settingsBody"></div>
+  </div>
+</div>
+
+<!-- shared map notice -->
+<div class="share-banner" id="shareBanner" hidden>
+  <svg><use href="#i-globe"/></svg>
+  <span>A shared atlas, read-only.</span>
+  <button class="btn btn-small" id="btnSaveCopy">Save a copy</button>
+  <button class="btn btn-small btn-ghost" id="btnExitShared">Open my atlas</button>
+</div>
+
+<div class="toast mono" id="toast" hidden></div>
+
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+<input type="file" id="photoFile" accept="image/*" hidden>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/markercluster/leaflet.markercluster.js"></script>
+<script src="vendor/lz/lz-string.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

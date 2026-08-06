@@ -1,0 +1,12 @@
+{
+  "name": "Resonate — a personal atlas",
+  "short_name": "Resonate",
+  "description": "Save the places that resonate with you. Local-first, no account, beautifully yours.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F2F4F0",
+  "theme_color": "#1F2A35",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
