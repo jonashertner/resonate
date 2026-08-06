@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf35';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf35';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf35';
-import * as mapView from './map.js?v=rf35';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf35';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf35';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf35';
-import { exifGPS } from './exif.js?v=rf35';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf36';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf36';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf36';
+import * as mapView from './map.js?v=rf36';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf36';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf36';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf36';
+import { exifGPS } from './exif.js?v=rf36';
 
 // ---------- helpers ----------
 
@@ -120,7 +120,7 @@ function applyWorldState() {
   const sel = state.selectedId && placeById(state.selectedId);
   if (sel && sel.tags[0]) {
     const t = tagById(sel.tags[0]);
-    if (t) return setWorld({ hue: t.hue, tint: 0.62 });
+    if (t) return setWorld({ hue: t.hue, tint: 0.55 });
   }
   if (state.filters.tags.size) {
     const first = tagById([...state.filters.tags][0]);
@@ -142,7 +142,12 @@ function applyTheme() {
   document.documentElement.dataset.theme = resolvedTheme();
   mapView.setBasemap(resolvedTheme());
   const w = $('#themeWord');
-  if (w) w.textContent = resolvedTheme() === 'dark' ? 'day' : 'night';
+  if (w) {
+    const mode = store.settings.theme;
+    w.textContent = mode === 'auto' ? `auto · ${resolvedTheme() === 'dark' ? 'night' : 'day'}` : mode === 'dark' ? 'night' : 'day';
+    w.setAttribute('aria-label', `Light and dark: ${w.textContent}. Press to change.`);
+    w.title = 'day, night, or follow this device';
+  }
 }
 
 function setTheme(mode) {
@@ -855,7 +860,7 @@ function selectRoute(id, { fly = true } = {}) {
   state.selectedRouteId = id;
   state.selectedId = null;
   const t = tagById(r.tags[0]);
-  if (t) setWorld({ hue: t.hue, tint: 0.62 }); else applyWorldState();
+  if (t) setWorld({ hue: t.hue, tint: 0.55 }); else applyWorldState();
   syncMarkers();
   if (fly) mapView.frameRoute(r);
   renderRoutePlate(r);
@@ -1111,7 +1116,7 @@ function openForeignPlate(corrId, placeId) {
   const p = c?.places.find(x => x.id === placeId);
   if (!c || !p) return;
   state.foreign = { corrId, name: c.name, sig: mapView.sigAngle(c.id), place: p };
-  setWorld({ hue: c.hue, tint: 0.62 });
+  setWorld({ hue: c.hue, tint: 0.55 });
   renderPlate(p, { foreign: state.foreign });
   openSurface('plate');
 }
@@ -1183,7 +1188,7 @@ function renderVoices() {
     row.querySelectorAll('[data-hue]').forEach(b => b.addEventListener('click', () => {
       store.updateCorrespondent(id, { hue: parseInt(b.dataset.hue, 10) });
       renderVoices();
-      setWorld({ hue: parseInt(b.dataset.hue, 10), tint: 0.62 });
+      setWorld({ hue: parseInt(b.dataset.hue, 10), tint: 0.7 });
       setTimeout(clearWorld, 1600);
     }));
   });
@@ -1207,7 +1212,7 @@ function openFolioReport(payload) {
   const held = places.filter(holdAlready);
   const fresh = places.filter(p => !holdAlready(p));
   const sig = mapView.sigAngle(author);
-  setWorld({ hue: 42, tint: 0.55 });
+  setWorld({ hue: 42, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -1313,7 +1318,7 @@ function openAskReport(payload) {
   const from = String(payload.from || '').trim() || 'someone';
   const q = String(payload.q || '').trim();
   const matches = q ? queryMyAtlas(q) : [];
-  setWorld({ hue: 155, tint: 0.55 });
+  setWorld({ hue: 155, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -1357,7 +1362,7 @@ function openAtlasReport(payload) {
   const picks = r.picks.slice(0, 7);
   const sig = mapView.sigAngle(name);
 
-  setWorld({ hue: 278, tint: 0.55 });
+  setWorld({ hue: 278, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -2719,7 +2724,11 @@ function init() {
   $('#fmCommand').addEventListener('click', togglePalette);
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
   $('#themeWord').addEventListener('click', () => {
-    setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark');
+    // day, night, or whatever this device is doing: one press moves along,
+    // so following the system is somewhere you can get back to
+    const order = ['auto', 'light', 'dark'];
+    const next = order[(order.indexOf(store.settings.theme) + 1) % order.length];
+    setTheme(next);
   });
   $('#indexKeys').addEventListener('click', () => {
     closeSurface('indexOverlay');

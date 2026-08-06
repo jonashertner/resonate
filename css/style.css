@@ -124,20 +124,24 @@ a { color: inherit; }
 
 /* the tiles obey --hue: grayscale strips CARTO, sepia re-seeds at ~48°, rotate steers */
 #map .leaflet-tile-pane {
-  /* invert-amplify-invert: darkens linework proportionally, ground stays paper */
+  /* invert-amplify-invert: darkens linework proportionally, ground stays paper.
+     the tint is a breath of colour through the map's features, never a wash
+     over its paper: measured, a squared curve to 1.35 drove the ground itself
+     to 0.26 chroma and cost the linework its separation. linear to 0.5 keeps
+     the paper paper, and reads more clearly. */
   filter: grayscale(1) invert(1) brightness(2.05) invert(1)
     sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * var(--tint) * 1.35))
+    saturate(calc(var(--tint) * 0.5))
     contrast(1.02);
 }
 :root[data-theme="dark"] #map .leaflet-tile-pane {
   filter: grayscale(1) brightness(1.55)
     sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * var(--tint) * 2.1))
+    saturate(calc(var(--tint) * 0.75))
     contrast(1.04) brightness(1.02);
 }
 /* greens land dull in filter space — boost the band */
-:root[data-hueband="green"] #map .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(2.05) invert(1) sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg)) saturate(calc(var(--tint) * var(--tint) * 1.7)) contrast(1.02); }
+:root[data-hueband="green"] #map .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(2.05) invert(1) sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg)) saturate(calc(var(--tint) * 0.62)) contrast(1.02); }
 
 .locate-dot { stroke: var(--ink); fill: none; }
 
@@ -195,7 +199,7 @@ body.dropping::after {
   animation: hint-breathe 2.6s ease-in-out infinite alternate;
   transition: font-size 1.15s var(--e-enter);
 }
-@keyframes hint-breathe { from { opacity: 0.55; } to { opacity: 1; } }
+@keyframes hint-breathe { from { opacity: 0.78; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .fm-hint { animation: none; } }
 .fm-count {
   margin-left: 0.9em; font-size: 10.5px; letter-spacing: 0.1em;
@@ -964,8 +968,10 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 }
 .name-ask .word-row { margin-top: 24px; }
 
+/* the name draws the eye by underlining itself, never by fading: at four
+   tenths opacity the one thing a newcomer must notice looked disabled */
 body.greet .fm-word { animation: word-pulse 1.8s ease-in-out 3; }
-@keyframes word-pulse { 50% { opacity: 0.4; } }
+@keyframes word-pulse { 50% { border-bottom-color: var(--ink); } }
 @media (prefers-reduced-motion: reduce) { body.greet .fm-word { animation: none; } }
 
 /* ---------- the first evening ---------- */
