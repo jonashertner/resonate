@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf14';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf14';
-import * as mapView from './map.js?v=rf14';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf14';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf14';
-import { exifGPS } from './exif.js?v=rf14';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf15';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf15';
+import * as mapView from './map.js?v=rf15';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf15';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf15';
+import { exifGPS } from './exif.js?v=rf15';
 
 // ---------- helpers ----------
 
@@ -1699,6 +1699,7 @@ function runIntro(onDone) {
   el.hidden = false;
   let raf = 0;
   let finished = false;
+  let cutoff = 0;
 
   // the generated scene: a long table at dusk, spoken in bokeh
   function startScene() {
@@ -1756,6 +1757,7 @@ function runIntro(onDone) {
     store.saveSettings();
     document.body.classList.add('entering');
     el.classList.add('dissolve');
+    clearTimeout(cutoff);
     setTimeout(() => {
       cancelAnimationFrame(raf);
       try { video.pause(); } catch { /* fine */ }
@@ -1765,21 +1767,47 @@ function runIntro(onDone) {
     }, 1900);
   };
 
-  // real footage takes over when assets/intro.mp4 exists
-  video.addEventListener('canplay', () => {
+  // the film is the evening; the drawn scene only stands in until it arrives,
+  // or for good if it never does
+  let filmUp = false;
+  cutoff = setTimeout(finish, 6200);
+
+  const raiseFilm = () => {
+    if (filmUp) return;
+    filmUp = true;
     el.classList.add('has-video');
     cancelAnimationFrame(raf);
-    video.play().catch(() => {});
-  }, { once: true });
+    video.muted = true;
+    const started = video.play();
+    // if the browser refuses to roll the film, the drawn scene stays rather
+    // than leaving a frozen frame on screen
+    if (started && started.catch) {
+      started.catch(() => {
+        if (video.currentTime > 0) return;
+        filmUp = false;
+        el.classList.remove('has-video');
+        startScene();
+      });
+    }
+    // let the film run its length, within reason, instead of the drawn scene's budget
+    clearTimeout(cutoff);
+    const len = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 7;
+    cutoff = setTimeout(finish, Math.min(len, 9) * 1000 + 300);
+  };
+
+  // canplay may already have fired on a warm cache, so ask the element directly
+  if (video.readyState >= 2) raiseFilm();
+  video.addEventListener('loadeddata', raiseFilm);
+  video.addEventListener('canplay', raiseFilm);
   video.addEventListener('error', () => {}, { once: true });
   video.addEventListener('ended', () => finish(), { once: true });
+  video.load();
   startScene();
 
   el.addEventListener('click', finish);
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') { finish(); document.removeEventListener('keydown', esc); }
   });
-  setTimeout(finish, 6200);
 }
 
 // ---------- init ----------

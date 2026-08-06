@@ -31,5 +31,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # this site's deployments have been taking well past the action's
+      # ten minute default, and were being aborted after they had succeeded
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1500000
