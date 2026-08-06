@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf31';
-import { measure, simplify } from './route.js?v=rf31';
+import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf32';
+import { measure, simplify } from './route.js?v=rf32';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';

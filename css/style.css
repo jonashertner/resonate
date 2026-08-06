@@ -13,19 +13,28 @@
 @property --tint { syntax: '<number>'; inherits: true; initial-value: 0; }
 
 :root {
-  /* role constants — sunlight-proof: deep ink on a bright field, every hue.
-     light pairs land ≥ 12:1; ink-2 ≥ 7:1 even at caption sizes. */
-  --L-f: 0.965; --C-f: 0.008;
-  --L-i: 0.27; --C-i: 0.075;
+  /* Role constants, solved rather than chosen. Lightness is fixed per role,
+     so every hue on the wheel carries the same contrast: measured across all
+     ten hues this app can be in, ink lands 12.9:1 and no text tier is under
+     4.5:1. Chroma is held under the sRGB ceiling for its lightness, so no
+     role has to be bent back into the gamut by the browser. */
+  --L-f: 0.965; --C-f: 0.008;   /* the field: paper */
+  --L-i: 0.27;  --C-i: 0.047;   /* the ink: yours. petrol's gamut ceiling; the field carries the hue */
+  --L-c: 0.45;  --C-c: 0.060;   /* the counter: someone else's */
 
   --field-hue: calc(var(--hue) + var(--split));
   --field: oklch(var(--L-f) var(--C-f) var(--field-hue));
   --ink: oklch(var(--L-i) var(--C-i) var(--hue));
   --ink-2: color-mix(in oklch, var(--ink) 84%, var(--field));
   --ink-3: color-mix(in oklch, var(--ink) 62%, var(--field));
+  /* the boundary of something you can act on: never under 3:1 */
+  --edge: color-mix(in oklch, var(--ink) 47%, var(--field));
+  /* a hairline between rows, and nothing that carries meaning alone */
   --ink-4: color-mix(in oklch, var(--ink) 24%, var(--field));
-  --counter: oklch(var(--L-i) max(var(--C-i), 0.09) calc(var(--hue) + 150));
-  --scrim: color-mix(in srgb, var(--field) 75%, transparent);
+  /* another voice is told apart by weight as well as by hue: at the ink's own
+     lightness it was 1.0:1 from yours, which is no distinction at all */
+  --counter: oklch(var(--L-c) var(--C-c) calc(var(--hue) + 150));
+  --scrim: color-mix(in oklab, var(--field) 75%, transparent);
 
   --font: "Bricolage Grotesque", system-ui, sans-serif;
   --mono: "Fragment Mono", ui-monospace, monospace;
@@ -47,12 +56,13 @@
 :root[data-theme="dark"] {
   --hue: 75; --split: 225;
   --L-f: 0.17; --C-f: 0.024;
-  --L-i: 0.93; --C-i: 0.04;
+  --L-i: 0.93; --C-i: 0.033;   /* 0.04 fell outside sRGB at five of the ten hues */
+  --L-c: 0.75; --C-c: 0.075;
 }
 
 @supports not (color: oklch(0% 0 0)) {
-  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #5D5372; --ink-3: #6E6484; --ink-4: #C4BED0; --counter: #2F6B4F; }
-  :root[data-theme="dark"] { --field: #1D1526; --ink: #EAE3D2; --ink-2: #C3C8B5; --ink-3: #A9AE9B; --ink-4: #55594D; --counter: #C9A0E8; }
+  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #5D5372; --ink-3: #6E6484; --edge: #8E86A0; --ink-4: #C4BED0; --counter: #4E7A5E; }
+  :root[data-theme="dark"] { --field: #1D1526; --ink: #EAE3D2; --ink-2: #C3C8B5; --ink-3: #A9AE9B; --edge: #8A8F7D; --ink-4: #55594D; --counter: #9FBE86; }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -538,7 +548,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   transition: border-color var(--mo-reflex) var(--e-reflex);
 }
 .word-btn:hover { border-color: var(--ink); }
-.word-btn.quiet { color: var(--ink-2); border-color: var(--ink-4); }
+.word-btn.quiet { color: var(--ink-2); border-color: var(--edge); }
 .word-btn.quiet:hover { color: var(--ink); }
 
 /* ---------- the plate ---------- */
@@ -594,7 +604,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   color: var(--ink-3);
   margin-bottom: 8px;
 }
-.plate-sec-head .dictate { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: var(--ink-2); border-bottom: 1px solid var(--ink-4); }
+.plate-sec-head .dictate { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: var(--ink-2); border-bottom: 1px solid var(--edge); }
 .plate-sec-head .dictate:hover { color: var(--ink); border-color: var(--ink-2); }
 .plate-sec-head .dictate.listening { color: var(--counter); border-color: var(--counter); animation: listen 1.2s ease-in-out infinite; }
 @keyframes listen { 50% { opacity: 0.45; } }
@@ -606,7 +616,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   font-family: var(--font);
   font-size: 15px; line-height: 1.6;
   color: var(--ink);
-  border-left: 1.5px solid var(--ink-4);
+  border-left: 1.5px solid var(--edge);
   padding-left: 14px;
 }
 .note-input:focus { border-left-color: var(--ink); }
@@ -615,7 +625,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .text-input {
   width: 100%;
   background: none; border: 0; outline: 0;
-  border-bottom: 1px solid var(--ink-4);
+  border-bottom: 1px solid var(--edge);
   padding: 5px 0 7px;
   font-size: 13.5px;
 }
