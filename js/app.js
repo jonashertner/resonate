@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf17';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf17';
-import * as mapView from './map.js?v=rf17';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf17';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf17';
-import { exifGPS } from './exif.js?v=rf17';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf20';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf20';
+import * as mapView from './map.js?v=rf20';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf20';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf20';
+import { exifGPS } from './exif.js?v=rf20';
 
 // ---------- helpers ----------
 
@@ -1690,6 +1690,11 @@ function renderPaletteResults(q) {
 
 // ---------- the first evening ----------
 
+const DISSOLVE_S = 1.4;   // matches #intro.dissolve in the stylesheet
+const FILM_IN = 1.6;      // enter the evening already in motion
+const FILM_TAIL = 0.9;    // the dissolve opens this long before the last frame,
+                          // so the face at the end of the shot is still there
+
 function runIntro(onDone) {
   const el = $('#intro');
   const video = $('#introVideo');
@@ -1765,7 +1770,7 @@ function runIntro(onDone) {
       el.hidden = true;
       document.body.classList.remove('entering');
       onDone();
-    }, 1900);
+    }, DISSOLVE_S * 1000);
   };
 
   // the film is the evening; the drawn scene only stands in until it arrives,
@@ -1773,12 +1778,22 @@ function runIntro(onDone) {
   let filmUp = false;
   cutoff = setTimeout(finish, 6200);
 
+  const armCutoff = () => {
+    if (finished) return;
+    const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6;
+    const left = Math.min(dur, 12) - video.currentTime;
+    clearTimeout(cutoff);
+    cutoff = setTimeout(finish, Math.max(1.8, left - FILM_TAIL) * 1000);
+  };
+
   const raiseFilm = () => {
     if (filmUp) return;
     filmUp = true;
     el.classList.add('has-video');
     cancelAnimationFrame(raf);
     video.muted = true;
+    // open on a frame that is already in motion, not on the first still
+    try { if (video.duration > FILM_IN + 2) video.currentTime = FILM_IN; } catch { /* fine */ }
     const started = video.play();
     // if the browser refuses to roll the film, the drawn scene stays rather
     // than leaving a frozen frame on screen
@@ -1793,9 +1808,12 @@ function runIntro(onDone) {
     // the field arrives while the table is still alive: the dissolve begins
     // partway through, so the film never ends on screen
     clearTimeout(cutoff);
-    const len = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6;
-    const hold = Math.max(1.6, Math.min(len, 9) * 0.52) * 1000;
-    cutoff = setTimeout(finish, hold);
+    // stay to the end of the shot: the dissolve opens over the last of it.
+    // measured from where the film actually starts, since a server without
+    // range requests will refuse the seek and simply begin at zero
+    armCutoff();
+    video.addEventListener('playing', armCutoff);
+    video.addEventListener('seeked', armCutoff);
   };
 
   // canplay may already have fired on a warm cache, so ask the element directly
@@ -1858,6 +1876,20 @@ function init() {
     store.settings.hintShown = true;
     store.saveSettings();
     setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
+  }
+
+  // the name waits in the middle of the field until the field is used
+  const leaveHero = () => {
+    if (!document.body.classList.contains('hero')) return;
+    document.body.classList.remove('hero');
+    $('#fmHint').hidden = true;
+  };
+  if (!location.hash.startsWith('#m=')) {
+    document.body.classList.add('hero');
+    mapView.onFirstUse(leaveHero);
+    ['keydown', 'wheel'].forEach(ev =>
+      document.addEventListener(ev, leaveHero, { once: true, passive: true }));
+    $('#fmCommand').addEventListener('click', leaveHero, { once: true });
   }
 
   function maybeAskName() {

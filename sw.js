@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first: the field should never be stale when a network exists.
 
-const CACHE = 'resonate-shell-v16';
+const CACHE = 'resonate-shell-v17';
 
 const SHELL = [
   './',

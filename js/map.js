@@ -75,6 +75,18 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
   return map;
 }
 
+// the first time a hand touches the field, whoever is waiting is told
+export function onFirstUse(fn) {
+  // only a hand counts: zoomstart also fires for the app's own framing
+  const once = () => {
+    fn();
+    map.off('dragstart', once);
+    map.off('click', once);
+  };
+  map.on('dragstart', once);
+  map.on('click', once);
+}
+
 export function setBasemap(mode /* 'light' | 'dark' */) {
   if (tileLayer) map.removeLayer(tileLayer);
   tileLayer = L.tileLayer(TILE[mode] || TILE.light, {
