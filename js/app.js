@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf1';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf1';
-import * as mapView from './map.js?v=rf1';
-import { makeShareUrl, parseShareHash, clearShareHash } from './share.js?v=rf1';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf1';
-import { exifGPS } from './exif.js?v=rf1';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf2';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf2';
+import * as mapView from './map.js?v=rf2';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf2';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf2';
+import { exifGPS } from './exif.js?v=rf2';
 
 // ---------- helpers ----------
 
@@ -719,6 +719,107 @@ function renderVoices() {
 // ---------- the resonance report ----------
 
 function openReport(payload) {
+  if (payload.kind === 'folio') return openFolioReport(payload);
+  if (payload.kind === 'ask') return openAskReport(payload);
+  return openAtlasReport(payload);
+}
+
+// a folio arrives: an envelope, not a feed item
+function openFolioReport(payload) {
+  const author = String(payload.author || '').trim() || 'unsigned';
+  const places = (payload.places || [])
+    .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    .map(p => newPlace({ ...p, photos: [] }));
+  const held = places.filter(holdAlready);
+  const fresh = places.filter(p => !holdAlready(p));
+  const sig = mapView.sigAngle(author);
+  setWorld({ hue: 42, tint: 0.55 });
+
+  const el = $('#reportOverlay');
+  el.innerHTML = `
+    <div class="rp-eyebrow">a folio from ${esc(author)}</div>
+    <h1 class="rp-name">${esc(payload.title || 'untitled')}</h1>
+    ${payload.dedication ? `<p class="rp-ded">“${esc(payload.dedication)}”</p>` : ''}
+    <ul class="rp-evidence mono">
+      <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'} enclosed</li>
+      ${held.length ? `<li><b>${held.length}</b> you already hold — you can trust the rest</li>` : ''}
+      ${fresh.length ? `<li><b>${fresh.length}</b> new to your field</li>` : ''}
+    </ul>
+    <div class="rp-case">
+      ${places.map((p, i) => `
+        <div class="rp-pick">
+          <span class="no">${fmtNo(i + 1)}</span>
+          <span class="nm">${esc(p.name)}</span>
+          <span class="why">${esc(p.city || '')}${p.rating ? ' · ' + starsText(p.rating) : ''}</span>
+          ${holdAlready(p)
+            ? '<span class="held">you hold this</span>'
+            : `<button class="adopt" data-adopt="${i}">adopt</button>`}
+        </div>`).join('')}
+    </div>
+    <div class="rp-foot">
+      ${fresh.length ? `<button class="word-btn" id="rpTakeAll">take all ${fresh.length}</button>` : ''}
+      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+    </div>`;
+  el.hidden = false;
+  requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
+
+  const ref = { name: author, sig };
+  $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
+    const p = places[parseInt(b.dataset.adopt, 10)];
+    if (!p) return;
+    adoptPlace(p, ref);
+    b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
+  }));
+  $('#rpTakeAll')?.addEventListener('click', () => {
+    fresh.forEach(p => store.addPlace(newPlace({
+      ...p, id: undefined, photos: [],
+      provenance: { name: author, sig, adoptedAt: new Date().toISOString() },
+    })));
+    renderAll();
+    clearShareHash();
+    el.hidden = true;
+    clearWorld();
+    mapView.fitAll(store.places);
+    toast(`${fresh.length} places taken — after ${author}`);
+  });
+  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+}
+
+// an ask arrives: your atlas has already drafted the reply
+function openAskReport(payload) {
+  const from = String(payload.from || '').trim() || 'someone';
+  const q = String(payload.q || '').trim();
+  const matches = q ? queryMyAtlas(q) : [];
+  setWorld({ hue: 155, tint: 0.55 });
+
+  const el = $('#reportOverlay');
+  el.innerHTML = `
+    <div class="rp-eyebrow">an ask, from ${esc(from)}</div>
+    <h1 class="rp-name">${esc(q || 'anything')}</h1>
+    <ul class="rp-evidence mono">
+      <li>your atlas holds <b>${matches.length}</b> answer${matches.length === 1 ? '' : 's'}</li>
+    </ul>
+    <div class="rp-foot">
+      ${matches.length ? `<button class="word-btn" id="askCompose">compose the folio for ${esc(from)}</button>` : ''}
+      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+    </div>`;
+  el.hidden = false;
+  requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
+
+  $('#askCompose')?.addEventListener('click', () => {
+    clearShareHash();
+    el.hidden = true;
+    clearWorld();
+    openFolioComposer({
+      title: q,
+      dedication: `for ${from}, who asked`,
+      places: matches,
+    });
+  });
+  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+}
+
+function openAtlasReport(payload) {
   const theirs = {
     tags: (payload.tags || []).map(t => newTag(t)),
     places: (payload.places || [])
@@ -784,6 +885,208 @@ function openReport(payload) {
     toast('visiting — your atlas is untouched · esc to leave');
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+}
+
+// ---------- folios: the atomic recommendation ----------
+
+function holdAlready(p) {
+  // do I already hold this place? (proximity + name family)
+  return store.places.some(mp => {
+    if (haversineKm(mp, p) > 0.15) return false;
+    const a = mp.name.toLowerCase(), b = p.name.toLowerCase();
+    return a.includes(b) || b.includes(a) || haversineKm(mp, p) < 0.04;
+  });
+}
+
+async function ensureAuthor() {
+  if (!store.settings.authorName) {
+    const name = prompt('Sign as…', '') || '';
+    store.settings.authorName = name;
+    store.saveSettings();
+  }
+  return store.settings.authorName;
+}
+
+function openFolioComposer({ title = '', dedication = '', places = null } = {}) {
+  const pool = places || filteredPlaces();
+  const chosen = new Set(pool.map(p => p.id));
+  const body = $('#folioBody');
+
+  const paint = () => {
+    body.innerHTML = `
+      <div class="fol-field"><input class="fol-title" id="folTitle" placeholder="Lisbon, the good part" value="${esc(title)}" maxlength="80"></div>
+      <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why — one line" value="${esc(dedication)}" maxlength="140"></div>
+      <div class="fol-count">${chosen.size} of ${pool.length} places enclosed</div>
+      ${pool.map(p => `
+        <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
+          <span class="in">${chosen.has(p.id) ? 'in' : 'out'}</span>
+          <span class="nm">${esc(p.name)}</span>
+          <span class="sub">${esc(p.city || '')}${p.rating ? ' · ' + starsText(p.rating) : ''}</span>
+        </button>`).join('')}
+      <div class="fol-acts">
+        <button class="word-btn" id="folCopy">copy the folio link</button>
+        <button class="word-btn quiet" id="folPublish">publish to the newsstand</button>
+        <button class="word-btn quiet" id="folAll">everything in</button>
+      </div>`;
+
+    $$('.fol-row', body).forEach(row => row.addEventListener('click', () => {
+      const id = row.dataset.fid;
+      chosen.has(id) ? chosen.delete(id) : chosen.add(id);
+      title = $('#folTitle').value;
+      dedication = $('#folDed').value;
+      paint();
+    }));
+    $('#folAll').addEventListener('click', () => {
+      pool.forEach(p => chosen.add(p.id));
+      title = $('#folTitle').value;
+      dedication = $('#folDed').value;
+      paint();
+    });
+    $('#folCopy').addEventListener('click', async () => {
+      const t = $('#folTitle').value.trim();
+      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
+      if (!chosen.size) return toast('nothing enclosed yet');
+      const author = await ensureAuthor();
+      const sel = pool.filter(p => chosen.has(p.id));
+      const tagIds = new Set(sel.flatMap(p => p.tags));
+      const url = makeFolioUrl({
+        title: t,
+        dedication: $('#folDed').value.trim(),
+        author,
+        tags: allTags().filter(x => tagIds.has(x.id)),
+        places: sel,
+      });
+      try { await navigator.clipboard.writeText(url); toast('folio copied — hand it to one person'); }
+      catch { prompt('Copy this folio:', url); }
+    });
+    $('#folPublish').addEventListener('click', async () => {
+      const t = $('#folTitle').value.trim();
+      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
+      if (!chosen.size) return toast('nothing enclosed yet');
+      const author = await ensureAuthor();
+      const sel = pool.filter(p => chosen.has(p.id));
+      const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, sel) + '\n```';
+      try { await navigator.clipboard.writeText(block); } catch { return prompt('Copy this, then paste it into the issue:', block); }
+      const issueUrl = 'https://github.com/jonashertner/resonate-commons/issues/new'
+        + '?title=' + encodeURIComponent('folio: ' + t)
+        + '&body=' + encodeURIComponent('Paste the folio below this line — it is already on your clipboard.\n\n');
+      window.open(issueUrl, '_blank', 'noopener');
+      toast('the folio is on your clipboard — paste it into the issue and submit');
+    });
+  };
+  paint();
+  openSurface('folioOverlay');
+}
+
+async function composeAsk() {
+  const q = prompt('Ask for… (a city, a taste, anything)', '');
+  if (!q || !q.trim()) return;
+  const from = await ensureAuthor();
+  const url = makeAskUrl({ from, q: q.trim() });
+  try { await navigator.clipboard.writeText(url); toast('ask copied — send it to someone whose taste you trust'); }
+  catch { prompt('Copy this ask:', url); }
+}
+
+// ---------- the newsstand: the commons, ranked by your own resonance ----------
+
+const COMMONS = 'https://jonashertner.github.io/resonate-commons';
+let newsIndex = null;
+
+function myDomainNames() {
+  return new Set(allTags().map(t => t.name.toLowerCase()));
+}
+function myCityNames() {
+  return new Set(allPlaces().map(p => (p.city || '').toLowerCase()).filter(Boolean));
+}
+
+function rankFolios(index, q) {
+  const needle = q.trim().toLowerCase();
+  const domains = myDomainNames();
+  const cities = myCityNames();
+  return index
+    .map(f => {
+      const hay = [f.title, f.author, f.dedication, ...(f.cities || []), ...(f.countries || []), ...(f.tags || [])].join(' ').toLowerCase();
+      if (needle && !hay.includes(needle)) return null;
+      const sharedDomains = (f.tags || []).filter(t => domains.has(t.toLowerCase()));
+      const knownCities = (f.cities || []).filter(c => cities.has(c.toLowerCase()));
+      const why = knownCities.length ? `your ${knownCities[0].toLowerCase()}`
+        : sharedDomains.length ? `${sharedDomains.length} shared domain${sharedDomains.length > 1 ? 's' : ''}`
+        : 'new ground';
+      const score = (needle ? 1 : 0) + knownCities.length * 0.8 + sharedDomains.length * 0.45 +
+        (Date.parse(f.publishedAt) || 0) / 1e15;
+      return { f, why, score };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+}
+
+async function openNewsstand(initialQ = '') {
+  openSurface('newsOverlay');
+  const body = $('#newsBody');
+  body.innerHTML = `<div class="news-note">consulting the newsstand…</div>`;
+  if (!newsIndex) {
+    try {
+      newsIndex = await (await fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })).json();
+    } catch {
+      body.innerHTML = `<div class="news-note">The newsstand is unreachable right now — it lives at ${COMMONS}. Try again with a connection.</div>`;
+      return;
+    }
+  }
+  const paint = (q) => {
+    const ranked = rankFolios(newsIndex, q);
+    body.innerHTML = `
+      <input class="news-search" id="newsQ" placeholder="a city, a taste, a name…" value="${esc(q)}">
+      ${ranked.length ? ranked.map(({ f, why }) => `
+        <button class="news-row" data-file="${esc(f.file)}">
+          <span class="t1"><span class="nm">${esc(f.title)}</span><span class="by">${esc(f.author)} · ${f.n}</span></span>
+          <span class="t2">
+            ${(f.cities || []).slice(0, 3).map(c => `<span>${esc(c)}</span>`).join('')}
+            <span class="why">${esc(why)}</span>
+          </span>
+        </button>`).join('')
+      : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet — publish the folio that should.</div>`}
+      <div class="news-note">Ranking happens here, against your own atlas. The newsstand never learns what you like.
+      Publish from any folio you compose (&gt;folio).</div>`;
+    const input = $('#newsQ');
+    input.addEventListener('input', debounce(() => paint(input.value), 250));
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    $$('.news-row', body).forEach(row => row.addEventListener('click', async () => {
+      try {
+        const rec = await (await fetch(`${COMMONS}/folios/${row.dataset.file}`, { cache: 'no-cache' })).json();
+        closeSurface('newsOverlay');
+        openFolioReport({
+          kind: 'folio',
+          title: rec.title,
+          dedication: rec.dedication,
+          author: rec.author,
+          places: (rec.places || []).map(p => ({ ...p, tags: [] })),
+        });
+      } catch { toast('could not open that folio'); }
+    }));
+  };
+  paint(initialQ);
+}
+
+function publishBlock(title, dedication, author, sel) {
+  const tagName = new Map(allTags().map(t => [t.id, t.name]));
+  return JSON.stringify({
+    title, dedication, author,
+    places: sel.map(p => ({
+      name: p.name, lat: p.lat, lng: p.lng, address: p.address, city: p.city,
+      country: p.country, tags: p.tags.map(t => tagName.get(t)).filter(Boolean),
+      status: p.status, rating: p.rating, note: p.note,
+    })),
+  }, null, 1);
+}
+
+function queryMyAtlas(q) {
+  const needle = q.toLowerCase();
+  const words = needle.split(/[\s,]+/).filter(Boolean);
+  return allPlaces().filter(p => {
+    const hay = [p.name, p.city, p.country, p.note, ...p.tags.map(t => tagById(t)?.name || '')].join(' ').toLowerCase();
+    return words.some(w => hay.includes(w));
+  });
 }
 
 // ---------- share ----------
@@ -1026,6 +1329,10 @@ const VERBS = {
   want: { run: () => setStatusFilter('wishlist'), hint: 'only places still to go' },
   all: { run: () => setStatusFilter('all'), hint: 'everything' },
   specimen: { run: seedDemo, hint: 'a demo atlas to play with' },
+  folio: { run: () => openFolioComposer(), hint: 'compose a slice to hand someone' },
+  ask: { run: composeAsk, hint: 'request someone’s taste' },
+  newsstand: { run: () => openNewsstand(), hint: 'published folios, ranked by your resonance' },
+  commons: { run: () => openNewsstand(), hint: 'published folios, ranked by your resonance' },
 };
 
 function setStatusFilter(status) {
@@ -1065,8 +1372,25 @@ function localMatches(q) {
   ).slice(0, 6);
 }
 
+function corrMatches(q) {
+  if (!q) return [];
+  const needle = q.toLowerCase();
+  const out = [];
+  for (const c of store.correspondents) {
+    for (const p of c.places) {
+      const hay = [p.name, p.city, p.country, p.note].join(' ').toLowerCase();
+      if (hay.includes(needle)) out.push({ kind: 'corrplace', c, p });
+      if (out.length >= 6) return out;
+    }
+  }
+  return out;
+}
+
 function rowHTML(item, i) {
   const hl = i === palette.hl ? ' hl' : '';
+  if (item.kind === 'corrplace') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.p.name)} <span class="after">· after ${esc(item.c.name)}</span></span><span class="row-sub">${esc([item.p.city, item.p.country].filter(Boolean).join(' · '))}${item.p.rating ? ' · ' + starsText(item.p.rating) : ''}</span></button>`;
+  }
   if (item.kind === 'local') {
     const p = item.place;
     const side = p.rating > 0 ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : 'been');
@@ -1105,6 +1429,7 @@ function activateRow(i) {
   const item = palette.rows[i];
   if (!item) return;
   if (item.kind === 'local') { popSurface(); selectPlace(item.place.id, { fly: true }); return; }
+  if (item.kind === 'corrplace') { popSurface(); openForeignPlate(item.c.id, item.p.id); return; }
   if (item.kind === 'remote') { popSurface(); addPlaceFromResult(item.r); return; }
   if (item.kind === 'verb') { popSurface(); item.run(); return; }
   if (item.kind === 'coords') { popSurface(); proposeAdd(item.lat, item.lng); return; }
@@ -1126,12 +1451,14 @@ const remoteSearch = debounce(async (q) => {
     const results = await searchGeo(q, { signal: palette.remoteAbort.signal });
     if (palette.input.value.trim() !== q) return;
     const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
+    const voices = corrMatches(q);
     const keys = new Set(locals.map(l => `${l.place.lat.toFixed(4)},${l.place.lng.toFixed(4)}`));
     const remote = results
       .filter(r => !keys.has(`${r.lat.toFixed(4)},${r.lng.toFixed(4)}`))
       .map(r => ({ kind: 'remote', r }));
     // column-reverse: first row sits nearest the input
-    paint([...locals, ...remote], (!locals.length && !remote.length) ? `nothing answers “${esc(q)}”` : '');
+    paint([...locals, ...voices, ...remote],
+      (!locals.length && !voices.length && !remote.length) ? `nothing answers “${esc(q)}”` : '');
   } catch (e) {
     if (e.name !== 'AbortError') console.warn('search failed', e);
   }
@@ -1159,7 +1486,8 @@ function renderPaletteResults(q) {
   }
   if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
   const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
-  paint(locals, r.rest ? '' : 'name a place — or  #tag   >verb   @voice');
+  const voices = corrMatches(r.rest);
+  paint([...locals, ...voices], r.rest ? '' : 'name a place — or  #tag   >verb   @voice');
   remoteSearch(r.rest);
 }
 

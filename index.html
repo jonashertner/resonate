@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf1">
+<link rel="stylesheet" href="css/style.css?v=rf2">
 </head>
 <body class="boot">
 
@@ -83,6 +83,18 @@
 <!-- the resonance report: opening someone's atlas -->
 <section class="report" id="reportOverlay" hidden aria-label="Resonance report"></section>
 
+<!-- the folio composer: a slice, a title, a dedication -->
+<section class="poster" id="folioOverlay" hidden aria-label="Compose a folio">
+  <header class="poster-head"><h1 class="poster-word">folio</h1><button class="poster-x" data-close>close</button></header>
+  <div class="poster-body" id="folioBody"></div>
+</section>
+
+<!-- the newsstand: published folios, ranked by your own resonance -->
+<section class="poster" id="newsOverlay" hidden aria-label="The newsstand">
+  <header class="poster-head"><h1 class="poster-word">newsstand</h1><button class="poster-x" data-close>close</button></header>
+  <div class="poster-body" id="newsBody"></div>
+</section>
+
 <!-- the command line -->
 <div class="cmd" id="paletteOverlay" hidden>
   <div class="cmd-results" id="paletteResults" role="listbox"></div>
@@ -99,6 +111,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf1"></script>
+<script type="module" src="js/app.js?v=rf2"></script>
 </body>
 </html>

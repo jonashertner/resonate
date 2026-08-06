@@ -619,6 +619,79 @@ body.dropping::after {
 .rp-pick .adopt { flex-shrink: 0; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--counter); border-bottom: 1px solid var(--counter); }
 .rp-foot { display: flex; flex-wrap: wrap; gap: 14px 30px; margin-top: 7vh; }
 
+/* ---------- the folio composer ---------- */
+
+.fol-field { margin-bottom: 3vh; }
+.fol-title {
+  width: 100%;
+  background: none; border: 0; outline: 0;
+  border-bottom: 1.5px solid var(--ink);
+  padding: 0.1em 0;
+  font-size: clamp(26px, 4vw, 44px);
+  font-variation-settings: 'opsz' 96, 'wdth' 84, 'wght' 620;
+  color: var(--ink);
+}
+.fol-title::placeholder, .fol-ded::placeholder { color: var(--ink-3); }
+.fol-ded {
+  width: 100%;
+  background: none; border: 0; outline: 0;
+  border-bottom: 1px solid var(--ink-4);
+  padding: 8px 0;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.fol-ded:focus { border-bottom-color: var(--ink); }
+.fol-count { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); margin: 3vh 0 8px; }
+.fol-row {
+  display: flex; align-items: baseline; gap: 16px;
+  width: 100%; text-align: left;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ink-4);
+  transition: opacity var(--mo-reflex);
+}
+.fol-row .nm { font-size: clamp(17px, 2vw, 24px); font-variation-settings: 'opsz' 40, 'wdth' 92, 'wght' 460; }
+.fol-row .sub { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.fol-row .in { flex-shrink: 0; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); }
+.fol-row[aria-pressed="false"] { opacity: 0.32; }
+.fol-row[aria-pressed="false"] .in { color: var(--ink-3); }
+.fol-acts { display: flex; flex-wrap: wrap; gap: 14px 30px; margin-top: 5vh; }
+
+/* folio & ask reports ride the .report styles; held rows are quiet */
+.rp-pick .held { flex-shrink: 0; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.rp-ded { margin-top: 2vh; font-size: clamp(17px, 2.2vw, 24px); font-variation-settings: 'opsz' 96, 'wdth' 88, 'wght' 340; color: var(--ink-2); max-width: 40ch; }
+
+/* voices section rows in the command line */
+.cmd-row .row-name .after { color: var(--counter); }
+
+/* the newsstand */
+.news-search {
+  width: 100%;
+  background: none; border: 0; outline: 0;
+  border-bottom: 1.5px solid var(--ink);
+  padding: 0.1em 0;
+  font-size: clamp(24px, 3.6vw, 40px);
+  font-variation-settings: 'opsz' 96, 'wdth' 86, 'wght' 340;
+  color: var(--ink);
+  margin-bottom: 4vh;
+}
+.news-search::placeholder { color: var(--ink-3); }
+.news-row {
+  display: block; width: 100%; text-align: left;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ink-4);
+}
+.news-row .t1 { display: flex; align-items: baseline; gap: 16px; }
+.news-row .nm {
+  font-size: clamp(20px, 2.6vw, 32px);
+  font-variation-settings: 'opsz' 40, 'wdth' 90, 'wght' 480;
+  transition: font-variation-settings 180ms var(--e-reflex);
+}
+.news-row:hover .nm { font-variation-settings: 'opsz' 40, 'wdth' 100, 'wght' 720; }
+.news-row .by { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.news-row .t2 { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 3px; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.news-row .why { color: var(--counter); }
+.news-note { font-size: 12.5px; color: var(--ink-3); margin-top: 4vh; max-width: 52ch; }
+
 /* ---------- toast ---------- */
 
 .toast {

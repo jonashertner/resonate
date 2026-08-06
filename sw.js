@@ -1,6 +1,6 @@
 // sw.js — offline app shell for Resonate
 
-const CACHE = 'resonate-shell-v4';
+const CACHE = 'resonate-shell-v5';
 const SHELL = [
   '.',
   'index.html',
