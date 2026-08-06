@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf20';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf20';
-import * as mapView from './map.js?v=rf20';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf20';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf20';
-import { exifGPS } from './exif.js?v=rf20';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf21';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf21';
+import * as mapView from './map.js?v=rf21';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf21';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf21';
+import { exifGPS } from './exif.js?v=rf21';
 
 // ---------- helpers ----------
 
@@ -155,16 +155,56 @@ media.addEventListener('change', () => { if (store.settings.theme === 'auto') ap
 const surfaces = [];
 const surfaceEl = id => $(`#${id}`);
 
+// a surface is a dialog: it announces itself, takes the focus, keeps it while
+// it stands, and hands it back to whatever summoned it
+const returnFocus = new Map();
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function focusables(el) {
+  return [...el.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null || n === document.activeElement);
+}
+
+function trapFocus(e) {
+  if (e.key !== 'Tab') return;
+  const id = topSurface();
+  if (!id) return;
+  const el = surfaceEl(id);
+  const items = focusables(el);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
+document.addEventListener('keydown', trapFocus, true);
+
 function openSurface(id, onShow) {
   if ((id === 'indexOverlay' && topSurface() === 'plate') ||
       (id === 'plate' && topSurface() === 'indexOverlay')) popSurface();
   if (surfaces.includes(id)) return;
+  returnFocus.set(id, document.activeElement);
   surfaces.push(id);
   const el = surfaceEl(id);
   el.hidden = false;
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
   el.classList.add('opening');
   setTimeout(() => el.classList.remove('opening'), 700);
   onShow?.();
+  if (id !== 'paletteOverlay') {
+    const items = focusables(el);
+    (items[0] || el).focus?.();
+  }
+}
+
+function restoreFocus(id) {
+  const back = returnFocus.get(id);
+  returnFocus.delete(id);
+  if (back && document.contains(back)) back.focus();
 }
 
 function popSurface() {
@@ -173,6 +213,7 @@ function popSurface() {
   surfaceEl(id).hidden = true;
   if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
   if (id === 'paletteOverlay') palette.remoteAbort?.abort();
+  restoreFocus(id);
   return true;
 }
 
@@ -182,6 +223,7 @@ function closeSurface(id) {
   surfaces.splice(i, 1);
   surfaceEl(id).hidden = true;
   if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
+  restoreFocus(id);
 }
 
 function topSurface() { return surfaces[surfaces.length - 1]; }
@@ -1890,6 +1932,7 @@ function init() {
     ['keydown', 'wheel'].forEach(ev =>
       document.addEventListener(ev, leaveHero, { once: true, passive: true }));
     $('#fmCommand').addEventListener('click', leaveHero, { once: true });
+    $('#fmIndex').addEventListener('click', leaveHero, { once: true });
   }
 
   function maybeAskName() {
