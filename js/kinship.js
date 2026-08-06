@@ -4,12 +4,20 @@
 // domains, and (3) where they diverge, the divergence is interesting — a
 // correspondent strong where you are blank expands you rather than mismatching.
 
-import { haversineKm } from './geocode.js?v=rf12';
+import { haversineKm } from './geocode.js?v=rf13';
 
 const SAME_PLACE_KM = 0.15; // within ~150m = the same place
 
 function norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+
+// evidence lines carry our own <b>/<i> markup, so every foreign value
+// interpolated into them must arrive inert
+function escv(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
 // tag distribution keyed by normalized tag NAME (ids differ across atlases)
@@ -136,15 +144,15 @@ export function evidenceLines(r, name) {
     lines.push('no overlaps yet, every mark here is news');
   }
   if (r.alignedDomains.length) {
-    lines.push(`both fluent in <i>${r.alignedDomains.slice(0, 2).join('</i> and <i>')}</i>`);
+    lines.push(`both fluent in <i>${r.alignedDomains.slice(0, 2).map(escv).join('</i> and <i>')}</i>`);
   } else if (r.alignment < 0.25) {
     lines.push('you read different sections of the world');
   }
   if (r.expansionDomains.length) {
-    const d = r.expansionDomains[0];
+    const d = escv(r.expansionDomains[0]);
     const n = r.picks.filter(p => p.expands).length;
     lines.push(n
-      ? `${name || 'they'} would hand you <b>${n}</b> place${n > 1 ? 's' : ''} in <i>${d}</i>, ground you barely touch`
+      ? `${escv(name) || 'they'} would hand you <b>${n}</b> place${n > 1 ? 's' : ''} in <i>${d}</i>, ground you barely touch`
       : `deep in <i>${d}</i>, where your atlas is thin`);
   }
   return lines;

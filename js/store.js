@@ -79,6 +79,8 @@ export function newPlace(partial = {}) {
     createdAt: now,
     updatedAt: now,
     ...partial,
+    // a caller passing id: undefined must still get a real, unique id
+    ...(partial.id ? {} : { id: uid() }),
   };
 }
 

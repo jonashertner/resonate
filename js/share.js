@@ -57,7 +57,10 @@ export function parseShareHash() {
     const json = LZString.decompressFromEncodedURIComponent(h.slice(3));
     if (!json) return null;
     const payload = JSON.parse(json);
-    if (!payload || !Array.isArray(payload.places)) return null;
+    if (!payload || typeof payload !== 'object') return null;
+    // an ask carries only a question and a name; everything else carries places
+    if (payload.kind === 'ask') return typeof payload.q === 'string' ? payload : null;
+    if (!Array.isArray(payload.places)) return null;
     return payload;
   } catch {
     return null;

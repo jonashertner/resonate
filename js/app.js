@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf12';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf12';
-import * as mapView from './map.js?v=rf12';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf12';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf12';
-import { exifGPS } from './exif.js?v=rf12';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf13';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf13';
+import * as mapView from './map.js?v=rf13';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf13';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf13';
+import { exifGPS } from './exif.js?v=rf13';
 
 // ---------- helpers ----------
 
@@ -1542,6 +1542,9 @@ function rowHTML(item, i) {
   if (item.kind === 'stand') {
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">the newsstand answers</span><span class="row-sub">${item.n} folio${item.n > 1 ? 's' : ''} · ↵ open</span></button>`;
   }
+  if (item.kind === 'world') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">“${esc(item.q)}”, in the world</span><span class="row-sub">↵ ask openstreetmap</span></button>`;
+  }
   return '';
 }
 
@@ -1572,12 +1575,16 @@ function activateRow(i) {
   }
   if (item.kind === 'voice') { popSurface(); openSurface('corrOverlay', renderVoices); return; }
   if (item.kind === 'stand') { popSurface(); openNewsstand(item.q); return; }
+  if (item.kind === 'world') { runWorldSearch(item.q); return; }
 }
 
-const remoteSearch = debounce(async (q) => {
+// the world answers only when asked: one request per explicit press,
+// never as-you-type (the nominatim policy forbids autocomplete)
+async function runWorldSearch(q) {
   if (!q || q.length < 2) return;
   palette.remoteAbort?.abort();
   palette.remoteAbort = new AbortController();
+  paint([], 'asking the world…');
   try {
     const results = await searchGeo(q, { signal: palette.remoteAbort.signal });
     if (palette.input.value.trim() !== q) return;
@@ -1598,7 +1605,7 @@ const remoteSearch = debounce(async (q) => {
   } catch (e) {
     if (e.name !== 'AbortError') console.warn('search failed', e);
   }
-}, 420);
+}
 
 function renderPaletteResults(q) {
   const r = route(q);
@@ -1630,8 +1637,13 @@ function renderPaletteResults(q) {
        <div class="cmd-teach"><b>keep.</b> type a place to add it. or drop a photo, or press long on the map.</div>`);
     return;
   }
-  paint([...locals, ...voices], '');
-  remoteSearch(r.rest);
+  let stand = [];
+  if (newsIndex) {
+    const nOnStand = rankFolios(newsIndex, r.rest).length;
+    if (nOnStand) stand = [{ kind: 'stand', q: r.rest, n: nOnStand }];
+  }
+  const world = r.rest.length >= 2 ? [{ kind: 'world', q: r.rest }] : [];
+  paint([...locals, ...voices, ...stand, ...world], '');
 }
 
 
