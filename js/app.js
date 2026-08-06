@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf7';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf7';
-import * as mapView from './map.js?v=rf7';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf7';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf7';
-import { exifGPS } from './exif.js?v=rf7';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf8';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf8';
+import * as mapView from './map.js?v=rf8';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf8';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf8';
+import { exifGPS } from './exif.js?v=rf8';
 
 // ---------- helpers ----------
 
@@ -1533,7 +1533,12 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
-  if (!store.settings.indexSeen) $('#fmHint').hidden = false;
+  if (!store.settings.indexSeen && !store.settings.hintShown) {
+    $('#fmHint').hidden = false;
+    store.settings.hintShown = true;
+    store.saveSettings();
+    setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
+  }
 
   if (!store.settings.authorName && !store.settings.namedAsked) {
     const ask = $('#nameAsk');

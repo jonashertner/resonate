@@ -10,7 +10,7 @@
 
 @property --hue { syntax: '<number>'; inherits: true; initial-value: 300; }
 @property --split { syntax: '<number>'; inherits: true; initial-value: -225; }
-@property --tint { syntax: '<number>'; inherits: true; initial-value: 0.58; }
+@property --tint { syntax: '<number>'; inherits: true; initial-value: 0; }
 
 :root {
   /* role constants — sunlight-proof: deep ink on a bright field, every hue.
@@ -43,7 +43,7 @@
 }
 
 /* rest state: BONE × IODINE, cross-hued; dark swaps the families */
-:root { --hue: 300; --split: -225; --tint: 0.58; }
+:root { --hue: 300; --split: -225; --tint: 0; }
 :root[data-theme="dark"] {
   --hue: 75; --split: 225;
   --L-f: 0.17; --C-f: 0.024;
@@ -132,6 +132,7 @@ body.dropping::after {
 }
 .fm-nw {
   top: max(18px, env(safe-area-inset-top)); left: 22px;
+  text-align: left;
   font-size: 12px; letter-spacing: 0.34em; text-transform: uppercase;
   font-variation-settings: 'wght' 600;
   padding: 8px 10px; margin: -8px -10px;
