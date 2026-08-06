@@ -9,9 +9,11 @@ permissions:
   pages: write
   id-token: write
 
+# never cancel a deployment already in flight: the pages service holds a
+# per-site lock, and a cancelled run leaves that lock wedged
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -21,8 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: stage the site, without the repository's machinery
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+          find _site -type f | sort
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
