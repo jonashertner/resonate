@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf33">
+<link rel="stylesheet" href="css/style.css?v=rf34">
 </head>
 <body class="boot">
 
@@ -189,6 +189,7 @@
   <div class="th-go">
     <button class="word-btn" id="thSample">open a sample atlas</button>
     <button class="word-btn quiet" id="thEmpty">start empty</button>
+    <button class="word-btn quiet" id="thImport">bring an atlas file in</button>
   </div>
   <button class="th-how" id="thHow">what it keeps, and what it shares</button>
 </section>
@@ -200,6 +201,12 @@
     <button class="word-btn" id="nameAskGo">sign</button>
     <button class="word-btn quiet" id="nameAskLater">leave it unsigned</button>
   </div>
+</div>
+
+<!-- visiting: a borrowed field needs a visible way home -->
+<div class="visit-bar" id="visitBar" hidden>
+  <span class="mono" id="visitWho"></span>
+  <button class="word-btn quiet" id="visitLeave">leave</button>
 </div>
 
 <div class="toast mono" id="toast" role="status" aria-live="polite" hidden></div>
@@ -215,6 +222,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf33"></script>
+<script type="module" src="js/app.js?v=rf34"></script>
 </body>
 </html>

@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf33';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf33';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf33';
-import * as mapView from './map.js?v=rf33';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf33';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf33';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf33';
-import { exifGPS } from './exif.js?v=rf33';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf34';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf34';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf34';
+import * as mapView from './map.js?v=rf34';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf34';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf34';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf34';
+import { exifGPS } from './exif.js?v=rf34';
 
 // ---------- helpers ----------
 
@@ -162,6 +162,9 @@ const surfaceEl = id => $(`#${id}`);
 // it stands, and hands it back to whatever summoned it
 const returnFocus = new Map();
 
+// a one-shot hook for a surface that must hand the floor back when it closes
+let onHowClosed = null;
+
 // the name waits in the middle of the field only until the field is used.
 // summoning anything at all counts as using it.
 let leaveHero = () => {};
@@ -278,6 +281,7 @@ function popSurface() {
   const id = surfaces.pop();
   if (!id) return false;
   surfaceEl(id).hidden = true;
+  if (id === 'howOverlay') onHowClosed?.();
   if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
   if (id === 'paletteOverlay') palette.remoteAbort?.abort();
   restoreFocus(id);
@@ -289,6 +293,7 @@ function closeSurface(id) {
   if (i === -1) return;
   surfaces.splice(i, 1);
   surfaceEl(id).hidden = true;
+  if (id === 'howOverlay') onHowClosed?.();
   if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
   restoreFocus(id);
 }
@@ -720,18 +725,31 @@ async function addFromPhoto(file) {
   }
   let dataUri = null;
   try { dataUri = await compressImage(file); } catch { /* keep the fix anyway */ }
-  const draft = { name: 'From a photograph', lat: fix.lat, lng: fix.lng, address: '', city: '', country: '', countryCode: '' };
-  try {
-    const r = await reverseGeo(fix.lat, fix.lng);
-    if (r) Object.assign(draft, { name: r.name || draft.name, address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
-  } catch { /* offline is fine */ }
-  const place = store.addPlace(newPlace({ ...draft, status: 'visited', photos: dataUri ? [dataUri] : [] }));
+  const place = store.addPlace(newPlace({
+    name: 'From a photograph', lat: fix.lat, lng: fix.lng,
+    status: 'visited', photos: dataUri ? [dataUri] : [],
+  }));
   if (!place) return toast('this browser refused to keep it. the photograph is large; export and free some room');
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
   selectPlace(place.id, { fly: true, edit: true });
-  toast('the photograph found its place');
+  toast('kept by its own fix. the name is on its way');
+  // the ground names itself when the network allows; the keep never waited
+  try {
+    const r = await reverseGeo(fix.lat, fix.lng);
+    if (r) {
+      const still = placeById(place.id);
+      if (still && still.name === 'From a photograph') {
+        store.updatePlace(place.id, {
+          name: r.name || still.name, address: r.address || r.sub || '',
+          city: r.city, country: r.country, countryCode: r.countryCode,
+        });
+        renderAll();
+        if (state.selectedId === place.id) renderPlate(placeById(place.id), { edit: true });
+      }
+    }
+  } catch { /* offline is fine; the fix stands */ }
 }
 
 // ---------- adding places ----------
@@ -759,8 +777,7 @@ function proposePlace(r) {
   $('#ppClose').addEventListener('click', () => { settle(); closeSurface('plate'); });
   $('#ppKeep').addEventListener('click', () => {
     settle();
-    addPlaceFromResult(r);
-    toast('kept. make it true');
+    if (addPlaceFromResult(r)) toast('kept. make it true');
   });
   $('#ppDirections').addEventListener('click', () => {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`, '_blank', 'noopener');
@@ -773,11 +790,12 @@ function addPlaceFromResult(r) {
     address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode,
     status: 'wishlist',
   }));
-  if (!place) return toast('this browser refused to keep it');
+  if (!place) { toast('this browser refused to keep it'); return null; }
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
   selectPlace(place.id, { fly: true });
+  return place;
   return place;
 }
 
@@ -1185,6 +1203,7 @@ function openFolioReport(payload) {
   const places = (payload.places || [])
     .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
     .map(p => newPlace({ ...p, photos: [] }));
+  const ways = payload.routes || [];
   const held = places.filter(holdAlready);
   const fresh = places.filter(p => !holdAlready(p));
   const sig = mapView.sigAngle(author);
@@ -1197,6 +1216,7 @@ function openFolioReport(payload) {
     ${payload.dedication ? `<p class="rp-ded">“${esc(payload.dedication)}”</p>` : ''}
     <ul class="rp-evidence mono">
       <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'} enclosed</li>
+      ${ways.length ? `<li><b>${ways.length}</b> way${ways.length === 1 ? '' : 's'} to walk</li>` : ''}
       ${held.length ? `<li><b>${held.length}</b> you already hold, you can trust the rest</li>` : ''}
       ${fresh.length ? `<li><b>${fresh.length}</b> new to your field</li>` : ''}
     </ul>
@@ -1210,6 +1230,13 @@ function openFolioReport(payload) {
             ? '<span class="held">you hold this</span>'
             : `<button class="adopt" data-adopt="${i}">adopt</button>`}
         </div>`).join('')}
+      ${ways.map((r, i) => `
+        <div class="rp-pick">
+          <span class="no">${r.loop ? '◯' : '⟋'}</span>
+          <span class="nm">${esc(r.name)}</span>
+          <span class="why">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
+          <button class="adopt" data-adopt-way="${i}">adopt</button>
+        </div>`).join('')}
     </div>
     <div class="rp-foot">
       ${fresh.length ? `<button class="word-btn" id="rpTakeAll">take all ${fresh.length}</button>` : ''}
@@ -1221,6 +1248,25 @@ function openFolioReport(payload) {
 
   const ref = { name: author, sig };
   const foreignTags = payload.tags || [];
+  // a way is adopted whole, with its provenance, like a place
+  const adoptWay = (r) => {
+    const made = store.addRoute(newRoute({
+      ...r, id: undefined, sample: false,
+      tags: graftTags(r.tags || [], foreignTags),
+      provenance: { name: author, sig, adoptedAt: new Date().toISOString() },
+    }));
+    if (!made) { toast('this browser refused to keep it'); return null; }
+    renderAll();
+    return made;
+  };
+  $$('[data-adopt-way]', el).forEach(b => b.addEventListener('click', () => {
+    const r = ways[parseInt(b.dataset.adoptWay, 10)];
+    if (!r) return;
+    if (adoptWay(r)) {
+      b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
+      toast(`the way is yours, after ${author}`);
+    }
+  }));
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
     const p = places[parseInt(b.dataset.adopt, 10)];
     if (!p) return;
@@ -1231,6 +1277,8 @@ function openFolioReport(payload) {
     // whatever was taken one at a time is already yours: never take it twice
     const remaining = fresh.filter(p => !holdAlready(p));
     remaining.forEach(p => adoptPlace(p, ref, foreignTags));
+    // untouched ways come along with take-all; adopted ones show 'yours'
+    $$('[data-adopt-way]', el).forEach(b => { if (b.tagName === 'BUTTON') adoptWay(ways[parseInt(b.dataset.adoptWay, 10)]); });
     renderAll();
     clearShareHash();
     dropDialog(el);
@@ -1240,7 +1288,13 @@ function openFolioReport(payload) {
       ? `${remaining.length} place${remaining.length === 1 ? '' : 's'} taken, after ${author}`
       : 'you already hold them all');
   });
-  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+  $('#rpLeave').addEventListener('click', () => {
+    clearShareHash();
+    dropDialog(el);
+    clearWorld();
+    renderAll();
+    if (store.places.length) mapView.fitAll(store.places);
+  });
   $('#rpPrint').addEventListener('click', () => {
     const theirTags = new Map((payload.tags || []).map(t => [t.id, t.name]));
     printSheet({
@@ -1248,6 +1302,7 @@ function openFolioReport(payload) {
       dedication: payload.dedication || '',
       author,
       places,
+      routes: ways,
       tagName: (id) => theirTags.get(id),
     });
   });
@@ -1294,6 +1349,7 @@ function openAtlasReport(payload) {
       .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
       .map(p => newPlace({ ...p, photos: [] })),
   };
+  const theirWays = payload.routes || [];
   const name = String(payload.author || '').trim() || 'an unsigned atlas';
   const r = resonance(myAtlas(), theirs);
   const v = verdict(r);
@@ -1319,6 +1375,16 @@ function openAtlasReport(payload) {
           <button class="adopt" data-adopt="${i}">adopt</button>
         </div>`).join('')}
     </div>` : ''}
+    ${theirWays.length ? `<div class="rp-case">
+      <div class="sec-head">the ways they walk</div>
+      ${theirWays.map((r, i) => `
+        <div class="rp-pick">
+          <span class="no">${r.loop ? '◯' : '⟋'}</span>
+          <span class="nm">${esc(r.name)}</span>
+          <span class="why">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
+          <button class="adopt" data-adopt-way="${i}">adopt</button>
+        </div>`).join('')}
+    </div>` : ''}
     <div class="rp-foot">
       ${store.places.length < 3 ? `<button class="word-btn" id="rpBegin">begin with a copy of this atlas</button>` : ''}
       <button class="word-btn ${store.places.length < 3 ? 'quiet' : ''}" id="rpKeep">keep ${esc(name)} as a correspondent</button>
@@ -1329,6 +1395,19 @@ function openAtlasReport(payload) {
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
   const foreignRef = { name, sig };
+  $$('[data-adopt-way]', el).forEach(b => b.addEventListener('click', () => {
+    const r = theirWays[parseInt(b.dataset.adoptWay, 10)];
+    if (!r) return;
+    const made = store.addRoute(newRoute({
+      ...r, id: undefined, sample: false,
+      tags: graftTags(r.tags || [], theirs.tags),
+      provenance: { name, sig, adoptedAt: new Date().toISOString() },
+    }));
+    if (!made) return toast('this browser refused to keep it');
+    renderAll();
+    b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
+    toast(`the way is yours, after ${name}`);
+  }));
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
     const pk = picks[parseInt(b.dataset.adopt, 10)];
     if (!pk) return;
@@ -1351,14 +1430,19 @@ function openAtlasReport(payload) {
     dropDialog(el);
     clearWorld();
     renderAll();
-    toast(`${finalName || name} is now a correspondent. their marks are on your field`);
+    // fly to where their marks actually are, so the toast tells the truth
+    if (kept.places.length) mapView.fitAll(kept.places);
+    toast(`${finalName || name} is now a voice. these are their marks`);
   });
   $('#rpLook').addEventListener('click', () => {
     state.visiting = { id: 'visit-' + Date.now(), name, hue: 278, visible: true, tags: theirs.tags, places: theirs.places };
     mapView.setCorrespondents([...store.correspondents, state.visiting]);
     dropDialog(el);
     mapView.fitAll(theirs.places);
-    toast('visiting. your atlas is untouched. esc to leave');
+    const bar = $('#visitBar');
+    bar.hidden = false;
+    $('#visitWho').textContent = `visiting ${name}`;
+    toast('their marks, on a field of yours that is untouched');
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
 }
@@ -1436,11 +1520,14 @@ function openFolioShelf() {
   openSurface('folioOverlay');
 }
 
-function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false } = {}) {
+function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [] } = {}) {
   const kept = folioId ? store.folioById(folioId) : null;
   const pool = kept || fresh ? allPlaces() : (places || filteredPlaces());
   const wayPool = allRoutes();
-  const chosen = new Set(kept ? kept.placeIds.filter(id => placeById(id)) : pool.map(p => p.id));
+  const chosen = new Set(
+    kept ? kept.placeIds.filter(id => placeById(id))
+      : fresh ? preselect.filter(id => placeById(id))
+        : pool.map(p => p.id));
   const chosenWays = new Set(kept ? kept.routeIds.filter(id => routeById(id)) : []);
   if (kept) { title = kept.title; dedication = kept.dedication; }
   const body = $('#folioBody');
@@ -1482,6 +1569,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         <button class="word-btn quiet" id="folPublish">publish to the newsstand</button>
         <button class="word-btn quiet" id="folPrint">print, or save as pdf</button>
         <button class="word-btn quiet" id="folAll">everything in</button>
+        <button class="word-btn quiet" id="folNone">everything out</button>
         ${kept ? '<button class="word-btn quiet" id="folRemove">remove from the shelf</button>' : ''}
       </div>
       <div class="news-note">Keeping shares nothing: the folio stays here, and follows your atlas as it
@@ -1499,6 +1587,12 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       readHead();
       pool.forEach(p => chosen.add(p.id));
       wayPool.forEach(r => chosenWays.add(r.id));
+      paint();
+    });
+    $('#folNone').addEventListener('click', () => {
+      readHead();
+      chosen.clear();
+      chosenWays.clear();
       paint();
     });
 
@@ -1596,9 +1690,7 @@ function fileIntoFolio(placeId) {
     fileIntoFolio(placeId);
   }));
   $('#folNewWith').addEventListener('click', () => {
-    const made = store.addFolio(newFolio({ title: '', placeIds: [placeId] }));
-    if (!made) return toast('this browser refused to keep it');
-    openFolioComposer({ folioId: made.id });
+    openFolioComposer({ fresh: true, preselect: [placeId] });
   });
   openSurface('folioOverlay');
 }
@@ -1616,7 +1708,7 @@ async function composeAsk() {
 
 const DOC_TITLE = document.title;
 
-function buildSheet({ title, dedication = '', author = store.settings.authorName, places, tagName = null }) {
+function buildSheet({ title, dedication = '', author = store.settings.authorName, places, routes = [], tagName = null }) {
   const nameOf = tagName || ((id) => tagById(id)?.name);
   const groups = new Map();
   places.forEach(p => {
@@ -1624,7 +1716,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   });
-  const nWays = (opts.routes || []).length;
+  const nWays = routes.length;
   const signed = [
     author ? `kept by ${author}` : '',
     fmtDate(new Date().toISOString()).toLowerCase(),
@@ -1647,7 +1739,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     </article>`;
   };
 
-  const ways = (opts.routes || []).map((r, i) => {
+  const ways = routes.map((r, i) => {
     const pf = profile(r.path, { width: 1000, height: 150, columns: 96 });
     const meta = [
       fmtKm(r.km),
@@ -2300,7 +2392,11 @@ function renderPaletteResults(q) {
     if (nOnStand) stand = [{ kind: 'stand', q: r.rest, n: nOnStand }];
   }
   const world = r.rest.length >= 2 ? [{ kind: 'world', q: r.rest }] : [];
-  paint([...locals, ...voices, ...stand, ...world], '');
+  // an empty answer is an answer: say it, rather than leaving a silence
+  const hint = (!locals.length && !voices.length && !stand.length && r.rest.length >= 2)
+    ? `nothing of yours answers “${esc(r.rest)}” yet`
+    : '';
+  paint([...locals, ...voices, ...stand, ...world], hint);
 }
 
 
@@ -2497,6 +2593,20 @@ function init() {
 
   renderAll();
 
+  // the welcome: the hint that teaches the one gesture, and the name's pulse.
+  // it starts when the field is actually revealed, never behind a cover, so
+  // it is never burned invisible and marked as shown.
+  const startWelcome = () => {
+    if (!store.settings.indexSeen && !store.settings.hintShown) {
+      $('#fmHint').hidden = false;
+      store.settings.hintShown = true;
+      store.saveSettings();
+      setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
+    }
+    document.body.classList.add('greet');
+    setTimeout(() => document.body.classList.remove('greet'), 5600);
+  };
+
   // read the link first: a visitor who was handed something is answering a
   // person, not starting an atlas, and must never be offered a first-run
   // choice over the top of it. an atlas that already exists has answered
@@ -2505,15 +2615,12 @@ function init() {
   if (payload) openReport(payload);
 
   runIntro(() => {
-    if (store.settings.chosen || store.places.length || payload) return;
+    if (store.settings.chosen || store.places.length || payload) {
+      if (!payload) startWelcome();
+      return;
+    }
     openThreshold();
   }, { brief: !!store.settings.introSeen, skip: !!payload });
-  if (!store.settings.indexSeen && !store.settings.hintShown) {
-    $('#fmHint').hidden = false;
-    store.settings.hintShown = true;
-    store.saveSettings();
-    setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
-  }
 
   setHeroExit(() => {
     if (!document.body.classList.contains('hero')) return;
@@ -2522,7 +2629,14 @@ function init() {
   });
   if (!location.hash.startsWith('#m=')) {
     document.body.classList.add('hero');
-    const exit = () => leaveHero();
+    const exit = () => {
+      if (!$('#intro').hidden || modalUp()) {
+        ['keydown', 'wheel'].forEach(ev =>
+          document.addEventListener(ev, exit, { once: true, passive: true }));
+        return;
+      }
+      leaveHero();
+    };
     mapView.onFirstUse(exit);
     ['keydown', 'wheel'].forEach(ev =>
       document.addEventListener(ev, exit, { once: true, passive: true }));
@@ -2538,7 +2652,10 @@ function init() {
       store.settings.chosen = true;
       store.saveSettings();
       dropDialog(th);
+      // ask the browser to treat this data as worth keeping, now that it exists
+      navigator.storage?.persist?.().catch?.(() => {});
       fn?.();
+      startWelcome();
     };
     $('#thSample').addEventListener('click', () => done(() => {
       seedDemo();
@@ -2553,13 +2670,47 @@ function init() {
       }
       toast('the field is yours. press the middle, or find or add below');
     }));
-    $('#thHow').addEventListener('click', () => done(() => openSurface('howOverlay')));
+    // the third way in: this browser is new, but the atlas is not
+    $('#thImport').addEventListener('click', () => {
+      const file = $('#importFile');
+      file.onchange = () => {
+        const f = file.files?.[0];
+        file.value = '';
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const added = store.merge(JSON.parse(reader.result));
+            if (!added) return toast('that file brought nothing in');
+            done(() => {
+              renderAll();
+              if (store.places.length) mapView.fitAll(store.places);
+              toast(`welcome back. ${added} place${added === 1 ? '' : 's'} are home`);
+            });
+          } catch { toast('that file isn’t a resonate export'); }
+        };
+        reader.readAsText(f);
+      };
+      file.click();
+    });
+    $('#thHow').addEventListener('click', () => {
+      // reading is not choosing: the door reopens when the reading is done
+      dropDialog(th);
+      const spared = leaveHero;
+      setHeroExit(() => {});
+      onHowClosed = () => {
+        onHowClosed = null;
+        setHeroExit(spared);
+        if (!store.settings.chosen && !store.places.length) raiseDialog(th, 'What Resonate is');
+      };
+      openSurface('howOverlay');
+    });
     raiseDialog(th, 'What Resonate is');
   }
 
   setTimeout(() => document.body.classList.remove('boot'), 700);
-  document.body.classList.add('greet');
-  setTimeout(() => document.body.classList.remove('greet'), 5600);
+
+  $('#visitLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
 
   // corner marks
   $('#fmIndex').addEventListener('click', () => {
@@ -2675,6 +2826,19 @@ function init() {
   });
 
   window.addEventListener('resize', debounce(() => mapView.invalidate(), 150));
+
+  // another tab wrote the atlas: take its truth rather than overwriting it
+  window.addEventListener('storage', debounce((e) => {
+    if (e && e.key && !String(e.key).startsWith('resonate.')) return;
+    store.load();
+    renderAll();
+    pushCorrespondentsToMap();
+  }, 250));
+
+  // an atlas that already exists deserves the browser's protection
+  if (store.settings.chosen || store.places.length) {
+    navigator.storage?.persist?.().catch?.(() => {});
+  }
 
   // keyboard
   document.addEventListener('keydown', (e) => {

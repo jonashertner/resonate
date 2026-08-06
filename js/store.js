@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf33';
-import { measure, simplify } from './route.js?v=rf33';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf34';
+import { measure, simplify } from './route.js?v=rf34';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -361,15 +361,21 @@ export const store = {
     const tagIds = new Set(this.tags.map(t => t.id));
     const placeIds = new Set(this.places.map(p => p.id));
     let added = 0;
+    // same name, same domain: never two Restaurants with different ids
+    const byName = new Map(this.tags.map(t => [t.name.trim().toLowerCase(), t.id]));
+    const remap = new Map();
     data.tags.forEach(t => {
-      if (!tagIds.has(t.id)) {
-        this.tags.push(newTag(t));
-        tagIds.add(t.id);
-      }
+      if (tagIds.has(t.id)) return;
+      const existing = byName.get(t.name.trim().toLowerCase());
+      if (existing) { remap.set(t.id, existing); return; }
+      this.tags.push(newTag(t));
+      tagIds.add(t.id);
+      byName.set(t.name.trim().toLowerCase(), t.id);
     });
+    const repoint = (ids) => ids.map(id => remap.get(id) || id);
     data.places.forEach(p => {
       if (!placeIds.has(p.id)) {
-        this.places.push(newPlace(p));
+        this.places.push(newPlace({ ...p, tags: repoint(p.tags) }));
         placeIds.add(p.id);
         added++;
       }
@@ -377,7 +383,7 @@ export const store = {
     const routeIds = new Set(this.routes.map(r => r.id));
     data.routes.forEach(r => {
       if (!routeIds.has(r.id)) {
-        this.routes.push(newRoute(r));
+        this.routes.push(newRoute({ ...r, tags: repoint(r.tags) }));
         routeIds.add(r.id);
         added++;
       }

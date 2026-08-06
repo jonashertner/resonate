@@ -236,3 +236,22 @@ test('the shelf comes home in a backup and not in a share', () => {
   assert.equal(JSON.parse(store.exportShareJSON()).folios, undefined,
     'a folio is a private arrangement; what you hand over is its contents');
 });
+
+// ---------- imports do not double the vocabulary ----------
+
+test('an import with the same domains under different ids keeps one of each', () => {
+  fresh();
+  const mine = store.addTag(newTag({ name: 'Restaurants' }));
+  store.addPlace(newPlace({ name: 'Mine', lat: 46, lng: 8, tags: [mine.id] }));
+
+  const added = store.merge({
+    tags: [{ id: 'their-tag', name: 'restaurants' }, { id: 'their-new', name: 'Vinyl' }],
+    places: [{ id: 'their-place', name: 'Theirs', lat: 45, lng: 9, tags: ['their-tag', 'their-new'] }],
+  });
+  assert.equal(added, 1);
+  assert.equal(store.tags.filter(t => t.name.toLowerCase() === 'restaurants').length, 1,
+    'same name is the same domain');
+  const theirs = store.placeById('their-place');
+  assert.ok(theirs.tags.includes(mine.id), 'the imported place points at the kept domain');
+  assert.ok(store.tags.some(t => t.name === 'Vinyl'), 'a genuinely new domain still arrives');
+});

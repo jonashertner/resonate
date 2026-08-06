@@ -858,8 +858,9 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   box-shadow: 0 0 0 1px var(--ink-4), 0 8px 30px color-mix(in srgb, var(--ink) 12%, transparent);
   animation: cmd-in 140ms linear both;
   pointer-events: none;
-  max-width: calc(100vw - 40px);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: min(calc(100vw - 40px), 64ch);
+  text-align: center;
+  text-wrap: balance;
 }
 
 /* ---------- boot ---------- */
@@ -1252,3 +1253,14 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   color: var(--ink-2); padding: 2px 0 14px;
 }
 .fol-back:hover { color: var(--ink); }
+
+/* ---------- visiting ---------- */
+.visit-bar {
+  position: fixed; z-index: 1100;
+  top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: 16px;
+  padding: 8px 16px;
+  background: var(--field);
+  box-shadow: 0 0 0 1px var(--edge);
+}
+.visit-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--counter); }
