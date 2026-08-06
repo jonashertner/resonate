@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf10';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf10';
-import * as mapView from './map.js?v=rf10';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf10';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf10';
-import { exifGPS } from './exif.js?v=rf10';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf11';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf11';
+import * as mapView from './map.js?v=rf11';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf11';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf11';
+import { exifGPS } from './exif.js?v=rf11';
 
 // ---------- helpers ----------
 
@@ -1751,7 +1751,9 @@ function init() {
       $$('.cmd-row', palette.results).forEach((r, i) => r.classList.toggle('hl', i === palette.hl));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      activateRow(palette.hl);
+      // act on what is visibly highlighted, never on a stale index
+      const el = palette.results.querySelector('.cmd-row.hl') || palette.results.querySelector('.cmd-row');
+      if (el) activateRow(parseInt(el.dataset.i, 10));
     }
   });
 
