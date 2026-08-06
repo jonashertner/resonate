@@ -3,13 +3,13 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf23';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf23';
-import * as mapView from './map.js?v=rf23';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf23';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf23';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf23';
-import { exifGPS } from './exif.js?v=rf23';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf24';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf24';
+import * as mapView from './map.js?v=rf24';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf24';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf24';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf24';
+import { exifGPS } from './exif.js?v=rf24';
 
 // ---------- helpers ----------
 
@@ -160,8 +160,20 @@ const surfaceEl = id => $(`#${id}`);
 // it stands, and hands it back to whatever summoned it
 const returnFocus = new Map();
 
-// while anything is summoned, the field behind it is not reachable by tab,
-// by screen reader, or by pointer
+// the plate stands beside a living map and must never deaden it: you go on
+// tapping marks while it is open. only a surface that covers the field
+// takes the field out of reach.
+const NON_MODAL = new Set(['plate']);
+
+function modalUp() {
+  if (!$('#reportOverlay').hidden) return true;
+  if (!$('#threshold')?.hidden) return true;
+  if (!$('#nameAsk').hidden) return true;
+  return surfaces.some(id => !NON_MODAL.has(id));
+}
+
+// while anything covers the field, it is not reachable by tab, by screen
+// reader, or by pointer
 function setBackgroundInert(on) {
   const app = $('#app');
   if (!app) return;
@@ -183,7 +195,7 @@ function raiseDialog(el, label) {
 function dropDialog(el) {
   el.hidden = true;
   el.removeAttribute('aria-modal');
-  if (!surfaces.length) setBackgroundInert(false);
+  if (!modalUp()) setBackgroundInert(false);
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -199,8 +211,10 @@ function frontDialog() {
     const el = document.getElementById(id);
     if (el && !el.hidden) return el;
   }
-  const id = topSurface();
-  return id ? surfaceEl(id) : null;
+  for (let i = surfaces.length - 1; i >= 0; i--) {
+    if (!NON_MODAL.has(surfaces[i])) return surfaceEl(surfaces[i]);
+  }
+  return null;
 }
 
 function trapFocus(e) {
@@ -227,13 +241,14 @@ function openSurface(id, onShow) {
   surfaces.push(id);
   const el = surfaceEl(id);
   el.hidden = false;
-  el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-modal', 'true');
-  setBackgroundInert(true);
+  const modal = !NON_MODAL.has(id);
+  el.setAttribute('role', modal ? 'dialog' : 'complementary');
+  if (modal) el.setAttribute('aria-modal', 'true'); else el.removeAttribute('aria-modal');
+  if (modal) setBackgroundInert(true);
   el.classList.add('opening');
   setTimeout(() => el.classList.remove('opening'), 700);
   onShow?.();
-  if (id !== 'paletteOverlay') {
+  if (modal && id !== 'paletteOverlay') {
     const items = focusables(el);
     (items[0] || el).focus?.();
   }
@@ -242,7 +257,9 @@ function openSurface(id, onShow) {
 function restoreFocus(id) {
   const back = returnFocus.get(id);
   returnFocus.delete(id);
-  if (!surfaces.length && $('#reportOverlay').hidden) setBackgroundInert(false);
+  if (!modalUp()) setBackgroundInert(false);
+  // the plate never stole the focus, so it never hands it back
+  if (NON_MODAL.has(id)) return;
   if (back && document.contains(back)) back.focus();
 }
 
@@ -2033,7 +2050,12 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
-  runIntro(() => { if (!store.settings.chosen) openThreshold(); });
+  // an atlas that already exists has answered this question; and someone
+  // arriving on a link is answering a person, not starting an atlas
+  runIntro(() => {
+    if (store.settings.chosen || store.places.length || !$('#reportOverlay').hidden) return;
+    openThreshold();
+  });
   if (!store.settings.indexSeen && !store.settings.hintShown) {
     $('#fmHint').hidden = false;
     store.settings.hintShown = true;

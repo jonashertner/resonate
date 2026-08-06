@@ -1,6 +1,6 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, SCHEMA_VERSION } from './schema.js?v=rf23';
+import { normImport, normPlace, SCHEMA_VERSION } from './schema.js?v=rf24';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';

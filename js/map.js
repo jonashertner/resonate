@@ -17,6 +17,7 @@ let locateMarker;
 const markersById = new Map();
 const nameById = new Map();
 let labelsOn = false;
+let labelRoom = null;
 let selectedIdRef = null;
 
 export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove, onViewChange }) {
@@ -108,17 +109,22 @@ export function sigAngle(id) {
   return (Math.abs([...String(id)].reduce((a, c) => a * 33 + c.charCodeAt(0), 5)) % 12) * 30;
 }
 
+const MARK_BOX = 44; // a thumb needs this much, even if the ring is smaller
+const MARK_C = MARK_BOX / 2;
+
 function markHTML(place, selected) {
   const wish = place.status === 'wishlist';
   // sig lands inside an attribute: it is a number or it is nothing
   const graft = place.provenance
-    ? `<circle class="graft" cx="15" cy="15" r="11.5" pathLength="360" style="--sig:${Number(place.provenance.sig) || 0}deg"/>`
+    ? `<circle class="graft" cx="${MARK_C}" cy="${MARK_C}" r="13.5" pathLength="360" style="--sig:${Number(place.provenance.sig) || 0}deg"/>`
     : '';
   return `<div class="mark${wish ? ' wish' : ''}${selected ? ' sel' : ''}" style="--seed:${seedFor(place.id)}ms">
-    <svg width="30" height="30" viewBox="0 0 30 30">
+    <svg width="${MARK_BOX}" height="${MARK_BOX}" viewBox="0 0 ${MARK_BOX} ${MARK_BOX}">
+      <circle cx="${MARK_C}" cy="${MARK_C}" r="${MARK_C}" class="mk-hit"/>
       ${graft}
-      <circle cx="15" cy="15" r="8" class="mk-ring"/>
-      <circle cx="15" cy="15" r="2.4" class="mk-dot"/>
+      <circle cx="${MARK_C}" cy="${MARK_C}" r="9" class="mk-halo"/>
+      <circle cx="${MARK_C}" cy="${MARK_C}" r="9" class="mk-ring"/>
+      <circle cx="${MARK_C}" cy="${MARK_C}" r="2.8" class="mk-dot"/>
     </svg></div>`;
 }
 
@@ -126,8 +132,8 @@ function makeIcon(place, selected) {
   return L.divIcon({
     className: 'mark-icon',
     html: markHTML(place, selected),
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [MARK_BOX, MARK_BOX],
+    iconAnchor: [MARK_C, MARK_C],
   });
 }
 
@@ -186,7 +192,8 @@ function bindLabel(id, m) {
   const rec = nameById.get(id);
   if (!rec) return;
   const z = map.getZoom();
-  const shouldShow = labelsOn || (z >= 7 && id === selectedIdRef);
+  const roomForIt = !labelRoom || labelRoom.has(id);
+  const shouldShow = (labelsOn && roomForIt) || (z >= 7 && id === selectedIdRef);
   const dir = labelDirection(m);
   if (m.getTooltip()) m.unbindTooltip();
   const node = document.createElement('span');
@@ -199,6 +206,23 @@ function bindLabel(id, m) {
     opacity: 1,
   });
   m._labelDir = dir;
+}
+
+// two names must never be printed over each other: a label is only kept
+// where no label already stands
+function declutter() {
+  const kept = [];
+  const taken = [];
+  [...markersById.entries()]
+    .sort((a, b) => (a[0] === selectedIdRef ? -1 : b[0] === selectedIdRef ? 1 : 0))
+    .forEach(([id, m]) => {
+      const pt = map.latLngToContainerPoint(m.getLatLng());
+      const clash = taken.some(q => Math.abs(q.x - pt.x) < 150 && Math.abs(q.y - pt.y) < 22);
+      if (clash) return;
+      taken.push(pt);
+      kept.push(id);
+    });
+  return new Set(kept);
 }
 
 function refreshLabels(force = false) {
@@ -215,6 +239,7 @@ function refreshLabels(force = false) {
     return;
   }
   labelsOn = show;
+  labelRoom = show ? declutter() : null;
   markersById.forEach((m, id) => bindLabel(id, m));
 }
 
@@ -224,9 +249,11 @@ let corrData = [];
 
 function apertureHTML(sig) {
   return `<div class="mark corr" style="--sig:${sig}deg">
-    <svg width="30" height="30" viewBox="0 0 30 30">
-      <circle class="corr-arcs" cx="15" cy="15" r="8.4" pathLength="360"/>
-      <circle class="corr-pole" cx="15" cy="15" r="1.7"/>
+    <svg width="${MARK_BOX}" height="${MARK_BOX}" viewBox="0 0 ${MARK_BOX} ${MARK_BOX}">
+      <circle cx="${MARK_C}" cy="${MARK_C}" r="${MARK_C}" class="mk-hit"/>
+      <circle class="mk-halo" cx="${MARK_C}" cy="${MARK_C}" r="9.4"/>
+      <circle class="corr-arcs" cx="${MARK_C}" cy="${MARK_C}" r="9.4" pathLength="360"/>
+      <circle class="corr-pole" cx="${MARK_C}" cy="${MARK_C}" r="2"/>
     </svg></div>`;
 }
 
@@ -246,8 +273,8 @@ function refreshCorrVisibility() {
         icon: L.divIcon({
           className: 'mark-icon',
           html: apertureHTML(sig),
-          iconSize: [30, 30],
-          iconAnchor: [15, 15],
+          iconSize: [MARK_BOX, MARK_BOX],
+          iconAnchor: [MARK_C, MARK_C],
         }),
       });
       const node = document.createElement('span');

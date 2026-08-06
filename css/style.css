@@ -213,20 +213,31 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- resonance marks ---------- */
 
 .mark-icon { background: none; border: 0; }
-.mark { color: var(--ink); width: 30px; height: 30px; }
+.mark { color: var(--ink); width: 44px; height: 44px; }
 .mark svg { overflow: visible; }
+/* the whole box takes the tap, not only the ring */
+.mk-hit { fill: transparent; }
+/* the field's own colour behind the ring, so linework never swallows it */
+.mk-halo {
+  fill: none; stroke: var(--field); stroke-width: 3.6; opacity: 0.9;
+  transform-origin: 22px 22px;
+  animation: breathe 5200ms ease-in-out infinite;
+  animation-delay: var(--seed, 0ms);
+}
 .mk-ring {
-  fill: none; stroke: currentColor; stroke-width: 1.2;
-  transform-origin: 15px 15px;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  transform-origin: 22px 22px;
   animation: breathe 5200ms ease-in-out infinite;
   animation-delay: var(--seed, 0ms);
 }
 .mk-dot { fill: currentColor; }
-.mark.wish .mk-ring { stroke-dasharray: 2 3; }
-.mark.wish .mk-dot { fill: none; stroke: currentColor; stroke-width: 1; }
-.mark.sel .mk-ring { stroke-width: 1.9; animation: none; transform: scale(1.28); }
-.mark:hover .mk-ring { animation-play-state: paused; transform: scale(1.2); transition: transform 160ms var(--e-reflex); }
-@keyframes breathe { 50% { transform: scale(1.13); opacity: 0.6; } }
+.mark.wish .mk-ring { stroke-dasharray: 2.4 3.4; }
+.mark.wish .mk-dot { fill: none; stroke: currentColor; stroke-width: 1.3; }
+.mark.sel .mk-ring { stroke-width: 2.6; animation: none; transform: scale(1.26); }
+.mark.sel .mk-halo { animation: none; transform: scale(1.26); }
+.mark:hover .mk-ring, .mark:hover .mk-halo { animation-play-state: paused; transform: scale(1.18); transition: transform 160ms var(--e-reflex); }
+/* it breathes in size only: a mark that fades is a mark you cannot find */
+@keyframes breathe { 50% { transform: scale(1.1); } }
 
 /* provenance graft: a 40° arc at the donor's signature angle, in counter-ink */
 .graft {
@@ -250,7 +261,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* clusters: a numeral in a thin ring */
 .station-icon { background: none; border: 0; }
 .station { position: relative; width: 100%; height: 100%; color: var(--ink); }
-.st-ring { fill: color-mix(in srgb, var(--field) 55%, transparent); stroke: currentColor; stroke-width: 1.1; }
+.st-ring { fill: color-mix(in srgb, var(--field) 88%, transparent); stroke: currentColor; stroke-width: 1.8; }
 .station-n {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -865,7 +876,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 
 @media (prefers-reduced-motion: reduce) {
   :root { transition: none; }
-  .mk-ring, .mark.corr { animation: none !important; }
+  .mk-ring, .mk-halo, .mark.corr { animation: none !important; }
   .field-ripple { display: none; }
   .mark.sel .mk-ring { transform: scale(1.28); }
   .index.opening .ix { animation: ix-still 120ms linear both; animation-delay: 0ms; }
