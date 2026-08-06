@@ -670,7 +670,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- posters (census · kept · voices · keys) ---------- */
 
 .poster {
-  position: fixed; inset: 0; height: var(--app-h); z-index: 45;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 55;
   overflow-y: auto; overscroll-behavior: contain;
   background: color-mix(in oklab, var(--field) 97%, transparent);
   padding: clamp(20px, 5vw, 72px);

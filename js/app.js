@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf38';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf38';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf38';
-import * as mapView from './map.js?v=rf38';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf38';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf38';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf38';
-import { exifGPS } from './exif.js?v=rf38';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf40';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf40';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf40';
+import * as mapView from './map.js?v=rf40';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf40';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf40';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf40';
+import { exifGPS } from './exif.js?v=rf40';
 
 // ---------- helpers ----------
 
@@ -176,6 +176,10 @@ let onHowClosed = null;
 // summoning anything at all counts as using it.
 let leaveHero = () => {};
 function setHeroExit(fn) { leaveHero = fn; }
+
+// the first-run door, reachable from anywhere that needs to offer it again
+let openThreshold = () => {};
+function setThresholdOpener(fn) { openThreshold = fn; }
 
 // the plate stands beside a living map and must never deaden it: you go on
 // tapping marks while it is open. only a surface that covers the field
@@ -1208,6 +1212,37 @@ function renderVoices() {
 
 // ---------- the resonance report ----------
 
+// a visit ends by putting the borrowed marks away, not by reloading
+function leaveVisit() {
+  state.visiting = null;
+  clearShareHash();
+  $('#visitBar').hidden = true;
+  pushCorrespondentsToMap();
+  clearWorld();
+  renderAll();
+  if (store.places.length) mapView.fitAll(store.places);
+  toast('their marks are put away');
+}
+
+// leaving a report opens the atlas it was offered to, rather than reloading
+// the page out from under the reader
+function leaveReport(el) {
+  clearShareHash();
+  dropDialog(el);
+  clearWorld();
+  state.visiting = null;
+  pushCorrespondentsToMap();
+  renderAll();
+  if (store.places.length || store.routes.length) {
+    mapView.fitAll([...store.places, ...store.routes.flatMap(r => r.path)]);
+    toast('your atlas');
+  } else if (!store.settings.chosen) {
+    openThreshold();
+  } else {
+    toast('your field is still empty. press the middle, or find or add below');
+  }
+}
+
 function openReport(payload) {
   if (payload.kind === 'folio') return openFolioReport(payload);
   if (payload.kind === 'ask') return openAskReport(payload);
@@ -1258,7 +1293,7 @@ function openFolioReport(payload) {
     <div class="rp-foot">
       ${fresh.length ? `<button class="word-btn" id="rpTakeAll">take all ${fresh.length}</button>` : ''}
       <button class="word-btn quiet" id="rpPrint">print, or save as pdf</button>
-      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+      <button class="word-btn quiet" id="rpLeave">${store.places.length || store.routes.length ? 'open my atlas' : 'begin my own atlas'}</button>
     </div>`;
   raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
@@ -1305,13 +1340,7 @@ function openFolioReport(payload) {
       ? `${remaining.length} place${remaining.length === 1 ? '' : 's'} taken, after ${author}`
       : 'you already hold them all');
   });
-  $('#rpLeave').addEventListener('click', () => {
-    clearShareHash();
-    dropDialog(el);
-    clearWorld();
-    renderAll();
-    if (store.places.length) mapView.fitAll(store.places);
-  });
+  $('#rpLeave').addEventListener('click', () => leaveReport(el));
   $('#rpPrint').addEventListener('click', () => {
     const theirTags = new Map((payload.tags || []).map(t => [t.id, t.name]));
     printSheet({
@@ -1341,7 +1370,7 @@ function openAskReport(payload) {
     </ul>
     <div class="rp-foot">
       ${matches.length ? `<button class="word-btn" id="askCompose">compose the folio for ${esc(from)}</button>` : ''}
-      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+      <button class="word-btn quiet" id="rpLeave">${store.places.length || store.routes.length ? 'open my atlas' : 'begin my own atlas'}</button>
     </div>`;
   raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
@@ -1356,7 +1385,7 @@ function openAskReport(payload) {
       places: matches,
     });
   });
-  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+  $('#rpLeave').addEventListener('click', () => leaveReport(el));
 }
 
 function openAtlasReport(payload) {
@@ -1406,7 +1435,7 @@ function openAtlasReport(payload) {
       ${store.places.length < 3 ? `<button class="word-btn" id="rpBegin">begin with a copy of this atlas</button>` : ''}
       <button class="word-btn ${store.places.length < 3 ? 'quiet' : ''}" id="rpKeep">keep ${esc(name)} as a voice</button>
       <button class="word-btn quiet" id="rpLook">just look around</button>
-      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+      <button class="word-btn quiet" id="rpLeave">${store.places.length || store.routes.length ? 'open my atlas' : 'begin my own atlas'}</button>
     </div>`;
   raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
@@ -1433,9 +1462,11 @@ function openAtlasReport(payload) {
   }));
   $('#rpBegin')?.addEventListener('click', () => {
     const added = store.merge({ tags: theirs.tags, places: theirs.places });
-    clearShareHash();
+    if (!added) return toast('this browser refused to keep them');
+    store.settings.chosen = true;
+    store.saveSettings();
+    leaveReport(el);
     toast(`${added} places are yours now. make them true`);
-    setTimeout(() => location.reload(), 900);
   });
   $('#rpKeep').addEventListener('click', () => {
     const finalName = prompt('Keep this atlas under which name?', name === 'an unsigned atlas' ? '' : name);
@@ -1461,7 +1492,7 @@ function openAtlasReport(payload) {
     $('#visitWho').textContent = `visiting ${name}`;
     toast('their marks, on a field of yours that is untouched');
   });
-  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+  $('#rpLeave').addEventListener('click', () => leaveReport(el));
 }
 
 // ---------- folios: the atomic recommendation ----------
@@ -2695,7 +2726,7 @@ function init() {
 
   // plain words, then a choice: nothing is seeded and nobody is named until
   // the visitor has said which start they want
-  function openThreshold() {
+  setThresholdOpener(function openThreshold() {
     const th = $('#threshold');
     const done = (fn) => {
       store.settings.chosen = true;
@@ -2755,11 +2786,11 @@ function init() {
       openSurface('howOverlay');
     });
     raiseDialog(th, 'What Resonate is');
-  }
+  });
 
   setTimeout(() => document.body.classList.remove('boot'), 700);
 
-  $('#visitLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+  $('#visitLeave').addEventListener('click', leaveVisit);
 
   // corner marks
   $('#fmIndex').addEventListener('click', () => {
@@ -2775,7 +2806,6 @@ function init() {
     setTheme(next);
   });
   $('#indexKeys').addEventListener('click', () => {
-    closeSurface('indexOverlay');
     openSurface('keysOverlay', renderKeys);
   });
 
@@ -2783,7 +2813,8 @@ function init() {
   $('#indexGo').addEventListener('click', (e) => {
     const b = e.target.closest('[data-go]');
     if (!b) return;
-    closeSurface('indexOverlay');
+    // the index stays open beneath: closing what you opened returns you to it,
+    // so reading one explanation does not cost you the others
     VERBS[b.dataset.go]?.run();
   });
 
@@ -2905,7 +2936,7 @@ function init() {
     }
     if (e.key === 'Escape') {
       if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
-      if (state.visiting) { clearShareHash(); location.reload(); return; }
+      if (state.visiting) { leaveVisit(); return; }
       if (!$('#reportOverlay').hidden) { dropDialog($('#reportOverlay')); clearWorld(); clearShareHash(); return; }
       if (popSurface()) return;
     }
