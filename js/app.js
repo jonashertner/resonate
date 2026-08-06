@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf32';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf32';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf32';
-import * as mapView from './map.js?v=rf32';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf32';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf32';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf32';
-import { exifGPS } from './exif.js?v=rf32';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf33';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf33';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf33';
+import * as mapView from './map.js?v=rf33';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf33';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf33';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf33';
+import { exifGPS } from './exif.js?v=rf33';
 
 // ---------- helpers ----------
 
@@ -520,6 +520,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
       <div class="plate-acts">
         <button class="word-btn" id="pDirections">directions ↗</button>
+        <button class="word-btn quiet" id="pFolio">file into a folio</button>
         ${safeUrl(place.url) ? `<a class="word-btn" href="${esc(place.url)}" target="_blank" rel="noopener">website ↗</a>` : ''}
         <button class="word-btn quiet" id="pDelete">remove</button>
       </div>
@@ -531,6 +532,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     try { await navigator.clipboard.writeText(`${place.lat}, ${place.lng}`); toast('coordinates copied'); }
     catch { toast('could not copy'); }
   });
+  $('#pFolio')?.addEventListener('click', () => fileIntoFolio(place.id));
   $('#pDirections')?.addEventListener('click', () => {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`, '_blank', 'noopener');
   });
@@ -1403,48 +1405,123 @@ function ensureAuthor() {
   });
 }
 
-function openFolioComposer({ title = '', dedication = '', places = null } = {}) {
-  const pool = places || filteredPlaces();
-  const chosen = new Set(pool.map(p => p.id));
+// ---------- folios: the shelf, and the composer ----------
+//
+// A folio is a titled slice of the atlas, kept as references so it stays
+// current as places improve. Keeping shares nothing. Handing over, publishing
+// and printing are each their own explicit act, from the same page.
+
+function openFolioShelf() {
   const body = $('#folioBody');
+  const shelf = store.folios;
+  body.innerHTML = `
+    ${shelf.length ? shelf.map(f => {
+      const r = store.resolveFolio(f.id);
+      const names = r.places.slice(0, 3).map(p => p.name).join(' · ');
+      const n = r.places.length + r.routes.length;
+      return `<button class="fol-shelf-row" data-open="${esc(f.id)}">
+        <span class="fs-title">${esc(f.title)}</span>
+        <span class="fs-meta mono">${n} enclosed${r.routes.length ? ` · ${r.routes.length} way${r.routes.length > 1 ? 's' : ''}` : ''} · ${fmtDate(f.updatedAt)}</span>
+        ${names ? `<span class="fs-names">${esc(names)}${r.places.length > 3 ? ' …' : ''}</span>` : ''}
+        ${f.dedication ? `<span class="fs-ded">${esc(f.dedication)}</span>` : ''}
+      </button>`;
+    }).join('') : `<div class="news-note">A folio is a titled set of places, kept here for yourself.
+      Hand it to one person as a link, publish it, or print it, whenever you choose.
+      Nothing is shared by keeping it.</div>`}
+    <div class="fol-acts">
+      <button class="word-btn" id="folNew">compose a new folio</button>
+    </div>`;
+  $$('[data-open]', body).forEach(b => b.addEventListener('click', () => openFolioComposer({ folioId: b.dataset.open })));
+  $('#folNew').addEventListener('click', () => openFolioComposer({ fresh: true }));
+  openSurface('folioOverlay');
+}
+
+function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false } = {}) {
+  const kept = folioId ? store.folioById(folioId) : null;
+  const pool = kept || fresh ? allPlaces() : (places || filteredPlaces());
+  const wayPool = allRoutes();
+  const chosen = new Set(kept ? kept.placeIds.filter(id => placeById(id)) : pool.map(p => p.id));
+  const chosenWays = new Set(kept ? kept.routeIds.filter(id => routeById(id)) : []);
+  if (kept) { title = kept.title; dedication = kept.dedication; }
+  const body = $('#folioBody');
+
+  const readHead = () => {
+    title = $('#folTitle').value;
+    dedication = $('#folDed').value;
+  };
+  const selection = () => pool.filter(p => chosen.has(p.id));
+  const wraySelection = () => wayPool.filter(r => chosenWays.has(r.id));
+  const needsTitle = () => {
+    const t = $('#folTitle').value.trim();
+    if (!t) { $('#folTitle').focus(); toast('a folio needs a title'); return null; }
+    if (!chosen.size && !chosenWays.size) { toast('nothing enclosed yet'); return null; }
+    return t;
+  };
 
   const paint = () => {
     body.innerHTML = `
-      <div class="fol-field"><input class="fol-title" id="folTitle" placeholder="Lisbon, the good part" value="${esc(title)}" maxlength="80"></div>
-      <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why. one line" value="${esc(dedication)}" maxlength="140"></div>
-      <div class="fol-count">${chosen.size} of ${pool.length} places enclosed</div>
+      ${store.folios.length || kept ? `<button class="fol-back mono" id="folBack">‹ the shelf</button>` : ''}
+      <div class="fol-field"><input class="fol-title" id="folTitle" placeholder="Lisbon, the good part" value="${esc(title)}" maxlength="80" aria-label="The folio's title"></div>
+      <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why. one line" value="${esc(dedication)}" maxlength="140" aria-label="Its dedication"></div>
+      <div class="fol-count">${chosen.size + chosenWays.size} of ${pool.length + wayPool.length} enclosed</div>
       ${pool.map(p => `
         <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
           <span class="in">${chosen.has(p.id) ? 'in' : 'out'}</span>
           <span class="nm">${esc(p.name)}</span>
           <span class="sub">${esc(p.city || '')}${p.rating ? ' · ' + starsText(p.rating) : ''}</span>
         </button>`).join('')}
+      ${wayPool.length ? wayPool.map(r => `
+        <button class="fol-row" data-wid="${esc(r.id)}" aria-pressed="${chosenWays.has(r.id)}">
+          <span class="in">${chosenWays.has(r.id) ? 'in' : 'out'}</span>
+          <span class="nm">${esc(r.name)}</span>
+          <span class="sub">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
+        </button>`).join('') : ''}
       <div class="fol-acts">
-        <button class="word-btn" id="folCopy">copy the folio link</button>
+        <button class="word-btn" id="folKeep">${kept ? 'keep the changes' : 'keep this folio'}</button>
+        <button class="word-btn quiet" id="folCopy">hand it over as a link</button>
         <button class="word-btn quiet" id="folPublish">publish to the newsstand</button>
         <button class="word-btn quiet" id="folPrint">print, or save as pdf</button>
         <button class="word-btn quiet" id="folAll">everything in</button>
-      </div>`;
+        ${kept ? '<button class="word-btn quiet" id="folRemove">remove from the shelf</button>' : ''}
+      </div>
+      <div class="news-note">Keeping shares nothing: the folio stays here, and follows your atlas as it
+      improves. A link carries a copy of what is enclosed today, without photographs.</div>`;
 
+    $('#folBack')?.addEventListener('click', () => { openFolioShelf(); });
     $$('.fol-row', body).forEach(row => row.addEventListener('click', () => {
-      const id = row.dataset.fid;
-      chosen.has(id) ? chosen.delete(id) : chosen.add(id);
-      title = $('#folTitle').value;
-      dedication = $('#folDed').value;
+      readHead();
+      const pid = row.dataset.fid, wid = row.dataset.wid;
+      if (pid) chosen.has(pid) ? chosen.delete(pid) : chosen.add(pid);
+      if (wid) chosenWays.has(wid) ? chosenWays.delete(wid) : chosenWays.add(wid);
       paint();
     }));
     $('#folAll').addEventListener('click', () => {
+      readHead();
       pool.forEach(p => chosen.add(p.id));
-      title = $('#folTitle').value;
-      dedication = $('#folDed').value;
+      wayPool.forEach(r => chosenWays.add(r.id));
       paint();
     });
+
+    $('#folKeep').addEventListener('click', () => {
+      const t = needsTitle();
+      if (!t) return;
+      const patch = {
+        title: t,
+        dedication: $('#folDed').value.trim(),
+        placeIds: [...chosen],
+        routeIds: [...chosenWays],
+      };
+      const saved = kept ? store.updateFolio(kept.id, patch) : store.addFolio(newFolio(patch));
+      if (!saved) return toast('this browser refused to keep it');
+      toast(kept ? 'kept' : 'on your shelf now. yours until you hand it over');
+      openFolioComposer({ folioId: saved.id });
+    });
+
     $('#folCopy').addEventListener('click', async () => {
-      const t = $('#folTitle').value.trim();
-      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
-      if (!chosen.size) return toast('nothing enclosed yet');
+      const t = needsTitle();
+      if (!t) return;
       const author = await ensureAuthor();
-      const sel = pool.filter(p => chosen.has(p.id));
+      const sel = selection();
       const tagIds = new Set(sel.flatMap(p => p.tags));
       const url = makeFolioUrl({
         title: t,
@@ -1452,27 +1529,26 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
         author,
         tags: allTags().filter(x => tagIds.has(x.id)),
         places: sel,
+        routes: wraySelection(),
       });
       try { await navigator.clipboard.writeText(url); toast('folio copied. hand it to one person'); }
       catch { prompt('Copy this folio:', url); }
     });
     $('#folPrint').addEventListener('click', () => {
-      const t = $('#folTitle').value.trim();
-      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
-      if (!chosen.size) return toast('nothing enclosed yet');
+      const t = needsTitle();
+      if (!t) return;
       printSheet({
         title: t,
         dedication: $('#folDed').value.trim(),
-        places: pool.filter(p => chosen.has(p.id)),
+        places: selection(),
+        routes: wraySelection(),
       });
     });
     $('#folPublish').addEventListener('click', async () => {
-      const t = $('#folTitle').value.trim();
-      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
-      if (!chosen.size) return toast('nothing enclosed yet');
+      const t = needsTitle();
+      if (!t) return;
       const author = await ensureAuthor();
-      const sel = pool.filter(p => chosen.has(p.id));
-      const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, sel) + '\n```';
+      const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, selection()) + '\n```';
       try { await navigator.clipboard.writeText(block); } catch { return prompt('Copy this, then paste it into the issue:', block); }
       const issueUrl = 'https://github.com/jonashertner/resonate-commons/issues/new'
         + '?title=' + encodeURIComponent('folio: ' + t)
@@ -1480,8 +1556,50 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
       window.open(issueUrl, '_blank', 'noopener');
       toast('the folio is on your clipboard. paste it into the issue and submit');
     });
+    $('#folRemove')?.addEventListener('click', () => {
+      if (!confirm(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.`)) return;
+      store.removeFolio(kept.id);
+      toast('off the shelf. every place is still yours');
+      openFolioShelf();
+    });
   };
   paint();
+  openSurface('folioOverlay');
+}
+
+// filing a place into a folio, from the place itself: the gesture a library
+// grows by. one tap for the shelf, one for the folio.
+function fileIntoFolio(placeId) {
+  const body = $('#folioBody');
+  const rows = store.folios.map(f => {
+    const inIt = f.placeIds.includes(placeId);
+    return `<button class="fol-row" data-file="${esc(f.id)}" aria-pressed="${inIt}">
+      <span class="in">${inIt ? 'in' : 'out'}</span>
+      <span class="nm">${esc(f.title)}</span>
+      <span class="sub">${f.placeIds.length + f.routeIds.length} enclosed</span>
+    </button>`;
+  }).join('');
+  body.innerHTML = `
+    <div class="fol-count">file “${esc(placeById(placeId)?.name || '')}” into</div>
+    ${rows || '<div class="news-note">No folios on the shelf yet.</div>'}
+    <div class="fol-acts">
+      <button class="word-btn quiet" id="folNewWith">a new folio, starting with it</button>
+    </div>`;
+  $$('[data-file]', body).forEach(b => b.addEventListener('click', () => {
+    const f = store.folioById(b.dataset.file);
+    const has = f.placeIds.includes(placeId);
+    const saved = store.updateFolio(f.id, {
+      placeIds: has ? f.placeIds.filter(x => x !== placeId) : [...f.placeIds, placeId],
+    });
+    if (!saved) return toast('this browser refused to keep it');
+    toast(has ? `out of “${f.title}”` : `into “${f.title}”`);
+    fileIntoFolio(placeId);
+  }));
+  $('#folNewWith').addEventListener('click', () => {
+    const made = store.addFolio(newFolio({ title: '', placeIds: [placeId] }));
+    if (!made) return toast('this browser refused to keep it');
+    openFolioComposer({ folioId: made.id });
+  });
   openSurface('folioOverlay');
 }
 
@@ -1986,7 +2104,8 @@ const VERBS = {
   want: { run: () => setStatusFilter('wishlist'), hint: 'only places still to go' },
   all: { run: () => setStatusFilter('all'), hint: 'everything' },
   specimen: { run: seedDemo, hint: 'a demo atlas to play with' },
-  folio: { run: () => openFolioComposer(), hint: 'compose a slice to hand someone' },
+  folio: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
+  folios: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
   ask: { run: composeAsk, hint: 'request someone’s taste' },
   newsstand: { run: () => openNewsstand(), hint: 'published folios, ranked by your resonance' },
   how: { run: () => openSurface('howOverlay'), hint: 'what this is, what it keeps, what it shares' },

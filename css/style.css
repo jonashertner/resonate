@@ -1230,3 +1230,25 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   .sh-profile .pf-high { fill: #fff; stroke: #000; stroke-width: 0.6; }
   .sh-measure { font-size: 9pt; margin-top: 1mm; }
 }
+
+/* ---------- the shelf ---------- */
+.fol-shelf-row {
+  display: flex; flex-direction: column; gap: 3px;
+  width: 100%; text-align: left;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--ink-4);
+}
+.fol-shelf-row:hover .fs-title { font-variation-settings: 'opsz' 40, 'wdth' 100, 'wght' 700; }
+.fs-title {
+  font-size: 22px;
+  font-variation-settings: 'opsz' 40, 'wdth' 92, 'wght' 560;
+  transition: font-variation-settings 160ms var(--e-reflex);
+}
+.fs-meta { font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.fs-names { font-size: 13px; color: var(--ink-2); }
+.fs-ded { font-size: 13px; font-style: italic; color: var(--ink-2); }
+.fol-back {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ink-2); padding: 2px 0 14px;
+}
+.fol-back:hover { color: var(--ink); }

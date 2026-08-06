@@ -1,13 +1,14 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf32';
-import { measure, simplify } from './route.js?v=rf32';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf33';
+import { measure, simplify } from './route.js?v=rf33';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
 const K_SETTINGS = 'resonate.settings.v1';
 const K_CORR = 'resonate.correspondents.v1';
 const K_ROUTES = 'resonate.routes.v1';
+const K_FOLIOS = 'resonate.folios.v1';
 
 // the tag wheel: eight hue stations that survive full-viewport takeover.
 // hue is the stored truth; hex is kept only for interop with old exports/links.
@@ -124,6 +125,23 @@ export function newRoute(partial = {}) {
   };
 }
 
+// a folio on the shelf: a titled slice, kept as references so it stays
+// current as the atlas improves. it copies nothing until it is handed over.
+export function newFolio(partial = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: uid(),
+    title: 'Untitled folio',
+    dedication: '',
+    placeIds: [],
+    routeIds: [],
+    createdAt: now,
+    updatedAt: now,
+    ...partial,
+    ...(partial.id ? {} : { id: uid() }),
+  };
+}
+
 export function newTag(partial = {}) {
   const t = {
     id: uid(),
@@ -141,6 +159,7 @@ const DEFAULT_SETTINGS = { theme: 'auto', lastView: null, seeded: false, authorN
 export const store = {
   places: [],
   routes: [],
+  folios: [],
   tags: [],
   correspondents: [],
   settings: { ...DEFAULT_SETTINGS },
@@ -148,6 +167,7 @@ export const store = {
   load() {
     this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean);
     this.routes = normRoutes(read(K_ROUTES, []));
+    this.folios = normFolioRefs(read(K_FOLIOS, []));
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
     this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
@@ -164,6 +184,42 @@ export const store = {
   saveSettings() { return write(K_SETTINGS, this.settings); },
   saveCorrespondents() { return write(K_CORR, this.correspondents); },
   saveRoutes() { return write(K_ROUTES, this.routes); },
+  saveFolios() { return write(K_FOLIOS, this.folios); },
+
+  folioById(id) { return this.folios.find(f => f.id === id); },
+
+  addFolio(folio) {
+    this.folios.unshift(folio);
+    if (!this.saveFolios()) { this.folios.shift(); return null; }
+    return folio;
+  },
+
+  updateFolio(id, patch) {
+    const f = this.folioById(id);
+    if (!f) return null;
+    const before = { ...f };
+    Object.assign(f, patch, { updatedAt: new Date().toISOString() });
+    if (!this.saveFolios()) { Object.assign(f, before); return null; }
+    return f;
+  },
+
+  removeFolio(id) {
+    const before = this.folios;
+    this.folios = this.folios.filter(f => f.id !== id);
+    if (!this.saveFolios()) this.folios = before;
+  },
+
+  // a folio materializes at the moment it is needed: missing places have
+  // been removed from the atlas and silently fall out of the slice
+  resolveFolio(id) {
+    const f = this.folioById(id);
+    if (!f) return null;
+    return {
+      ...f,
+      places: f.placeIds.map(pid => this.placeById(pid)).filter(Boolean),
+      routes: f.routeIds.map(rid => this.routeById(rid)).filter(Boolean),
+    };
+  },
 
   routeById(id) { return this.routes.find(r => r.id === id); },
 
@@ -278,6 +334,7 @@ export const store = {
   clearAll() {
     this.places = [];
     this.routes = [];
+    this.folios = [];
     this.tags = [];
     this.correspondents = [];
     try {
@@ -297,7 +354,8 @@ export const store = {
     // held so the whole import can be undone if any part of it is refused
     const before = {
       places: [...this.places], tags: [...this.tags],
-      routes: [...this.routes], correspondents: [...this.correspondents],
+      routes: [...this.routes], folios: [...this.folios],
+      correspondents: [...this.correspondents],
       settings: { ...this.settings },
     };
     const tagIds = new Set(this.tags.map(t => t.id));
@@ -324,6 +382,13 @@ export const store = {
         added++;
       }
     });
+    const folioIds = new Set(this.folios.map(f => f.id));
+    data.folios.forEach(f => {
+      if (!folioIds.has(f.id)) {
+        this.folios.push(newFolio(f));
+        folioIds.add(f.id);
+      }
+    });
     // an export carries the whole atlas back, correspondents and signature included
     const corrIds = new Set(this.correspondents.map(c => c.id));
     data.correspondents.forEach(c => {
@@ -342,14 +407,16 @@ export const store = {
     if (data.settings.theme) this.settings.theme = data.settings.theme;
     // an import is one act: if any part of it cannot be written, none of it
     // is kept, and the caller is told nothing came in
-    const ok = this.savePlaces() && this.saveTags() && this.saveRoutes() && this.saveCorrespondents();
+    const ok = this.savePlaces() && this.saveTags() && this.saveRoutes()
+      && this.saveFolios() && this.saveCorrespondents();
     if (!ok) {
       this.places = before.places;
       this.tags = before.tags;
       this.routes = before.routes;
+      this.folios = before.folios;
       this.correspondents = before.correspondents;
       this.settings = before.settings;
-      this.savePlaces(); this.saveTags(); this.saveRoutes(); this.saveCorrespondents();
+      this.savePlaces(); this.saveTags(); this.saveRoutes(); this.saveFolios(); this.saveCorrespondents();
       return 0;
     }
     this.saveSettings();
@@ -380,6 +447,7 @@ export const store = {
       tags: this.tags,
       places: this.places,
       routes: this.routes,
+      folios: this.folios,
       correspondents: this.correspondents,
       settings: this.settings,
     }, null, 2);

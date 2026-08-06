@@ -5,11 +5,12 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf32';
+import { decodePath } from './route.js?v=rf33';
 
 export const SCHEMA_VERSION = 3;
 
 export const LIMITS = {
+  folios: 120,
   routes: 200,
   routePoints: 3000,
   places: 500,
@@ -261,6 +262,30 @@ export function normPayload(raw) {
   return base;
 }
 
+// a kept folio is a named slice of the atlas: references, never copies
+export function normFolioRef(raw, i = 0) {
+  if (!isObj(raw)) return null;
+  const f = safeKeys(raw);
+  const title = str(f.title, LIMITS.title).trim();
+  if (!title) return null;
+  const ids = (arr, cap) => Array.isArray(arr)
+    ? arr.filter(x => typeof x === 'string' && !FORBIDDEN.has(x)).slice(0, cap)
+    : [];
+  return {
+    id: id(f.id, `f${i}`),
+    title,
+    dedication: str(f.dedication, LIMITS.dedication),
+    placeIds: ids(f.placeIds, LIMITS.places),
+    routeIds: ids(f.routeIds, LIMITS.routes),
+    createdAt: str(f.createdAt, 40),
+    updatedAt: str(f.updatedAt, 40),
+  };
+}
+
+export function normFolioRefs(arr) {
+  return normList(arr, normFolioRef, LIMITS.folios);
+}
+
 // an exported file, on its way back in
 export function normImport(raw) {
   if (!isObj(raw)) return null;
@@ -269,6 +294,7 @@ export function normImport(raw) {
     tags: normTags(d.tags),
     places: normPlaces(d.places),
     routes: normRoutes(d.routes, decodePath),
+    folios: normFolioRefs(d.folios),
     correspondents: normList(d.correspondents, normCorrespondent, LIMITS.correspondents),
     settings: normSettings(d.settings),
   };

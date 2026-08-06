@@ -30,12 +30,12 @@ globalThis.localStorage = new Proxy(storage, {
   get: (t, p) => (typeof t[p] === 'function' ? t[p].bind(t) : t[p]),
 });
 
-const { store, newPlace, newTag, newRoute, demoData } = await import('../js/store.js?v=test');
+const { store, newPlace, newTag, newRoute, newFolio, demoData } = await import('../js/store.js?v=test');
 
 function fresh() {
   storage.map.clear();
   storage.refuse = false;
-  store.places = []; store.routes = []; store.tags = []; store.correspondents = [];
+  store.places = []; store.routes = []; store.folios = []; store.tags = []; store.correspondents = [];
   store.settings = { theme: 'auto', lastView: null, seeded: false, authorName: '' };
 }
 
@@ -176,4 +176,63 @@ test('a way is kept with its measure and comes back whole', () => {
   assert.equal(back.name, routes[0].name);
   assert.ok(back.path.length >= 2);
   assert.equal(Math.round(back.ascent), Math.round(r.ascent));
+});
+
+// ---------- the shelf: folios kept for yourself ----------
+
+test('a kept folio shares nothing: it holds references, not copies', () => {
+  fresh();
+  const a = store.addPlace(newPlace({ name: 'Markthalle', lat: 47.5479, lng: 7.5875, note: 'the momo stand' }));
+  const b = store.addPlace(newPlace({ name: 'Rheinbad', lat: 47.5533, lng: 7.6053 }));
+  const f = store.addFolio(newFolio({ title: 'Basel, the good part', placeIds: [a.id, b.id] }));
+  assert.ok(f);
+  const raw = localStorage.getItem('resonate.folios.v1');
+  assert.ok(!raw.includes('47.54'), 'no coordinate is copied into the shelf');
+  assert.ok(!raw.includes('momo'), 'and no note either');
+});
+
+test('a folio follows the atlas as it improves', () => {
+  fresh();
+  const a = store.addPlace(newPlace({ name: 'Markthalle', lat: 47.5479, lng: 7.5875 }));
+  const f = store.addFolio(newFolio({ title: 'Basel', placeIds: [a.id] }));
+  store.updatePlace(a.id, { name: 'Markthalle (the momo stand)', rating: 5 });
+  const resolved = store.resolveFolio(f.id);
+  assert.equal(resolved.places[0].name, 'Markthalle (the momo stand)');
+  assert.equal(resolved.places[0].rating, 5, 'the folio was never a snapshot');
+});
+
+test('a place removed from the atlas falls quietly out of its folios', () => {
+  fresh();
+  const a = store.addPlace(newPlace({ name: 'Gone', lat: 46, lng: 8 }));
+  const b = store.addPlace(newPlace({ name: 'Stays', lat: 46.1, lng: 8.1 }));
+  const f = store.addFolio(newFolio({ title: 'Two', placeIds: [a.id, b.id] }));
+  store.removePlace(a.id);
+  const resolved = store.resolveFolio(f.id);
+  assert.equal(resolved.places.length, 1);
+  assert.equal(resolved.places[0].name, 'Stays');
+});
+
+test('taking a folio off the shelf leaves every place in the atlas', () => {
+  fresh();
+  const a = store.addPlace(newPlace({ name: 'Kept', lat: 46, lng: 8 }));
+  const f = store.addFolio(newFolio({ title: 'A folio', placeIds: [a.id] }));
+  store.removeFolio(f.id);
+  assert.equal(store.folios.length, 0);
+  assert.equal(store.places.length, 1, 'the shelf held references, so removing it removed nothing');
+});
+
+test('a folio the device refuses is not on the shelf', () => {
+  fresh();
+  storage.refuse = true;
+  assert.equal(store.addFolio(newFolio({ title: 'Nope' })), null);
+  assert.equal(store.folios.length, 0);
+});
+
+test('the shelf comes home in a backup and not in a share', () => {
+  fresh();
+  const a = store.addPlace(newPlace({ name: 'A', lat: 46, lng: 8 }));
+  store.addFolio(newFolio({ title: 'Mine', placeIds: [a.id] }));
+  assert.equal(JSON.parse(store.exportJSON()).folios.length, 1);
+  assert.equal(JSON.parse(store.exportShareJSON()).folios, undefined,
+    'a folio is a private arrangement; what you hand over is its contents');
 });
