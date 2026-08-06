@@ -4,7 +4,7 @@
 // domains, and (3) where they diverge, the divergence is interesting — a
 // correspondent strong where you are blank expands you rather than mismatching.
 
-import { haversineKm } from './geocode.js?v=rf4';
+import { haversineKm } from './geocode.js?v=rf5';
 
 const SAME_PLACE_KM = 0.15; // within ~150m = the same place
 
@@ -130,10 +130,10 @@ export function evidenceLines(r, name) {
   const lines = [];
   if (r.common.length) {
     lines.push(r.loved >= 1
-      ? `<b>${r.common.length}</b> places you both hold — <b>${r.loved}</b> you both love`
+      ? `<b>${r.common.length}</b> places you both hold, <b>${r.loved}</b> you both love`
       : `<b>${r.common.length}</b> place${r.common.length > 1 ? 's' : ''} you both hold`);
   } else {
-    lines.push('no overlaps yet — every mark here is news');
+    lines.push('no overlaps yet, every mark here is news');
   }
   if (r.alignedDomains.length) {
     lines.push(`both fluent in <i>${r.alignedDomains.slice(0, 2).join('</i> and <i>')}</i>`);
@@ -144,7 +144,7 @@ export function evidenceLines(r, name) {
     const d = r.expansionDomains[0];
     const n = r.picks.filter(p => p.expands).length;
     lines.push(n
-      ? `${name || 'they'} would hand you <b>${n}</b> place${n > 1 ? 's' : ''} in <i>${d}</i> — ground you barely touch`
+      ? `${name || 'they'} would hand you <b>${n}</b> place${n > 1 ? 's' : ''} in <i>${d}</i>, ground you barely touch`
       : `deep in <i>${d}</i>, where your atlas is thin`);
   }
   return lines;
@@ -154,7 +154,7 @@ export function evidenceLines(r, name) {
 export function resonancePhrase(r, name) {
   const who = name || 'This atlas';
   if (!r.common.length && r.alignment < 0.25 && !r.expansionDomains.length) {
-    return `${who} charts different ground than yours — read it as travel, not counsel.`;
+    return `${who} charts different ground than yours. Read it as travel, not counsel.`;
   }
   const bits = [];
   if (r.loved >= 2) bits.push(`you both love ${r.loved} of the same places`);
@@ -164,5 +164,5 @@ export function resonancePhrase(r, name) {
   if (r.expansionDomains.length) bits.push(`deep in ${r.expansionDomains[0]}, where your atlas is blank`);
   const strength = r.score >= 0.65 ? 'resonates strongly with yours' :
     r.score >= 0.35 ? 'resonates with yours' : 'touches yours lightly';
-  return `${who} ${strength} — ${bits.join(', ')}.`;
+  return `${who} ${strength}: ${bits.join(', ')}.`;
 }

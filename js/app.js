@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf4';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf4';
-import * as mapView from './map.js?v=rf4';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf4';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf4';
-import { exifGPS } from './exif.js?v=rf4';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf5';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf5';
+import * as mapView from './map.js?v=rf5';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf5';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf5';
+import { exifGPS } from './exif.js?v=rf5';
 
 // ---------- helpers ----------
 
@@ -208,7 +208,7 @@ function renderList() {
   const places = filteredPlaces();
   if (!places.length) {
     wrap.innerHTML = allPlaces().length === 0
-      ? `<div class="ix-empty">Every place that ever <b>resonated</b> — held in one field.
+      ? `<div class="ix-empty">Every place that ever <b>resonated</b>, held in one field.
           <p>Press <b>/</b> and name a place. Drop a photo on the field. Or open a
           <button class="word-btn" id="emptyDemo" style="font-size:inherit;letter-spacing:0;text-transform:none">specimen atlas</button>.</p>
         </div>`
@@ -314,7 +314,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       ${place.rating ? `<div class="stars-line">${starsText(place.rating).split('').map(() => '<button class="on" disabled>★</button>').join('')}</div>` : ''}
       ${place.note ? `<div class="plate-sec"><div class="plate-sec-head"><span>their note</span></div><p class="note-input" style="border-left-color:var(--counter)">${esc(place.note)}</p></div>` : ''}
       <div class="plate-acts">
-        <button class="word-btn" id="pAdopt">adopt — after ${esc(foreign.name)}</button>
+        <button class="word-btn" id="pAdopt">adopt, after ${esc(foreign.name)}</button>
         <button class="word-btn quiet" id="pDirections">directions ↗</button>
       </div>`
     : `
@@ -445,7 +445,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
         const dataUri = await compressImage(f);
         const photos = [...(place.photos || []), dataUri];
         save({ photos });
-        if (!store.savePlaces()) toast('storage is full — photo not kept');
+        if (!store.savePlaces()) toast('storage is full, photo not kept');
         renderPlate(place); renderList();
       } catch { toast('could not read that image'); }
     };
@@ -532,7 +532,7 @@ async function addFromPhoto(file) {
   toast('reading the photo…');
   const fix = await exifGPS(file);
   if (!fix) {
-    toast('no location in this photo — add the place first, then attach it');
+    toast('no location in this photo. add the place first, then attach it');
     return;
   }
   let dataUri = null;
@@ -543,7 +543,7 @@ async function addFromPhoto(file) {
     if (r) Object.assign(draft, { name: r.name || draft.name, address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
   } catch { /* offline is fine */ }
   const place = store.addPlace(newPlace({ ...draft, status: 'visited', photos: dataUri ? [dataUri] : [] }));
-  if (!store.savePlaces()) toast('storage is full — photo not kept');
+  if (!store.savePlaces()) toast('storage is full, photo not kept');
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
@@ -608,7 +608,7 @@ function seedDemo() {
   renderAll();
   closeSurface('indexOverlay');
   mapView.fitAll(store.places);
-  toast('a specimen atlas — make it yours');
+  toast('a specimen atlas. make it yours');
 }
 
 // ---------- correspondents ----------
@@ -630,7 +630,7 @@ function adoptPlace(place, foreign) {
   renderAll();
   closeSurface('plate');
   selectPlace(adopted.id, { fly: false });
-  toast(`yours now — after ${foreign.name}`);
+  toast(`yours now, after ${foreign.name}`);
 }
 
 function openForeignPlate(corrId, placeId) {
@@ -649,7 +649,7 @@ function renderVoices() {
     body.innerHTML = `<div class="corr-empty">
       <p class="ce-law">Resonance is exchanged, not followed.</p>
       <p class="ce-how">Hand your atlas to one person whose taste you trust. When theirs comes back,
-      open the link — the field will tell you what you have in common.</p>
+      open the link here. the field will tell you what you have in common.</p>
       <div class="word-row">
         <button class="word-btn" id="ceShare">copy my atlas link</button>
         <button class="word-btn quiet" id="ceImport">open one sent to me</button>
@@ -701,7 +701,7 @@ function renderVoices() {
       renderVoices();
     });
     row.querySelector('[data-part]').addEventListener('click', () => {
-      if (!confirm(`Part ways with ${c.name}? Their marks leave your field. Places you adopted stay yours — and still say “after ${c.name}”.`)) return;
+      if (!confirm(`Part ways with ${c.name}? Their marks leave your field. Places you adopted stay yours, and still say “after ${c.name}”.`)) return;
       store.removeCorrespondent(id);
       pushCorrespondentsToMap();
       renderVoices();
@@ -742,7 +742,7 @@ function openFolioReport(payload) {
     ${payload.dedication ? `<p class="rp-ded">“${esc(payload.dedication)}”</p>` : ''}
     <ul class="rp-evidence mono">
       <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'} enclosed</li>
-      ${held.length ? `<li><b>${held.length}</b> you already hold — you can trust the rest</li>` : ''}
+      ${held.length ? `<li><b>${held.length}</b> you already hold, you can trust the rest</li>` : ''}
       ${fresh.length ? `<li><b>${fresh.length}</b> new to your field</li>` : ''}
     </ul>
     <div class="rp-case">
@@ -780,7 +780,7 @@ function openFolioReport(payload) {
     el.hidden = true;
     clearWorld();
     mapView.fitAll(store.places);
-    toast(`${fresh.length} places taken — after ${author}`);
+    toast(`${fresh.length} places taken, after ${author}`);
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
 }
@@ -852,7 +852,8 @@ function openAtlasReport(payload) {
         </div>`).join('')}
     </div>` : ''}
     <div class="rp-foot">
-      <button class="word-btn" id="rpKeep">keep ${esc(name)} as a correspondent</button>
+      ${store.places.length < 3 ? `<button class="word-btn" id="rpBegin">begin with a copy of this atlas</button>` : ''}
+      <button class="word-btn ${store.places.length < 3 ? 'quiet' : ''}" id="rpKeep">keep ${esc(name)} as a correspondent</button>
       <button class="word-btn quiet" id="rpLook">just look around</button>
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
@@ -866,6 +867,12 @@ function openAtlasReport(payload) {
     adoptPlace(pk.place, foreignRef);
     b.replaceWith(Object.assign(document.createElement('span'), { className: 'why', textContent: 'yours' }));
   }));
+  $('#rpBegin')?.addEventListener('click', () => {
+    const added = store.merge({ tags: theirs.tags, places: theirs.places });
+    clearShareHash();
+    toast(`${added} places are yours now. make them true`);
+    setTimeout(() => location.reload(), 900);
+  });
   $('#rpKeep').addEventListener('click', () => {
     const finalName = prompt('Keep this atlas under which name?', name === 'an unsigned atlas' ? '' : name);
     if (finalName === null) return;
@@ -875,14 +882,14 @@ function openAtlasReport(payload) {
     el.hidden = true;
     clearWorld();
     renderAll();
-    toast(`${finalName || name} is now a correspondent — their marks are on your field`);
+    toast(`${finalName || name} is now a correspondent. their marks are on your field`);
   });
   $('#rpLook').addEventListener('click', () => {
     state.visiting = { id: 'visit-' + Date.now(), name, hue: 278, visible: true, tags: theirs.tags, places: theirs.places };
     mapView.setCorrespondents([...store.correspondents, state.visiting]);
     el.hidden = true;
     mapView.fitAll(theirs.places);
-    toast('visiting — your atlas is untouched · esc to leave');
+    toast('visiting. your atlas is untouched. esc to leave');
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
 }
@@ -915,7 +922,7 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
   const paint = () => {
     body.innerHTML = `
       <div class="fol-field"><input class="fol-title" id="folTitle" placeholder="Lisbon, the good part" value="${esc(title)}" maxlength="80"></div>
-      <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why — one line" value="${esc(dedication)}" maxlength="140"></div>
+      <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why. one line" value="${esc(dedication)}" maxlength="140"></div>
       <div class="fol-count">${chosen.size} of ${pool.length} places enclosed</div>
       ${pool.map(p => `
         <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
@@ -956,7 +963,7 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
         tags: allTags().filter(x => tagIds.has(x.id)),
         places: sel,
       });
-      try { await navigator.clipboard.writeText(url); toast('folio copied — hand it to one person'); }
+      try { await navigator.clipboard.writeText(url); toast('folio copied. hand it to one person'); }
       catch { prompt('Copy this folio:', url); }
     });
     $('#folPublish').addEventListener('click', async () => {
@@ -969,9 +976,9 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
       try { await navigator.clipboard.writeText(block); } catch { return prompt('Copy this, then paste it into the issue:', block); }
       const issueUrl = 'https://github.com/jonashertner/resonate-commons/issues/new'
         + '?title=' + encodeURIComponent('folio: ' + t)
-        + '&body=' + encodeURIComponent('Paste the folio below this line — it is already on your clipboard.\n\n');
+        + '&body=' + encodeURIComponent('Paste the folio below this line. It is already on your clipboard.\n\n');
       window.open(issueUrl, '_blank', 'noopener');
-      toast('the folio is on your clipboard — paste it into the issue and submit');
+      toast('the folio is on your clipboard. paste it into the issue and submit');
     });
   };
   paint();
@@ -983,7 +990,7 @@ async function composeAsk() {
   if (!q || !q.trim()) return;
   const from = await ensureAuthor();
   const url = makeAskUrl({ from, q: q.trim() });
-  try { await navigator.clipboard.writeText(url); toast('ask copied — send it to someone whose taste you trust'); }
+  try { await navigator.clipboard.writeText(url); toast('ask copied. send it to someone whose taste you trust'); }
   catch { prompt('Copy this ask:', url); }
 }
 
@@ -1028,7 +1035,7 @@ async function openNewsstand(initialQ = '') {
     try {
       newsIndex = await (await fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })).json();
     } catch {
-      body.innerHTML = `<div class="news-note">The newsstand is unreachable right now — it lives at ${COMMONS}. Try again with a connection.</div>`;
+      body.innerHTML = `<div class="news-note">The newsstand is unreachable right now. Try again with a connection.</div>`;
       return;
     }
   }
@@ -1044,7 +1051,7 @@ async function openNewsstand(initialQ = '') {
             <span class="why">${esc(why)}</span>
           </span>
         </button>`).join('')
-      : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet — publish the folio that should.</div>`}
+      : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet. publish the folio that should.</div>`}
       <div class="news-note">Ranking happens here, against your own atlas. The newsstand never learns what you like.
       Publish from any folio you compose (&gt;folio).</div>`;
     const input = $('#newsQ');
@@ -1101,7 +1108,7 @@ async function shareMap() {
   const url = makeShareUrl(allTags(), allPlaces(), author);
   try {
     await navigator.clipboard.writeText(url);
-    toast('link copied — your whole atlas travels in it');
+    toast('link copied. your whole atlas travels in it');
   } catch {
     prompt('Copy this link:', url);
   }
@@ -1121,7 +1128,7 @@ function renderStats() {
     if (p.city) cities.add(p.city);
   });
   if (!places.length) {
-    body.innerHTML = `<p class="stat-opening">Nothing counted yet — <em>the field is waiting.</em></p>`;
+    body.innerHTML = `<p class="stat-opening">Nothing counted yet. <em>The field is waiting.</em></p>`;
     return;
   }
   const tagRows = allTags()
@@ -1130,7 +1137,7 @@ function renderStats() {
   const countryList = [...countries.entries()].sort((a, b) => b[1] - a[1]);
 
   body.innerHTML = `
-    <p class="stat-opening">${places.length} places across ${countries.size} countr${countries.size === 1 ? 'y' : 'ies'} —
+    <p class="stat-opening">${places.length} places across ${countries.size} countr${countries.size === 1 ? 'y' : 'ies'}.
       ${visited.length} been, <em>${wish.length} still to go.</em></p>
     <div class="stat-band">
       <div class="stat-cell"><div class="stat-num">${places.length}</div><div class="stat-lbl">places</div></div>
@@ -1186,7 +1193,7 @@ function renderSettings() {
       <div class="set-row">
         <div class="set-row-sub">${store.correspondents.length
           ? `${store.correspondents.length} correspondent${store.correspondents.length > 1 ? 's' : ''} on your field.`
-          : 'No correspondents yet — resonance is exchanged, not followed.'}</div>
+          : 'No correspondents yet. Resonance is exchanged, not followed.'}</div>
         <button class="word-btn" id="openVoices">open the correspondence</button>
       </div>
     </div>
@@ -1199,7 +1206,7 @@ function renderSettings() {
         <button class="word-btn quiet" id="impJson">import</button>
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
-      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. Export before switching devices — or send yourself the share link.</div>
+      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. Export before switching devices, or send yourself the share link.</div>
     </div>`;
 
   $('#themeSeg').addEventListener('click', (e) => {
@@ -1332,6 +1339,8 @@ const VERBS = {
   folio: { run: () => openFolioComposer(), hint: 'compose a slice to hand someone' },
   ask: { run: composeAsk, hint: 'request someone’s taste' },
   newsstand: { run: () => openNewsstand(), hint: 'published folios, ranked by your resonance' },
+  how: { run: () => openSurface('howOverlay'), hint: 'what this is, what it keeps, what it shares' },
+  about: { run: () => openSurface('howOverlay'), hint: 'what this is, what it keeps, what it shares' },
   commons: { run: () => openNewsstand(), hint: 'published folios, ranked by your resonance' },
 };
 
@@ -1404,7 +1413,7 @@ function rowHTML(item, i) {
   }
   if (item.kind === 'tag') {
     const on = state.filters.tags.has(item.tag.id);
-    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name"># ${esc(item.tag.name)}</span><span class="row-sub">${item.n} places · ${on ? 'filtered — ↵ clears' : '↵ inks the world'}</span></button>`;
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name"># ${esc(item.tag.name)}</span><span class="row-sub">${item.n} places · ${on ? 'filtered, ↵ clears' : '↵ inks the world'}</span></button>`;
   }
   if (item.kind === 'voice') {
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">@ ${esc(item.c.name)}</span><span class="row-sub">${item.c.places.length} marks · ${item.c.visible === false ? 'muted' : 'audible'}</span></button>`;
@@ -1482,12 +1491,12 @@ function renderPaletteResults(q) {
     const items = store.correspondents
       .filter(c => c.name.toLowerCase().includes(r.rest))
       .map(c => ({ kind: 'voice', c }));
-    return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no correspondents yet — >share to begin the exchange');
+    return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no correspondents yet. >share to begin the exchange');
   }
   if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
   const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
   const voices = corrMatches(r.rest);
-  paint([...locals, ...voices], r.rest ? '' : 'name a place — or  #tag   >verb   @voice');
+  paint([...locals, ...voices], r.rest ? '' : 'name a place, or  #tag   >verb   @voice');
   remoteSearch(r.rest);
 }
 

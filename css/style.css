@@ -10,7 +10,7 @@
 
 @property --hue { syntax: '<number>'; inherits: true; initial-value: 300; }
 @property --split { syntax: '<number>'; inherits: true; initial-value: -180; }
-@property --tint { syntax: '<number>'; inherits: true; initial-value: 0.4; }
+@property --tint { syntax: '<number>'; inherits: true; initial-value: 0.58; }
 
 :root {
   /* role constants — sunlight-proof: deep ink on a bright field, every hue.
@@ -43,7 +43,7 @@
 }
 
 /* rest state — LICHEN × IODINE, cross-hued; dark swaps the families */
-:root { --hue: 300; --split: -180; --tint: 0.4; }
+:root { --hue: 300; --split: -180; --tint: 0.58; }
 :root[data-theme="dark"] {
   --hue: 120; --split: 180;
   --L-f: 0.17; --C-f: 0.026;
@@ -97,14 +97,14 @@ a { color: inherit; }
 #map .leaflet-tile-pane {
   filter: grayscale(1) sepia(1)
     hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * 1.15))
-    brightness(1.03) contrast(0.94);
+    saturate(calc(var(--tint) * 1.3))
+    brightness(0.985) contrast(1.08);
 }
 :root[data-theme="dark"] #map .leaflet-tile-pane {
   filter: grayscale(1) sepia(1)
     hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * 1.7))
-    brightness(1.24) contrast(0.98);
+    saturate(calc(var(--tint) * 1.9))
+    brightness(1.38) contrast(1.1);
 }
 /* greens land dull in filter space — boost the band */
 :root[data-hueband="green"] #map .leaflet-tile-pane { filter: grayscale(1) sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg)) saturate(calc(var(--tint) * 1.5)) brightness(1.05) contrast(0.94); }
@@ -112,7 +112,7 @@ a { color: inherit; }
 .locate-dot { stroke: var(--ink); fill: none; }
 
 body.dropping::after {
-  content: "drop the photo — the field will place it";
+  content: "drop the photo. the field will place it";
   position: fixed; inset: 0; z-index: 200;
   display: grid; place-items: center;
   background: var(--scrim);
@@ -822,3 +822,5 @@ body.dropping::after {
   .ix-name, .cmd-row .row-name, .rp-pick .nm, .fm-nw { transition: none; }
   .plate-sec-head .dictate.listening { animation: none; }
 }
+
+.how-body p { max-width: 58ch; font-size: 15px; line-height: 1.6; color: var(--ink); margin-bottom: 14px; }
