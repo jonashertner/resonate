@@ -1015,7 +1015,16 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 
 @media print {
   body > *:not(#sheet) { display: none !important; }
-  html, body { background: #fff !important; }
+  /* the screen pins the body to one visible viewport so iOS cannot drift it.
+     paper has no viewport: unpin it, or the atlas prints as a single page. */
+  html, body {
+    background: #fff !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+  }
+  #sheet { position: static; height: auto; }
   @page { margin: 16mm 18mm 20mm; }
 
   #sheet {
