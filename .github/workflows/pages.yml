@@ -73,7 +73,7 @@ jobs:
           mark=$(grep -oE 'v=rf[0-9]+' index.html | head -1)
           echo "looking for $mark"
           for i in $(seq 1 20); do
-            body=$(curl -fsS "https://jonashertner.github.io/resonate/?ci=$i" || true)
+            body=$(curl -fsS "https://resonate.select/?ci=$i" || true)
             if printf '%s' "$body" | grep -q "$mark"; then
               echo "live after $((i * 15))s"
               exit 0
@@ -85,14 +85,14 @@ jobs:
       - name: the shell it needs is reachable
         run: |
           for p in css/style.css js/app.js js/schema.js sw.js assets/intro.mp4 manifest.webmanifest; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://jonashertner.github.io/resonate/$p")
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 200 ] || exit 1
           done
       - name: the repository's machinery is not published
         run: |
           for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://jonashertner.github.io/resonate/$p")
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 404 ] || exit 1
           done

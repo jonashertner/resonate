@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf37';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf37';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf37';
-import * as mapView from './map.js?v=rf37';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf37';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf37';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf37';
-import { exifGPS } from './exif.js?v=rf37';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf38';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf38';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf38';
+import * as mapView from './map.js?v=rf38';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf38';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf38';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf38';
+import { exifGPS } from './exif.js?v=rf38';
 
 // ---------- helpers ----------
 
@@ -1785,7 +1785,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
       `${groups.size > 1 || city !== 'off the map' ? `<h2 class="sh-city mono">${esc(city.toLowerCase())}</h2>` : ''}
        ${list.map(entry).join('')}`).join('')}
     ${ways ? `<h2 class="sh-city mono">ways</h2>${ways}` : ''}
-    <footer class="sh-colophon mono">resonate · jonashertner.github.io/resonate</footer>`;
+    <footer class="sh-colophon mono">resonate · resonate.select</footer>`;
 }
 
 function atlasSheetOpts() {

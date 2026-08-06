@@ -3,7 +3,7 @@
 A personal atlas of the places that matter to you, and a quiet trust network
 around them. It lives in your browser. No account, no server, no build step.
 
-Live at [jonashertner.github.io/resonate](https://jonashertner.github.io/resonate/).
+Live at [resonate.select](https://resonate.select/).
 
 ## The idea
 
@@ -93,11 +93,8 @@ published only when a maintainer applies a label to its issue.
 
 ## Known limits
 
-The app and the commons share one github.io origin, and localStorage is scoped
-to an origin rather than a path. The commons serves no page that could run
-script, but a dedicated hostname is the real fix. Photos live in localStorage
-and a large atlas can exhaust the quota; a refused write says so, and IndexedDB
-is the next move. See [SECURITY.md](SECURITY.md).
+Photos live in localStorage and a large atlas can exhaust the quota; a refused
+write says so, and IndexedDB is the next move. See [SECURITY.md](SECURITY.md).
 
 ## Attribution
 
