@@ -91,3 +91,70 @@ test('the evidence lines escape a hostile domain name', async () => {
   assert.ok(!all.includes('<script'), 'a script tag survived into the evidence');
   assert.ok(all.includes('&lt;img'), 'the hostile name should appear as text');
 });
+
+// ---------- the shared protocol ----------
+
+const schema = await import('../js/schema.js?v=test');
+
+test('a payload without a kind it can satisfy is refused', () => {
+  assert.equal(schema.normPayload(null), null);
+  assert.equal(schema.normPayload('atlas'), null);
+  assert.equal(schema.normPayload({ kind: 'atlas', places: [] }), null);
+  assert.equal(schema.normPayload({ kind: 'folio', title: '', places: [{ lat: 1, lng: 1 }] }), null);
+  assert.equal(schema.normPayload({ kind: 'ask', q: '   ' }), null);
+});
+
+test('a place off the globe is not a place', () => {
+  assert.equal(schema.normPlace({ lat: 91, lng: 0 }), null);
+  assert.equal(schema.normPlace({ lat: 0, lng: 181 }), null);
+  assert.equal(schema.normPlace({ lat: 'x', lng: 0 }), null);
+  assert.equal(schema.normPlace({ lat: NaN, lng: 0 }), null);
+  assert.ok(schema.normPlace({ lat: -89.9, lng: 179.9 }));
+});
+
+test('malformed places are dropped, not carried into a crash', () => {
+  const p = schema.normPayload({
+    kind: 'atlas',
+    places: [null, 'nope', { lat: 1, lng: 1, name: 'real' }, { lat: 999, lng: 1 }],
+    tags: [null, 7, { name: 'wine' }],
+  });
+  assert.equal(p.places.length, 1);
+  assert.equal(p.places[0].name, 'real');
+  assert.equal(p.tags.length, 1);
+  // every place has an array of tags, so tags.map can never throw downstream
+  assert.ok(p.places.every(x => Array.isArray(x.tags)));
+});
+
+test('the payload is bounded, however long the link', () => {
+  const many = Array.from({ length: 5000 }, (_, i) => ({ lat: 1, lng: i / 1000, name: 'x' }));
+  const p = schema.normPayload({ kind: 'atlas', places: many });
+  assert.equal(p.places.length, schema.LIMITS.places);
+  const long = schema.normPlace({ lat: 1, lng: 1, name: 'n'.repeat(9999), note: 'x'.repeat(99999) });
+  assert.equal(long.name.length, schema.LIMITS.name);
+  assert.equal(long.note.length, schema.LIMITS.note);
+});
+
+test('a prototype cannot be poisoned through a link', () => {
+  const p = schema.normPayload(JSON.parse('{"kind":"atlas","places":[{"lat":1,"lng":1,"__proto__":{"pwned":true}}]}'));
+  assert.equal({}.pwned, undefined);
+  assert.equal(Object.prototype.pwned, undefined);
+  assert.equal(p.places[0].pwned, undefined);
+});
+
+test('a javascript url never survives as a link', () => {
+  assert.equal(schema.normPlace({ lat: 1, lng: 1, url: 'javascript:alert(1)' }).url, '');
+  assert.equal(schema.normPlace({ lat: 1, lng: 1, url: 'data:text/html,x' }).url, '');
+  assert.equal(schema.normPlace({ lat: 1, lng: 1, url: 'https://ok.test/x' }).url, 'https://ok.test/x');
+});
+
+test('a newsstand row cannot point outside the folios it names', () => {
+  assert.equal(schema.normFolioCard({ file: '../../etc/passwd', title: 't' }), null);
+  assert.equal(schema.normFolioCard({ file: 'a/b.json', title: 't' }), null);
+  assert.equal(schema.normFolioCard({ file: 'abc123.json', title: '' }), null);
+  assert.ok(schema.normFolioCard({ file: 'abc123.json', title: 'Milan' }));
+});
+
+test('a photo that is not a photo does not reach the atlas', () => {
+  const p = schema.normPlace({ lat: 1, lng: 1, photos: ['data:image/png;base64,AAA', 'https://x.test/a.png', 42] });
+  assert.deepEqual(p.photos, ['data:image/png;base64,AAA']);
+});

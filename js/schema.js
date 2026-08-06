@@ -1,0 +1,219 @@
+// schema.js — one gate for everything that arrives from outside.
+//
+// A share link, an imported file, and a folio from the commons are the same
+// kind of stranger. They pass through here or they do not pass. Nothing
+// downstream may assume a field exists, has a type, or has a sane size:
+// this is the only place that decides.
+
+export const SCHEMA_VERSION = 2;
+
+export const LIMITS = {
+  places: 500,
+  tags: 64,
+  correspondents: 64,
+  tagsPerPlace: 24,
+  name: 140,
+  note: 4000,
+  url: 500,
+  title: 80,
+  dedication: 140,
+  author: 60,
+  question: 120,
+  photos: 12,
+  photoBytes: 3_000_000,
+};
+
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const str = (v, n) => String(v ?? '').slice(0, n);
+
+// keys that would poison an object literal on assignment
+const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
+
+function safeKeys(o) {
+  const out = {};
+  for (const k of Object.keys(o)) {
+    if (FORBIDDEN.has(k)) continue;
+    out[k] = o[k];
+  }
+  return out;
+}
+
+function id(v, fallback) {
+  const s = str(v, 64).trim();
+  return s && !FORBIDDEN.has(s) ? s : fallback;
+}
+
+export function normPlace(raw, i = 0) {
+  if (!isObj(raw)) return null;
+  const p = safeKeys(raw);
+  const lat = Number(p.lat);
+  const lng = Number(p.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  const photos = Array.isArray(p.photos)
+    ? p.photos
+      .filter(s => typeof s === 'string' && s.startsWith('data:image/') && s.length <= LIMITS.photoBytes)
+      .slice(0, LIMITS.photos)
+    : [];
+
+  const out = {
+    id: id(p.id, `p${i}`),
+    name: str(p.name, LIMITS.name) || 'Untitled place',
+    lat,
+    lng,
+    address: str(p.address, 200),
+    city: str(p.city, 120),
+    country: str(p.country, 120),
+    countryCode: str(p.countryCode, 8),
+    tags: Array.isArray(p.tags)
+      ? p.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
+      : [],
+    status: p.status === 'visited' ? 'visited' : 'wishlist',
+    rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
+    note: str(p.note, LIMITS.note),
+    url: /^https?:\/\//i.test(String(p.url ?? '')) ? str(p.url, LIMITS.url) : '',
+    photos,
+    createdAt: str(p.createdAt, 40),
+    updatedAt: str(p.updatedAt, 40),
+  };
+
+  // provenance reaches an attribute in the marker: rebuilt, never carried
+  if (isObj(p.provenance)) {
+    out.provenance = {
+      name: str(p.provenance.name, LIMITS.author),
+      sig: Number(p.provenance.sig) || 0,
+      adoptedAt: str(p.provenance.adoptedAt, 40),
+    };
+  }
+  return out;
+}
+
+const HEX = /^#[0-9a-fA-F]{3,8}$/;
+
+export function normTag(raw, i = 0) {
+  if (!isObj(raw)) return null;
+  const t = safeKeys(raw);
+  const name = str(t.name, 60).trim();
+  if (!name) return null;
+  const hue = Number(t.hue);
+  return {
+    id: id(t.id, `t${i}`),
+    name,
+    emoji: str(t.emoji, 8),
+    color: HEX.test(String(t.color ?? '')) ? String(t.color) : '',
+    hue: Number.isFinite(hue) ? ((hue % 360) + 360) % 360 : NaN,
+  };
+}
+
+function normList(arr, fn, cap) {
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (let i = 0; i < arr.length && out.length < cap; i++) {
+    const v = fn(arr[i], i);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+export function normPlaces(arr) { return normList(arr, normPlace, LIMITS.places); }
+export function normTags(arr) { return normList(arr, normTag, LIMITS.tags); }
+
+export function normCorrespondent(raw, i = 0) {
+  if (!isObj(raw)) return null;
+  const c = safeKeys(raw);
+  const hue = Number(c.hue);
+  return {
+    id: id(c.id, `c${i}`),
+    name: str(c.name, LIMITS.author) || 'Unnamed correspondent',
+    hue: Number.isFinite(hue) ? ((hue % 360) + 360) % 360 : NaN,
+    visible: c.visible !== false,
+    addedAt: str(c.addedAt, 40),
+    tags: normTags(c.tags),
+    places: normPlaces(c.places),
+  };
+}
+
+export function normSettings(raw) {
+  if (!isObj(raw)) return {};
+  const s = safeKeys(raw);
+  const out = {};
+  if (typeof s.authorName === 'string') out.authorName = str(s.authorName, LIMITS.author);
+  if (s.theme === 'light' || s.theme === 'dark' || s.theme === 'auto') out.theme = s.theme;
+  return out;
+}
+
+// ---------- the payloads ----------
+//
+// Each kind states its own shape. A payload that does not satisfy its kind is
+// rejected here and never reaches a renderer.
+
+export function normPayload(raw) {
+  if (!isObj(raw)) return null;
+  const p = safeKeys(raw);
+  const kind = p.kind === 'folio' || p.kind === 'ask' ? p.kind : 'atlas';
+  const v = Number(p.v);
+
+  if (kind === 'ask') {
+    const q = str(p.q, LIMITS.question).trim();
+    if (!q) return null;
+    return { v: Number.isFinite(v) ? v : 1, kind, from: str(p.from, LIMITS.author), q };
+  }
+
+  const places = normPlaces(p.places);
+  if (!places.length) return null;
+  const base = {
+    v: Number.isFinite(v) ? v : 1,
+    kind,
+    author: str(p.author, LIMITS.author),
+    tags: normTags(p.tags),
+    places,
+  };
+  if (kind === 'folio') {
+    const title = str(p.title, LIMITS.title).trim();
+    if (!title) return null;
+    return { ...base, title, dedication: str(p.dedication, LIMITS.dedication) };
+  }
+  return base;
+}
+
+// an exported file, on its way back in
+export function normImport(raw) {
+  if (!isObj(raw)) return null;
+  const d = safeKeys(raw);
+  return {
+    tags: normTags(d.tags),
+    places: normPlaces(d.places),
+    correspondents: normList(d.correspondents, normCorrespondent, LIMITS.correspondents),
+    settings: normSettings(d.settings),
+  };
+}
+
+// one row of the newsstand index, which the commons machine writes
+export function normFolioCard(raw) {
+  if (!isObj(raw)) return null;
+  const f = safeKeys(raw);
+  const file = str(f.file, 80);
+  // the index names a file inside the folios directory and nothing else
+  if (!/^[A-Za-z0-9_-]+\.json$/.test(file)) return null;
+  const title = str(f.title, LIMITS.title).trim();
+  if (!title) return null;
+  const strList = (a, n, cap) => Array.isArray(a)
+    ? a.filter(x => typeof x === 'string').map(x => str(x, n)).slice(0, cap) : [];
+  return {
+    id: id(f.id, file),
+    file,
+    title,
+    author: str(f.author, LIMITS.author) || 'unsigned',
+    dedication: str(f.dedication, LIMITS.dedication),
+    n: Math.max(0, Math.min(LIMITS.places, Math.floor(Number(f.n) || 0))),
+    cities: strList(f.cities, 120, 12),
+    countries: strList(f.countries, 120, 8),
+    tags: strList(f.tags, 60, 12),
+    publishedAt: str(f.publishedAt, 40),
+  };
+}
+
+export function normIndex(raw) {
+  return normList(raw, normFolioCard, 500);
+}

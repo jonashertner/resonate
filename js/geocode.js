@@ -2,6 +2,43 @@
 
 const BASE = 'https://nominatim.openstreetmap.org';
 
+// The Nominatim usage policy asks for at most one request a second, and for
+// results to be cached rather than asked for twice. Both are kept here, so no
+// caller can breach the policy by accident.
+const MIN_GAP_MS = 1100;
+const CACHE_MAX = 200;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const memo = new Map();
+let lastCall = 0;
+let queue = Promise.resolve();
+
+function cached(key) {
+  const hit = memo.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CACHE_TTL_MS) { memo.delete(key); return null; }
+  // keep it warm: most recently used last
+  memo.delete(key); memo.set(key, hit);
+  return hit.value;
+}
+
+function remember(key, value) {
+  memo.set(key, { at: Date.now(), value });
+  while (memo.size > CACHE_MAX) memo.delete(memo.keys().next().value);
+}
+
+// one request at a time, never closer together than the policy allows
+function paced(fn) {
+  const run = queue.then(async () => {
+    const wait = MIN_GAP_MS - (Date.now() - lastCall);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastCall = Date.now();
+    return fn();
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
 function pickCity(addr = {}) {
   return addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || addr.suburb || '';
 }
@@ -37,20 +74,35 @@ function toResult(r) {
 }
 
 export async function searchGeo(query, { signal, limit = 6 } = {}) {
-  const url = `${BASE}/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
-  if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
-  const rows = await res.json();
-  return rows.map(toResult).filter(r => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+  const q = String(query || '').trim();
+  const key = `s:${limit}:${q.toLowerCase()}`;
+  const hit = cached(key);
+  if (hit) return hit;
+  const url = `${BASE}/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(q)}`;
+  const rows = await paced(async () => {
+    const res = await fetch(url, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
+    if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
+    return res.json();
+  });
+  const out = rows.map(toResult).filter(r => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+  remember(key, out);
+  return out;
 }
 
 export async function reverseGeo(lat, lng, { signal } = {}) {
+  // a fix is only worth asking about to about a metre
+  const key = `r:${(+lat).toFixed(5)},${(+lng).toFixed(5)}`;
+  const hit = cached(key);
+  if (hit !== null && hit !== undefined) return hit;
   const url = `${BASE}/reverse?format=jsonv2&addressdetails=1&zoom=17&lat=${lat}&lon=${lng}`;
-  const res = await fetch(url, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
-  if (!res.ok) throw new Error(`Reverse geocoding failed (${res.status})`);
-  const r = await res.json();
-  if (r.error) return null;
-  return toResult(r);
+  const r = await paced(async () => {
+    const res = await fetch(url, { signal, headers: { 'Accept-Language': navigator.language || 'en' } });
+    if (!res.ok) throw new Error(`Reverse geocoding failed (${res.status})`);
+    return res.json();
+  });
+  const out = r.error ? null : toResult(r);
+  remember(key, out);
+  return out;
 }
 
 export function fmtCoord(lat, lng) {

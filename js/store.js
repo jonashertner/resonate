@@ -1,5 +1,7 @@
 // store.js — persistence, models, demo data
 
+import { normImport, normPlace, SCHEMA_VERSION } from './schema.js?v=rf22';
+
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
 const K_SETTINGS = 'resonate.settings.v1';
@@ -65,33 +67,9 @@ function write(key, value) {
 }
 
 // a place arriving from a link, a file, or the commons is a stranger.
-// it gets the shape of a place before it is allowed to be one.
+// schema.js decides what a place is; this keeps the old name for callers.
 export function sanePlace(p) {
-  const str = (s, n) => String(s ?? '').slice(0, n);
-  const out = {
-    ...p,
-    name: str(p.name, 140) || 'Untitled place',
-    address: str(p.address, 200),
-    city: str(p.city, 120),
-    country: str(p.country, 120),
-    countryCode: str(p.countryCode, 8),
-    note: str(p.note, 4000),
-    url: str(p.url, 500),
-    tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string').slice(0, 24) : [],
-    status: p.status === 'visited' ? 'visited' : 'wishlist',
-    rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
-  };
-  // provenance is rebuilt, never carried: sig reaches an attribute in map.js
-  if (p.provenance && typeof p.provenance === 'object') {
-    out.provenance = {
-      name: str(p.provenance.name, 60),
-      sig: Number(p.provenance.sig) || 0,
-      adoptedAt: str(p.provenance.adoptedAt, 40),
-    };
-  } else {
-    delete out.provenance;
-  }
-  return out;
+  return normPlace({ lat: 0, lng: 0, ...p }) || normPlace({ lat: 0, lng: 0 });
 }
 
 export function newPlace(partial = {}) {
@@ -140,7 +118,7 @@ export const store = {
   settings: { ...DEFAULT_SETTINGS },
 
   load() {
-    this.places = read(K_PLACES, []).map(sanePlace);
+    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean);
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
     this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
@@ -192,28 +170,32 @@ export const store = {
   tagById(id) { return this.tags.find(t => t.id === id); },
   placeById(id) { return this.places.find(p => p.id === id); },
 
+  // a mutation that cannot be written is not a mutation: roll it back so the
+  // screen never shows a place the device refused to keep
   addPlace(place) {
     this.places.unshift(place);
-    this.savePlaces();
+    if (!this.savePlaces()) { this.places.shift(); return null; }
     return place;
   },
 
   updatePlace(id, patch) {
     const p = this.placeById(id);
     if (!p) return null;
+    const before = { ...p };
     Object.assign(p, patch, { updatedAt: new Date().toISOString() });
-    this.savePlaces();
+    if (!this.savePlaces()) { Object.assign(p, before); return null; }
     return p;
   },
 
   removePlace(id) {
+    const before = this.places;
     this.places = this.places.filter(p => p.id !== id);
-    this.savePlaces();
+    if (!this.savePlaces()) this.places = before;
   },
 
   addTag(tag) {
     this.tags.push(tag);
-    this.saveTags();
+    if (!this.saveTags()) { this.tags.pop(); return null; }
     return tag;
   },
 
@@ -241,58 +223,53 @@ export const store = {
     this.places = [];
     this.tags = [];
     this.correspondents = [];
-    this.settings = { ...DEFAULT_SETTINGS };
-    [K_PLACES, K_TAGS, K_CORR, K_SETTINGS].forEach(k => {
-      try { localStorage.removeItem(k); } catch { /* nothing left to do */ }
-    });
     try {
       Object.keys(localStorage)
         .filter(k => k.startsWith('resonate.'))
         .forEach(k => localStorage.removeItem(k));
     } catch { /* nothing left to do */ }
+    // an erased atlas is not a new one: a specimen must never grow back over it
+    this.settings = { ...DEFAULT_SETTINGS, seeded: true, erasedAt: new Date().toISOString() };
+    this.saveSettings();
   },
 
   // merge imported data, deduping by id; imported fields that reach markup are normalized
-  merge(data) {
-    const okColor = c => /^#[0-9a-fA-F]{3,8}$/.test(String(c ?? '')) ? c : TAG_COLORS[0];
-    const okPhotos = ph => Array.isArray(ph) ? ph.filter(s => typeof s === 'string' && s.startsWith('data:image/')) : [];
+  merge(raw) {
+    const data = normImport(raw);
+    if (!data) return 0;
     const tagIds = new Set(this.tags.map(t => t.id));
     const placeIds = new Set(this.places.map(p => p.id));
     let added = 0;
-    (data.tags || []).forEach(t => {
-      if (t && t.id && !tagIds.has(t.id)) {
-        this.tags.push(newTag({ ...t, color: okColor(t.color) }));
+    data.tags.forEach(t => {
+      if (!tagIds.has(t.id)) {
+        this.tags.push(newTag(t));
         tagIds.add(t.id);
       }
     });
-    (data.places || []).forEach(p => {
-      if (p && p.id && !placeIds.has(p.id) && Number.isFinite(p.lat) && Number.isFinite(p.lng)) {
-        this.places.push(newPlace(sanePlace({ ...p, photos: okPhotos(p.photos) })));
+    data.places.forEach(p => {
+      if (!placeIds.has(p.id)) {
+        this.places.push(newPlace(p));
         placeIds.add(p.id);
         added++;
       }
     });
     // an export carries the whole atlas back, correspondents and signature included
     const corrIds = new Set(this.correspondents.map(c => c.id));
-    (data.correspondents || []).forEach(c => {
-      if (c && c.id && !corrIds.has(c.id)) {
+    data.correspondents.forEach(c => {
+      if (!corrIds.has(c.id)) {
         this.correspondents.push({
           ...c,
-          name: String(c.name ?? '').slice(0, 60),
-          places: Array.isArray(c.places) ? c.places.map(sanePlace) : [],
-          tags: Array.isArray(c.tags) ? c.tags : [],
+          hue: Number.isFinite(c.hue) ? c.hue : TAG_STATIONS[(this.correspondents.length + 2) % TAG_STATIONS.length].hue,
+          tags: c.tags.map(t => newTag(t)),
         });
         corrIds.add(c.id);
       }
     });
-    if (data.settings && typeof data.settings === 'object') {
-      const s = data.settings;
-      if (typeof s.authorName === 'string' && !this.settings.authorName) {
-        this.settings.authorName = s.authorName.slice(0, 60);
-      }
-      if (s.theme === 'light' || s.theme === 'dark' || s.theme === 'auto') this.settings.theme = s.theme;
-      this.saveSettings();
+    if (!this.settings.authorName && data.settings.authorName) {
+      this.settings.authorName = data.settings.authorName;
     }
+    if (data.settings.theme) this.settings.theme = data.settings.theme;
+    this.saveSettings();
     this.savePlaces();
     this.saveTags();
     this.saveCorrespondents();
@@ -302,7 +279,7 @@ export const store = {
   exportJSON() {
     return JSON.stringify({
       app: 'resonate',
-      version: 1,
+      version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       tags: this.tags,
       places: this.places,

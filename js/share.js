@@ -2,6 +2,8 @@
 
 /* global LZString */
 
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf22';
+
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
 }
@@ -9,7 +11,7 @@ function pack(payload) {
 // a folio: a composed slice with a title and a dedication — the atomic recommendation
 export function makeFolioUrl({ title, dedication, author, tags, places }) {
   return pack({
-    v: 1,
+    v: SCHEMA_VERSION,
     kind: 'folio',
     title: String(title || '').slice(0, 80),
     dedication: String(dedication || '').slice(0, 140),
@@ -26,7 +28,7 @@ export function makeFolioUrl({ title, dedication, author, tags, places }) {
 // an ask: a request-letter — the recipient's atlas pre-composes the reply
 export function makeAskUrl({ from, q }) {
   return pack({
-    v: 1,
+    v: SCHEMA_VERSION,
     kind: 'ask',
     from: String(from || '').slice(0, 60),
     q: String(q || '').slice(0, 80),
@@ -35,7 +37,8 @@ export function makeAskUrl({ from, q }) {
 
 export function makeShareUrl(tags, places, author = '') {
   const payload = {
-    v: 1,
+    v: SCHEMA_VERSION,
+    kind: 'atlas',
     author: String(author || '').slice(0, 60),
     tags: tags.map(t => ({ id: t.id, name: t.name, emoji: t.emoji, color: t.color })),
     // photos stay private on the device — they never travel in the link
@@ -56,12 +59,8 @@ export function parseShareHash() {
   try {
     const json = LZString.decompressFromEncodedURIComponent(h.slice(3));
     if (!json) return null;
-    const payload = JSON.parse(json);
-    if (!payload || typeof payload !== 'object') return null;
-    // an ask carries only a question and a name; everything else carries places
-    if (payload.kind === 'ask') return typeof payload.q === 'string' ? payload : null;
-    if (!Array.isArray(payload.places)) return null;
-    return payload;
+    // one gate: a payload is normalized and bounded, or it is not a payload
+    return normPayload(JSON.parse(json));
   } catch {
     return null;
   }

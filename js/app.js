@@ -3,12 +3,13 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf21';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf21';
-import * as mapView from './map.js?v=rf21';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf21';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf21';
-import { exifGPS } from './exif.js?v=rf21';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf22';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf22';
+import * as mapView from './map.js?v=rf22';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf22';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf22';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf22';
+import { exifGPS } from './exif.js?v=rf22';
 
 // ---------- helpers ----------
 
@@ -159,6 +160,32 @@ const surfaceEl = id => $(`#${id}`);
 // it stands, and hands it back to whatever summoned it
 const returnFocus = new Map();
 
+// while anything is summoned, the field behind it is not reachable by tab,
+// by screen reader, or by pointer
+function setBackgroundInert(on) {
+  const app = $('#app');
+  if (!app) return;
+  if (on) { app.setAttribute('inert', ''); app.setAttribute('aria-hidden', 'true'); }
+  else { app.removeAttribute('inert'); app.removeAttribute('aria-hidden'); }
+}
+
+// a dialog that does not live on the surface stack still behaves like one
+function raiseDialog(el, label) {
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  if (label) el.setAttribute('aria-label', label);
+  el.hidden = false;
+  setBackgroundInert(true);
+  const first = el.querySelector(FOCUSABLE);
+  (first || el).focus?.();
+}
+
+function dropDialog(el) {
+  el.hidden = true;
+  el.removeAttribute('aria-modal');
+  if (!surfaces.length) setBackgroundInert(false);
+}
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function focusables(el) {
@@ -192,6 +219,7 @@ function openSurface(id, onShow) {
   el.hidden = false;
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
+  setBackgroundInert(true);
   el.classList.add('opening');
   setTimeout(() => el.classList.remove('opening'), 700);
   onShow?.();
@@ -204,6 +232,7 @@ function openSurface(id, onShow) {
 function restoreFocus(id) {
   const back = returnFocus.get(id);
   returnFocus.delete(id);
+  if (!surfaces.length && $('#reportOverlay').hidden) setBackgroundInert(false);
   if (back && document.contains(back)) back.focus();
 }
 
@@ -881,7 +910,7 @@ function openFolioReport(payload) {
       <button class="word-btn quiet" id="rpPrint">print, or save as pdf</button>
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
-  el.hidden = false;
+  raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
   const ref = { name: author, sig };
@@ -898,7 +927,7 @@ function openFolioReport(payload) {
     remaining.forEach(p => adoptPlace(p, ref, foreignTags));
     renderAll();
     clearShareHash();
-    el.hidden = true;
+    dropDialog(el);
     clearWorld();
     mapView.fitAll(store.places);
     toast(remaining.length
@@ -936,12 +965,12 @@ function openAskReport(payload) {
       ${matches.length ? `<button class="word-btn" id="askCompose">compose the folio for ${esc(from)}</button>` : ''}
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
-  el.hidden = false;
+  raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
   $('#askCompose')?.addEventListener('click', () => {
     clearShareHash();
-    el.hidden = true;
+    dropDialog(el);
     clearWorld();
     openFolioComposer({
       title: q,
@@ -990,7 +1019,7 @@ function openAtlasReport(payload) {
       <button class="word-btn quiet" id="rpLook">just look around</button>
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
-  el.hidden = false;
+  raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
   const foreignRef = { name, sig };
@@ -1012,7 +1041,7 @@ function openAtlasReport(payload) {
     store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
     pushCorrespondentsToMap();
     clearShareHash();
-    el.hidden = true;
+    dropDialog(el);
     clearWorld();
     renderAll();
     toast(`${finalName || name} is now a correspondent. their marks are on your field`);
@@ -1244,7 +1273,7 @@ async function openNewsstand(initialQ = '') {
   body.innerHTML = `<div class="news-note">consulting the newsstand…</div>`;
   if (!newsIndex) {
     try {
-      newsIndex = await (await fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })).json();
+      newsIndex = normIndex(await (await fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })).json());
     } catch {
       body.innerHTML = `<div class="news-note">The newsstand is unreachable right now. Try again with a connection.</div>`;
       return;
@@ -1272,14 +1301,27 @@ async function openNewsstand(initialQ = '') {
     $$('.news-row', body).forEach(row => row.addEventListener('click', async () => {
       try {
         const rec = await (await fetch(`${COMMONS}/folios/${row.dataset.file}`, { cache: 'no-cache' })).json();
-        closeSurface('newsOverlay');
-        openFolioReport({
+        // the commons keeps domains by name; give them ids so an adopted
+        // place can carry its domains home
+        const names = [...new Set((rec.places || [])
+          .flatMap(p => (Array.isArray(p.tags) ? p.tags : []))
+          .filter(n => typeof n === 'string' && n.trim()))].slice(0, 24);
+        const idOf = new Map(names.map((n, i) => [n, `cf${i}`]));
+        const payload = normPayload({
+          v: SCHEMA_VERSION,
           kind: 'folio',
           title: rec.title,
           dedication: rec.dedication,
           author: rec.author,
-          places: (rec.places || []).map(p => ({ ...p, tags: [] })),
+          tags: names.map(n => ({ id: idOf.get(n), name: n })),
+          places: (rec.places || []).map(p => ({
+            ...p,
+            tags: (Array.isArray(p.tags) ? p.tags : []).map(n => idOf.get(n)).filter(Boolean),
+          })),
         });
+        if (!payload) { toast('that folio did not read as a folio'); return; }
+        closeSurface('newsOverlay');
+        openFolioReport(payload);
       } catch { toast('could not open that folio'); }
     }));
   };
@@ -1417,7 +1459,12 @@ function renderSettings() {
     if (!confirm('This cannot be undone. Really erase everything?')) return;
     store.clearAll();
     state.selectedId = null;
+    state.foreign = null;
+    state.visiting = null;
+    state.filters.tags.clear();
     closeSurface('settingsOverlay');
+    pushCorrespondentsToMap();
+    clearWorld();
     renderAll();
     toast('the field is blank again');
   });
@@ -1938,12 +1985,17 @@ function init() {
   function maybeAskName() {
     if (store.settings.authorName || store.settings.namedAsked) return;
     const ask = $('#nameAsk');
-    setTimeout(() => { ask.hidden = false; $('#nameAskInput').focus(); }, 900);
+    // someone arriving on a link is answering a person, not opening an atlas:
+    // the report has the floor, and the name can be asked another time
+    setTimeout(() => {
+      if (!$('#reportOverlay').hidden) return;
+      raiseDialog(ask, 'Your name');
+    }, 900);
     const done = (name) => {
       store.settings.namedAsked = true;
       if (name) { store.settings.authorName = name; renderCount(); }
       store.saveSettings();
-      ask.hidden = true;
+      dropDialog(ask);
       if (name) toast(`welcome, ${name}. the field is yours`);
     };
     $('#nameAskGo').addEventListener('click', () => done($('#nameAskInput').value.trim()));
@@ -2073,7 +2125,7 @@ function init() {
     if (e.key === 'Escape') {
       if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
       if (state.visiting) { clearShareHash(); location.reload(); return; }
-      if (!$('#reportOverlay').hidden) { $('#reportOverlay').hidden = true; clearWorld(); clearShareHash(); return; }
+      if (!$('#reportOverlay').hidden) { dropDialog($('#reportOverlay')); clearWorld(); clearShareHash(); return; }
       if (popSurface()) return;
     }
     if (inField) return;
@@ -2104,7 +2156,7 @@ function init() {
   });
 
   fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })
-    .then(r => r.json()).then(ix => { newsIndex = ix; }).catch(() => {});
+    .then(r => r.json()).then(ix => { newsIndex = normIndex(ix); }).catch(() => {});
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

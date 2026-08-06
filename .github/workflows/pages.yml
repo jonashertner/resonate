@@ -26,27 +26,50 @@ jobs:
       - name: stage the site, without the repository's machinery
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
-          find _site -type f | sort
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' \
+                --exclude 'test' --exclude 'node_modules' ./ _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-      # this site's deployments run past the action's ten minute ceiling and
-      # land anyway, so the wait is allowed to give up and the site itself
-      # is asked whether the commit arrived
+      # deploy-pages cancels the deployment when its wait runs out, so the
+      # wait is the whole truth: no continue-on-error, no polling afterwards
+      # to paper over a deployment that is already dead.
       - id: deployment
-        continue-on-error: true
         uses: actions/deploy-pages@v4
-      - name: wait until the site serves this build
+        with:
+          timeout: 600000
+
+  # a separate job, so a green deploy that serves the wrong bytes still fails
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the site serves this build
         run: |
           mark=$(grep -oE 'v=rf[0-9]+' index.html | head -1)
           echo "looking for $mark"
-          for i in $(seq 1 60); do
-            if curl -fsS "https://jonashertner.github.io/resonate/?ci=$i" | grep -q "$mark"; then
-              echo "live after $((i * 30))s"
+          for i in $(seq 1 20); do
+            body=$(curl -fsS "https://jonashertner.github.io/resonate/?ci=$i" || true)
+            if printf '%s' "$body" | grep -q "$mark"; then
+              echo "live after $((i * 15))s"
               exit 0
             fi
-            sleep 30
+            sleep 15
           done
           echo "the site never served $mark"
           exit 1
+      - name: the shell it needs is reachable
+        run: |
+          for p in css/style.css js/app.js js/schema.js sw.js assets/intro.mp4 manifest.webmanifest; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://jonashertner.github.io/resonate/$p")
+            echo "$p $code"
+            [ "$code" = 200 ] || exit 1
+          done
+      - name: the repository's machinery is not published
+        run: |
+          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://jonashertner.github.io/resonate/$p")
+            echo "$p $code"
+            [ "$code" = 404 ] || exit 1
+          done

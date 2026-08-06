@@ -1,0 +1,40 @@
+Resonate
+Copyright (c) 2026 Jonas Hertner
+
+The MIT license in LICENSE covers the source of this application. The
+following are not covered by it.
+
+## The intro film
+
+assets/intro.mp4 is not licensed for reuse. It is included so the
+application runs as intended, and it is reserved by its author.
+
+## Vendored dependencies
+
+vendor/leaflet/ — Leaflet
+  Copyright (c) 2010-2024, Volodymyr Agafonkin
+  Copyright (c) 2010-2011, CloudMade
+  BSD 2-Clause License. https://github.com/Leaflet/Leaflet
+
+vendor/markercluster/ — Leaflet.markercluster
+  Copyright (c) 2012, David Leaver
+  MIT License. https://github.com/Leaflet/Leaflet.markercluster
+
+vendor/lz/ — lz-string
+  Copyright (c) 2013 Pieroxy
+  MIT License. https://github.com/pieroxy/lz-string
+
+## Data and services
+
+Map data is © OpenStreetMap contributors, available under the Open
+Database License. https://www.openstreetmap.org/copyright
+
+Map tiles are by CARTO. https://carto.com/attributions
+
+Geocoding is by Nominatim, operated by the OpenStreetMap Foundation,
+used under its usage policy.
+https://operations.osmfoundation.org/policies/nominatim/
+
+Typefaces are served by Google Fonts: Bricolage Grotesque by Mathieu
+Triay and contributors, and Fragment Mono by Wei Huang, both under the
+SIL Open Font License 1.1.
