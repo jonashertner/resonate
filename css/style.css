@@ -342,19 +342,49 @@ body.dropping::after {
   padding: 10px 0 10px 14px;
 }
 .index-x:hover { color: var(--ink); }
+/* the hub: a table of contents — each surface states its role */
 .index-go {
-  display: flex; flex-wrap: wrap; gap: 2px 26px;
-  margin-top: 14px;
-  font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 30px;
+  margin-top: 16px;
 }
 .index-go button {
-  padding: 9px 0;
-  color: var(--ink);
-  letter-spacing: inherit; text-transform: inherit;
-  border-bottom: 1.5px solid var(--ink-4);
+  display: flex; flex-direction: column; gap: 2px;
+  text-align: left;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--ink-4);
   transition: border-color var(--mo-reflex) var(--e-reflex);
 }
 .index-go button:hover { border-color: var(--ink); }
+.go-word {
+  font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+  font-variation-settings: 'wght' 640;
+  color: var(--ink);
+}
+.go-sub {
+  font-size: 12px; line-height: 1.35;
+  color: var(--ink-2);
+}
+
+/* keys: a whisper at the very bottom, keyboards only */
+.index-keys { display: none; }
+@media (min-width: 761px) {
+  .index-keys { display: block; margin-top: 8vh; padding-bottom: 2vh; }
+  .index-keys button {
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .index-keys button:hover { color: var(--ink); }
+}
+
+.poster-sub {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  max-width: 46ch;
+}
 .index-line button:hover { color: var(--ink-2); }
 .index-line button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
 .index-line button sup { font-family: var(--mono); font-size: 8px; letter-spacing: 0; margin-left: 3px; vertical-align: 0.5em; }
@@ -748,7 +778,9 @@ body.dropping::after {
   .fm-sw { left: 16px; bottom: max(12px, env(safe-area-inset-bottom)); }
   .word-btn { font-size: 13px; padding: 10px 0 4px; }
   .index-line { font-size: 13px; }
-  .index-go { font-size: 13px; gap: 2px 22px; }
+  .index-head { position: static; background: none; } /* the list must not fight a tall sticky header */
+  .index-go { grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+  .go-sub { font-size: 11.5px; }
   .ix-meta { font-size: 11px; }
   .cmd-row .row-sub { font-size: 11px; }
   .plate-eyebrow { font-size: 11px; }

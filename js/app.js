@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf3';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf3';
-import * as mapView from './map.js?v=rf3';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf3';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf3';
-import { exifGPS } from './exif.js?v=rf3';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf4';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf4';
+import * as mapView from './map.js?v=rf4';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf4';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf4';
+import { exifGPS } from './exif.js?v=rf4';
 
 // ---------- helpers ----------
 
@@ -1532,6 +1532,10 @@ function init() {
   });
   $('#fmCommand').addEventListener('click', togglePalette);
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
+  $('#indexKeys').addEventListener('click', () => {
+    closeSurface('indexOverlay');
+    openSurface('keysOverlay', renderKeys);
+  });
 
   // the index is the hub: every surface reachable as a word
   $('#indexGo').addEventListener('click', (e) => {

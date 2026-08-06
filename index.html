@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf3">
+<link rel="stylesheet" href="css/style.css?v=rf4">
 </head>
 <body class="boot">
 
@@ -45,12 +45,11 @@
   <header class="index-head">
     <h1 class="index-count"><span id="ixN">0</span><small>places</small></h1>
     <nav class="index-go" id="indexGo" aria-label="Go to">
-      <button data-go="folio">folio</button>
-      <button data-go="newsstand">newsstand</button>
-      <button data-go="voices">voices</button>
-      <button data-go="census">census</button>
-      <button data-go="kept">kept</button>
-      <button data-go="keys">keys</button>
+      <button data-go="folio"><span class="go-word">folio</span><span class="go-sub">hand a set of places to one person</span></button>
+      <button data-go="newsstand"><span class="go-word">newsstand</span><span class="go-sub">published folios, ranked against your atlas</span></button>
+      <button data-go="voices"><span class="go-word">voices</span><span class="go-sub">the people whose atlases you keep</span></button>
+      <button data-go="census"><span class="go-word">census</span><span class="go-sub">your atlas, counted</span></button>
+      <button data-go="kept"><span class="go-word">kept</span><span class="go-sub">appearance, signature, your data</span></button>
     </nav>
     <div class="index-line" id="statusSeg" role="tablist" aria-label="Status">
       <button data-status="all" aria-pressed="true">all</button>
@@ -66,6 +65,9 @@
     </div>
   </header>
   <div class="index-list" id="listView" role="list"></div>
+  <footer class="index-keys">
+    <button id="indexKeys">keys — the keyboard speaks. press ? anywhere.</button>
+  </footer>
 </section>
 
 <!-- the plate: a typographic column over a live map -->
@@ -74,18 +76,22 @@
 <!-- posters: census, kept (settings), correspondence, keys -->
 <section class="poster" id="statsOverlay" hidden aria-label="The census">
   <header class="poster-head"><h1 class="poster-word">census</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">the story your atlas tells in numbers.</p>
   <div class="poster-body" id="statsBody"></div>
 </section>
 <section class="poster" id="settingsOverlay" hidden aria-label="Kept">
   <header class="poster-head"><h1 class="poster-word">kept</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">how this atlas is kept.</p>
   <div class="poster-body" id="settingsBody"></div>
 </section>
 <section class="poster" id="corrOverlay" hidden aria-label="Correspondence">
   <header class="poster-head"><h1 class="poster-word">voices</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">resonance is exchanged, not followed.</p>
   <div class="poster-body" id="corrBody"></div>
 </section>
 <section class="poster" id="keysOverlay" hidden aria-label="Keys">
   <header class="poster-head"><h1 class="poster-word">keys</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">the keyboard speaks.</p>
   <div class="poster-body" id="keysBody"></div>
 </section>
 
@@ -95,12 +101,14 @@
 <!-- the folio composer: a slice, a title, a dedication -->
 <section class="poster" id="folioOverlay" hidden aria-label="Compose a folio">
   <header class="poster-head"><h1 class="poster-word">folio</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">a titled, signed set of places — for one person, or the newsstand.</p>
   <div class="poster-body" id="folioBody"></div>
 </section>
 
 <!-- the newsstand: published folios, ranked by your own resonance -->
 <section class="poster" id="newsOverlay" hidden aria-label="The newsstand">
   <header class="poster-head"><h1 class="poster-word">newsstand</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">a commons, not a feed — ranked here, against your own atlas.</p>
   <div class="poster-body" id="newsBody"></div>
 </section>
 
@@ -120,6 +128,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf3"></script>
+<script type="module" src="js/app.js?v=rf4"></script>
 </body>
 </html>
