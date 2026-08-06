@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf13';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf13';
-import * as mapView from './map.js?v=rf13';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf13';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf13';
-import { exifGPS } from './exif.js?v=rf13';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf14';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf14';
+import * as mapView from './map.js?v=rf14';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf14';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf14';
+import { exifGPS } from './exif.js?v=rf14';
 
 // ---------- helpers ----------
 
@@ -47,7 +47,10 @@ function fmtDate(iso) {
   catch { return ''; }
 }
 
-function starsText(r) { return r > 0 ? '★'.repeat(r) : ''; }
+function starsText(r) {
+  const n = Math.max(0, Math.min(5, Math.floor(Number(r) || 0)));
+  return n > 0 ? '★'.repeat(n) : '';
+}
 function fmtNo(n) { return String(n).padStart(2, '0'); }
 
 // ---------- state ----------
@@ -286,7 +289,7 @@ function clearFilters() {
 
 // ---------- selection & the plate ----------
 
-function selectPlace(id, { fly = false, edit = false } = {}) {
+function selectPlace(id, { fly = false, edit = false, quiet = false } = {}) {
   const prev = state.selectedId;
   state.selectedId = id;
   state.foreign = null;
@@ -294,6 +297,8 @@ function selectPlace(id, { fly = false, edit = false } = {}) {
   if (!place) return;
   if (prev && placeById(prev)) mapView.refreshMarkerIcon(placeById(prev), tagById, false);
   mapView.refreshMarkerIcon(place, tagById, true);
+  // quiet: mark it on the field, but raise no plate behind whatever stands in front
+  if (quiet) return;
   applyWorldState();
   mapView.ripple(place.lat, place.lng);
   if (fly) mapView.flyToPlace(place);
@@ -378,7 +383,11 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   });
 
   if (ro) {
-    $('#pAdopt').addEventListener('click', () => adoptPlace(place, foreign));
+    $('#pAdopt').addEventListener('click', () => {
+      const c = store.correspondents.find(x => x.id === foreign.corrId) ||
+        (state.visiting && state.visiting.id === foreign.corrId ? state.visiting : null);
+      adoptPlace(place, foreign, c?.tags);
+    });
     return;
   }
 
@@ -665,21 +674,45 @@ function pushCorrespondentsToMap() {
   mapView.setCorrespondents(store.correspondents);
 }
 
-function adoptPlace(place, foreign) {
+// a place keeps its domains when it changes hands: foreign tag names are
+// matched to yours by name, and the ones you lack are adopted alongside it
+function graftTags(foreignTagIds, foreignTags) {
+  if (!Array.isArray(foreignTagIds) || !foreignTags) return [];
+  const byId = new Map(foreignTags.map(t => [t.id, t]));
+  const out = [];
+  for (const fid of foreignTagIds) {
+    const ft = byId.get(fid);
+    if (!ft) continue;
+    const name = String(ft.name || '').trim();
+    if (!name) continue;
+    const mine = store.tags.find(t => t.name.toLowerCase() === name.toLowerCase());
+    if (mine) { out.push(mine.id); continue; }
+    const made = store.addTag(newTag({ name, hue: ft.hue, color: ft.color }));
+    out.push(made.id);
+  }
+  return [...new Set(out)];
+}
+
+function adoptPlace(place, foreign, foreignTags = null) {
   const adopted = store.addPlace(newPlace({
     ...place,
     id: undefined,
     photos: [],
+    tags: graftTags(place.tags, foreignTags || foreign.tags),
     provenance: { name: foreign.name, sig: foreign.sig, adoptedAt: new Date().toISOString() },
   }));
   renderAll();
-  closeSurface('plate');
-  selectPlace(adopted.id, { fly: false });
+  // the report still stands in front: select quietly, do not raise a plate behind it
+  if (topSurface() === 'plate') closeSurface('plate');
+  const reportUp = !$('#reportOverlay').hidden;
+  selectPlace(adopted.id, { fly: false, quiet: reportUp });
   toast(`yours now, after ${foreign.name}`);
+  return adopted;
 }
 
 function openForeignPlate(corrId, placeId) {
-  const c = store.correspondents.find(x => x.id === corrId);
+  const c = store.correspondents.find(x => x.id === corrId) ||
+    (state.visiting && state.visiting.id === corrId ? state.visiting : null);
   const p = c?.places.find(x => x.id === placeId);
   if (!c || !p) return;
   state.foreign = { corrId, name: c.name, sig: mapView.sigAngle(c.id), place: p };
@@ -810,23 +843,25 @@ function openFolioReport(payload) {
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
   const ref = { name: author, sig };
+  const foreignTags = payload.tags || [];
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
     const p = places[parseInt(b.dataset.adopt, 10)];
     if (!p) return;
-    adoptPlace(p, ref);
+    adoptPlace(p, ref, foreignTags);
     b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
   }));
   $('#rpTakeAll')?.addEventListener('click', () => {
-    fresh.forEach(p => store.addPlace(newPlace({
-      ...p, id: undefined, photos: [],
-      provenance: { name: author, sig, adoptedAt: new Date().toISOString() },
-    })));
+    // whatever was taken one at a time is already yours: never take it twice
+    const remaining = fresh.filter(p => !holdAlready(p));
+    remaining.forEach(p => adoptPlace(p, ref, foreignTags));
     renderAll();
     clearShareHash();
     el.hidden = true;
     clearWorld();
     mapView.fitAll(store.places);
-    toast(`${fresh.length} places taken, after ${author}`);
+    toast(remaining.length
+      ? `${remaining.length} place${remaining.length === 1 ? '' : 's'} taken, after ${author}`
+      : 'you already hold them all');
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
   $('#rpPrint').addEventListener('click', () => {
@@ -920,7 +955,7 @@ function openAtlasReport(payload) {
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
     const pk = picks[parseInt(b.dataset.adopt, 10)];
     if (!pk) return;
-    adoptPlace(pk.place, foreignRef);
+    adoptPlace(pk.place, foreignRef, theirs.tags);
     b.replaceWith(Object.assign(document.createElement('span'), { className: 'why', textContent: 'yours' }));
   }));
   $('#rpBegin')?.addEventListener('click', () => {
@@ -1603,7 +1638,13 @@ async function runWorldSearch(q) {
     paint([...locals, ...voices, ...stand, ...remote],
       (!locals.length && !voices.length && !remote.length) ? `nothing answers “${esc(q)}”` : '');
   } catch (e) {
-    if (e.name !== 'AbortError') console.warn('search failed', e);
+    if (e.name === 'AbortError') return;
+    console.warn('search failed', e);
+    // never leave the palette holding an empty promise: give the rows back
+    if (palette.input.value.trim() !== q) return;
+    const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
+    const voices = corrMatches(q);
+    paint([...locals, ...voices, { kind: 'world', q }], 'the world did not answer. try again');
   }
 }
 
@@ -1744,6 +1785,7 @@ function runIntro(onDone) {
 // ---------- init ----------
 
 function init() {
+  setWriteFailedHandler(() => toast('this browser refused to save. export your atlas before you lose it', 6000));
   store.load();
 
   // testing phase: a specimen atlas is the default start

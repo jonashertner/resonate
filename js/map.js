@@ -97,8 +97,9 @@ export function sigAngle(id) {
 
 function markHTML(place, selected) {
   const wish = place.status === 'wishlist';
+  // sig lands inside an attribute: it is a number or it is nothing
   const graft = place.provenance
-    ? `<circle class="graft" cx="15" cy="15" r="11.5" pathLength="360" style="--sig:${place.provenance.sig || 0}deg"/>`
+    ? `<circle class="graft" cx="15" cy="15" r="11.5" pathLength="360" style="--sig:${Number(place.provenance.sig) || 0}deg"/>`
     : '';
   return `<div class="mark${wish ? ' wish' : ''}${selected ? ' sel' : ''}" style="--seed:${seedFor(place.id)}ms">
     <svg width="30" height="30" viewBox="0 0 30 30">

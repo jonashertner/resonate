@@ -49,14 +49,49 @@ function read(key, fallback) {
   }
 }
 
+// a refused write must be heard: the app sets onWriteFailed to say so out loud
+export let onWriteFailed = null;
+export function setWriteFailedHandler(fn) { onWriteFailed = fn; }
+
 function write(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (e) {
     console.warn('Storage write failed', e);
+    onWriteFailed?.(key, e);
     return false;
   }
+}
+
+// a place arriving from a link, a file, or the commons is a stranger.
+// it gets the shape of a place before it is allowed to be one.
+export function sanePlace(p) {
+  const str = (s, n) => String(s ?? '').slice(0, n);
+  const out = {
+    ...p,
+    name: str(p.name, 140) || 'Untitled place',
+    address: str(p.address, 200),
+    city: str(p.city, 120),
+    country: str(p.country, 120),
+    countryCode: str(p.countryCode, 8),
+    note: str(p.note, 4000),
+    url: str(p.url, 500),
+    tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string').slice(0, 24) : [],
+    status: p.status === 'visited' ? 'visited' : 'wishlist',
+    rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
+  };
+  // provenance is rebuilt, never carried: sig reaches an attribute in map.js
+  if (p.provenance && typeof p.provenance === 'object') {
+    out.provenance = {
+      name: str(p.provenance.name, 60),
+      sig: Number(p.provenance.sig) || 0,
+      adoptedAt: str(p.provenance.adoptedAt, 40),
+    };
+  } else {
+    delete out.provenance;
+  }
+  return out;
 }
 
 export function newPlace(partial = {}) {
@@ -96,17 +131,19 @@ export function newTag(partial = {}) {
   return t;
 }
 
+const DEFAULT_SETTINGS = { theme: 'auto', lastView: null, seeded: false, authorName: '' };
+
 export const store = {
   places: [],
   tags: [],
   correspondents: [],
-  settings: { theme: 'auto', lastView: null, seeded: false, authorName: '' },
+  settings: { ...DEFAULT_SETTINGS },
 
   load() {
-    this.places = read(K_PLACES, []);
+    this.places = read(K_PLACES, []).map(sanePlace);
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
-    this.settings = { theme: 'auto', lastView: null, seeded: false, authorName: '', ...read(K_SETTINGS, {}) };
+    this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
     // migrate hex-era tags onto the hue wheel
     let migrated = false;
     this.tags.forEach(t => {
@@ -199,11 +236,20 @@ export const store = {
     return this.places.reduce((n, p) => n + (p.tags.includes(id) ? 1 : 0), 0);
   },
 
+  // erase means erase: every resonate key leaves the device
   clearAll() {
     this.places = [];
     this.tags = [];
-    this.savePlaces();
-    this.saveTags();
+    this.correspondents = [];
+    this.settings = { ...DEFAULT_SETTINGS };
+    [K_PLACES, K_TAGS, K_CORR, K_SETTINGS].forEach(k => {
+      try { localStorage.removeItem(k); } catch { /* nothing left to do */ }
+    });
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('resonate.'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* nothing left to do */ }
   },
 
   // merge imported data, deduping by id; imported fields that reach markup are normalized
@@ -221,13 +267,35 @@ export const store = {
     });
     (data.places || []).forEach(p => {
       if (p && p.id && !placeIds.has(p.id) && Number.isFinite(p.lat) && Number.isFinite(p.lng)) {
-        this.places.push(newPlace({ ...p, photos: okPhotos(p.photos) }));
+        this.places.push(newPlace(sanePlace({ ...p, photos: okPhotos(p.photos) })));
         placeIds.add(p.id);
         added++;
       }
     });
+    // an export carries the whole atlas back, correspondents and signature included
+    const corrIds = new Set(this.correspondents.map(c => c.id));
+    (data.correspondents || []).forEach(c => {
+      if (c && c.id && !corrIds.has(c.id)) {
+        this.correspondents.push({
+          ...c,
+          name: String(c.name ?? '').slice(0, 60),
+          places: Array.isArray(c.places) ? c.places.map(sanePlace) : [],
+          tags: Array.isArray(c.tags) ? c.tags : [],
+        });
+        corrIds.add(c.id);
+      }
+    });
+    if (data.settings && typeof data.settings === 'object') {
+      const s = data.settings;
+      if (typeof s.authorName === 'string' && !this.settings.authorName) {
+        this.settings.authorName = s.authorName.slice(0, 60);
+      }
+      if (s.theme === 'light' || s.theme === 'dark' || s.theme === 'auto') this.settings.theme = s.theme;
+      this.saveSettings();
+    }
     this.savePlaces();
     this.saveTags();
+    this.saveCorrespondents();
     return added;
   },
 
@@ -238,6 +306,8 @@ export const store = {
       exportedAt: new Date().toISOString(),
       tags: this.tags,
       places: this.places,
+      correspondents: this.correspondents,
+      settings: this.settings,
     }, null, 2);
   },
 
