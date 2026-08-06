@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf5';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf5';
-import * as mapView from './map.js?v=rf5';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf5';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf5';
-import { exifGPS } from './exif.js?v=rf5';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf6';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf6';
+import * as mapView from './map.js?v=rf6';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf6';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf6';
+import { exifGPS } from './exif.js?v=rf6';
 
 // ---------- helpers ----------
 
@@ -135,6 +135,8 @@ function resolvedTheme() {
 function applyTheme() {
   document.documentElement.dataset.theme = resolvedTheme();
   mapView.setBasemap(resolvedTheme());
+  const w = $('#themeWord');
+  if (w) w.textContent = resolvedTheme() === 'dark' ? 'day' : 'night';
 }
 
 function setTheme(mode) {
@@ -195,7 +197,11 @@ function renderChips() {
     const n = allPlaces().reduce((k, p) => k + (p.tags.includes(t.id) ? 1 : 0), 0);
     const on = state.filters.tags.has(t.id);
     return `<button data-tag="${esc(t.id)}" aria-pressed="${on}">${esc(t.name)}<sup>${n}</sup></button>`;
-  }).join('');
+  }).join('') + `<button class="edit-tags" id="editTags">edit</button>`;
+  $('#editTags').addEventListener('click', () => {
+    closeSurface('indexOverlay');
+    openSurface('tagsOverlay', renderTags);
+  });
   $$('[data-tag]', wrap).forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.tag;
     state.filters.tags.has(id) ? state.filters.tags.delete(id) : state.filters.tags.add(id);
@@ -1150,51 +1156,15 @@ function renderStats() {
       <div class="country-cols">${countryList.map(([c, n]) => `<div class="tally"><span class="name">${esc(c)}</span><span class="n">${n}</span></div>`).join('')}</div>` : ''}`;
 }
 
+// yours: signature and data, nothing else
 function renderSettings() {
   const body = $('#settingsBody');
-  const theme = store.settings.theme;
   body.innerHTML = `
     <div class="set-sec">
-      <div class="sec-head">appearance</div>
+      <div class="sec-head">signature</div>
       <div class="set-row">
-        <div><div class="set-row-label">Theme</div><div class="set-row-sub">The field is inked to match.</div></div>
-        <div class="word-row" id="themeSeg">
-          ${['auto', 'light', 'dark'].map(m => `<button class="word-btn ${theme === m ? '' : 'quiet'}" data-mode="${m}">${m}</button>`).join('')}
-        </div>
-      </div>
-      <div class="set-row">
-        <div><div class="set-row-label">Signature</div><div class="set-row-sub">Your atlas signs its share links with this name.</div></div>
+        <div class="set-row-sub">Your atlas signs its share links with this name.</div>
         <input class="text-input" id="authorName" style="max-width:220px" placeholder="unsigned" value="${esc(store.settings.authorName)}">
-      </div>
-    </div>
-
-    <div class="set-sec">
-      <div class="sec-head">tags</div>
-      <div class="tag-rows">
-        ${store.tags.map(t => `
-          <div class="tally" data-tid="${esc(t.id)}">
-            <span class="name">${esc(t.name)}</span>
-            <button class="word-btn quiet" data-rename>rename</button>
-            <button class="word-btn quiet" data-del>remove</button>
-            <span class="n">${store.tagCount(t.id)}</span>
-          </div>`).join('')}
-      </div>
-      <div class="tag-add">
-        <input class="text-input" id="tagName" style="max-width:220px" placeholder="new tag name">
-        <div class="hue-stations" id="tagHues">
-          ${TAG_STATIONS.map((s, i) => `<button data-hue="${s.hue}" data-hex="${s.hex}" aria-pressed="${i === 4}">${s.name}</button>`).join('')}
-        </div>
-        <button class="word-btn" id="tagAdd">add</button>
-      </div>
-    </div>
-
-    <div class="set-sec">
-      <div class="sec-head">voices</div>
-      <div class="set-row">
-        <div class="set-row-sub">${store.correspondents.length
-          ? `${store.correspondents.length} correspondent${store.correspondents.length > 1 ? 's' : ''} on your field.`
-          : 'No correspondents yet. Resonance is exchanged, not followed.'}</div>
-        <button class="word-btn" id="openVoices">open the correspondence</button>
       </div>
     </div>
 
@@ -1209,55 +1179,10 @@ function renderSettings() {
       <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. Export before switching devices, or send yourself the share link.</div>
     </div>`;
 
-  $('#themeSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-mode]');
-    if (!b) return;
-    setTheme(b.dataset.mode);
-    renderSettings();
-  });
   $('#authorName').addEventListener('change', (e) => {
     store.settings.authorName = e.target.value.trim();
     store.saveSettings();
   });
-
-  let picked = TAG_STATIONS[4];
-  $('#tagHues').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-hue]');
-    if (!b) return;
-    picked = { hue: parseInt(b.dataset.hue, 10), hex: b.dataset.hex };
-    $$('#tagHues button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    setWorld({ hue: picked.hue, tint: 0.8 });
-    setTimeout(() => { applyWorldState(); }, 1400);
-  });
-  $('#tagAdd').addEventListener('click', () => {
-    const name = $('#tagName').value.trim();
-    if (!name) return $('#tagName').focus();
-    store.addTag(newTag({ name, hue: picked.hue, color: picked.hex }));
-    renderSettings(); renderChips();
-    toast(`tag “${name}” added`);
-  });
-  $('#tagName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#tagAdd').click(); });
-
-  $('.tag-rows', body).addEventListener('click', (e) => {
-    const row = e.target.closest('[data-tid]');
-    if (!row) return;
-    const id = row.dataset.tid;
-    const tag = store.tagById(id);
-    if (e.target.closest('[data-del]')) {
-      const n = store.tagCount(id);
-      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}?`)) return;
-      store.removeTag(id);
-      renderSettings(); renderAll();
-    }
-    if (e.target.closest('[data-rename]')) {
-      const name = prompt('Tag name', tag.name);
-      if (name === null) return;
-      store.updateTag(id, { name: name.trim() || tag.name });
-      renderSettings(); renderAll();
-    }
-  });
-
-  $('#openVoices').addEventListener('click', () => { closeSurface('settingsOverlay'); openSurface('corrOverlay', renderVoices); });
   $('#expJson').addEventListener('click', () => download('resonate-atlas.json', store.exportJSON(), 'application/json'));
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
   $('#impJson').addEventListener('click', () => {
@@ -1291,6 +1216,65 @@ function renderSettings() {
   });
 }
 
+// tags: the domains of your taste, kept on their own page
+function renderTags() {
+  const body = $('#tagsBody');
+  body.innerHTML = `
+    <div class="tag-rows">
+      ${store.tags.map(t => `
+        <div class="tally" data-tid="${esc(t.id)}">
+          <span class="name">${esc(t.name)}</span>
+          <button class="word-btn quiet" data-rename>rename</button>
+          <button class="word-btn quiet" data-del>remove</button>
+          <span class="n">${store.tagCount(t.id)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="tag-add">
+      <input class="text-input" id="tagName" placeholder="new tag name">
+      <div class="hue-stations" id="tagHues">
+        ${TAG_STATIONS.map((s, i) => `<button data-hue="${s.hue}" data-hex="${s.hex}" aria-pressed="${i === 4}">${s.name}</button>`).join('')}
+      </div>
+      <button class="word-btn" id="tagAdd">add the tag</button>
+    </div>`;
+
+  let picked = TAG_STATIONS[4];
+  $('#tagHues').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hue]');
+    if (!b) return;
+    picked = { hue: parseInt(b.dataset.hue, 10), hex: b.dataset.hex };
+    $$('#tagHues button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    setWorld({ hue: picked.hue, tint: 0.8 });
+    setTimeout(() => { applyWorldState(); }, 1400);
+  });
+  $('#tagAdd').addEventListener('click', () => {
+    const name = $('#tagName').value.trim();
+    if (!name) return $('#tagName').focus();
+    store.addTag(newTag({ name, hue: picked.hue, color: picked.hex }));
+    renderTags(); renderChips();
+    toast(`tag “${name}” added`);
+  });
+  $('#tagName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#tagAdd').click(); });
+
+  $('.tag-rows', body).addEventListener('click', (e) => {
+    const row = e.target.closest('[data-tid]');
+    if (!row) return;
+    const id = row.dataset.tid;
+    const tag = store.tagById(id);
+    if (e.target.closest('[data-del]')) {
+      const n = store.tagCount(id);
+      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}?`)) return;
+      store.removeTag(id);
+      renderTags(); renderAll();
+    }
+    if (e.target.closest('[data-rename]')) {
+      const name = prompt('Tag name', tag.name);
+      if (name === null) return;
+      store.updateTag(id, { name: name.trim() || tag.name });
+      renderTags(); renderAll();
+    }
+  });
+}
+
 function renderKeys() {
   const rows = [
     ['/', 'command line'], ['⌘K', 'command line'], ['i', 'the index'],
@@ -1321,8 +1305,10 @@ const VERBS = {
   share: { run: shareMap, hint: 'hand your atlas to someone' },
   census: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
   stats: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
-  kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'settings & data' },
-  settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'settings & data' },
+  yours: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
+  kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
+  settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
+  tags: { run: () => openSurface('tagsOverlay', renderTags), hint: 'the domains of your taste' },
   voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'your correspondents' },
   keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
   frame: { run: () => mapView.fitAll(filteredPlaces()), hint: 'fit everything in view' },
@@ -1541,6 +1527,9 @@ function init() {
   });
   $('#fmCommand').addEventListener('click', togglePalette);
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
+  $('#themeWord').addEventListener('click', () => {
+    setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark');
+  });
   $('#indexKeys').addEventListener('click', () => {
     closeSurface('indexOverlay');
     openSurface('keysOverlay', renderKeys);

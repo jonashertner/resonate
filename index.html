@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf5">
+<link rel="stylesheet" href="css/style.css?v=rf6">
 </head>
 <body class="boot">
 
@@ -49,13 +49,14 @@
       <button data-go="newsstand"><span class="go-word">newsstand</span><span class="go-sub">published folios, ranked against your atlas</span></button>
       <button data-go="voices"><span class="go-word">voices</span><span class="go-sub">the people whose atlases you keep</span></button>
       <button data-go="census"><span class="go-word">census</span><span class="go-sub">your atlas, counted</span></button>
-      <button data-go="kept"><span class="go-word">kept</span><span class="go-sub">appearance, signature, your data</span></button>
+      <button data-go="yours"><span class="go-word">yours</span><span class="go-sub">signature, your data, erase</span></button>
       <button data-go="how"><span class="go-word">how</span><span class="go-sub">what this is and what it shares</span></button>
     </nav>
     <div class="index-line" id="statusSeg" role="tablist" aria-label="Status">
       <button data-status="all" aria-pressed="true">all</button>
       <button data-status="visited" aria-pressed="false">been</button>
       <button data-status="wishlist" aria-pressed="false">want to go</button>
+      <button id="themeWord" class="theme-word">night</button>
     </div>
     <div class="index-line" id="filterChips" aria-label="Tags"></div>
     <div class="index-line ix-sorts" id="sortLine" aria-label="Arrange">
@@ -80,10 +81,15 @@
   <p class="poster-sub">the story your atlas tells in numbers.</p>
   <div class="poster-body" id="statsBody"></div>
 </section>
-<section class="poster" id="settingsOverlay" hidden aria-label="Kept">
-  <header class="poster-head"><h1 class="poster-word">kept</h1><button class="poster-x" data-close>close</button></header>
-  <p class="poster-sub">how this atlas is kept.</p>
+<section class="poster" id="settingsOverlay" hidden aria-label="Yours">
+  <header class="poster-head"><h1 class="poster-word">yours</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">signature, your data, erase.</p>
   <div class="poster-body" id="settingsBody"></div>
+</section>
+<section class="poster" id="tagsOverlay" hidden aria-label="Tags">
+  <header class="poster-head"><h1 class="poster-word">tags</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">the domains of your taste. each carries a color the world wears.</p>
+  <div class="poster-body" id="tagsBody"></div>
 </section>
 <section class="poster" id="corrOverlay" hidden aria-label="Correspondence">
   <header class="poster-head"><h1 class="poster-word">voices</h1><button class="poster-x" data-close>close</button></header>
@@ -155,6 +161,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf5"></script>
+<script type="module" src="js/app.js?v=rf6"></script>
 </body>
 </html>
