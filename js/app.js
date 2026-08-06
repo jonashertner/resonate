@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf16';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf16';
-import * as mapView from './map.js?v=rf16';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf16';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf16';
-import { exifGPS } from './exif.js?v=rf16';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf17';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf17';
+import * as mapView from './map.js?v=rf17';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf17';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf17';
+import { exifGPS } from './exif.js?v=rf17';
 
 // ---------- helpers ----------
 
@@ -1695,7 +1695,8 @@ function runIntro(onDone) {
   const video = $('#introVideo');
   const canvas = $('#introCanvas');
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (store.settings.introSeen || RM) { onDone(); return; }
+  // the evening opens every visit, not only the first
+  if (RM) { onDone(); return; }
   el.hidden = false;
   let raf = 0;
   let finished = false;
@@ -1789,10 +1790,12 @@ function runIntro(onDone) {
         startScene();
       });
     }
-    // let the film run its length, within reason, instead of the drawn scene's budget
+    // the field arrives while the table is still alive: the dissolve begins
+    // partway through, so the film never ends on screen
     clearTimeout(cutoff);
-    const len = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 7;
-    cutoff = setTimeout(finish, Math.min(len, 9) * 1000 + 300);
+    const len = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6;
+    const hold = Math.max(1.6, Math.min(len, 9) * 0.52) * 1000;
+    cutoff = setTimeout(finish, hold);
   };
 
   // canplay may already have fired on a warm cache, so ask the element directly
@@ -1800,7 +1803,6 @@ function runIntro(onDone) {
   video.addEventListener('loadeddata', raiseFilm);
   video.addEventListener('canplay', raiseFilm);
   video.addEventListener('error', () => {}, { once: true });
-  video.addEventListener('ended', () => finish(), { once: true });
   video.load();
   startScene();
 
