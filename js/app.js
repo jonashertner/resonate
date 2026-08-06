@@ -3,13 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf27';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf27';
-import * as mapView from './map.js?v=rf27';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf27';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf27';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf27';
-import { exifGPS } from './exif.js?v=rf27';
+import { store, newPlace, newTag, newRoute, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf28';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf28';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf28';
+import * as mapView from './map.js?v=rf28';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf28';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf28';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf28';
+import { exifGPS } from './exif.js?v=rf28';
 
 // ---------- helpers ----------
 
@@ -60,6 +61,7 @@ const state = {
   filters: { tags: new Set(), status: 'all' },
   sort: 'recent',
   selectedId: null,
+  selectedRouteId: null,
   foreign: null, // { corrId?, name, sig, place } — a place from someone else's atlas
   visiting: null, // temp correspondent-shaped object when "just looking" at a share
   pendingAdd: null, // {lat, lng, name?, photo?} awaiting confirm
@@ -160,6 +162,11 @@ const surfaceEl = id => $(`#${id}`);
 // it stands, and hands it back to whatever summoned it
 const returnFocus = new Map();
 
+// the name waits in the middle of the field only until the field is used.
+// summoning anything at all counts as using it.
+let leaveHero = () => {};
+function setHeroExit(fn) { leaveHero = fn; }
+
 // the plate stands beside a living map and must never deaden it: you go on
 // tapping marks while it is open. only a surface that covers the field
 // takes the field out of reach.
@@ -237,6 +244,7 @@ function trapFocus(e) {
 document.addEventListener('keydown', trapFocus, true);
 
 function openSurface(id, onShow) {
+  leaveHero();
   if ((id === 'indexOverlay' && topSurface() === 'plate') ||
       (id === 'plate' && topSurface() === 'indexOverlay')) popSurface();
   if (surfaces.includes(id)) return;
@@ -291,8 +299,11 @@ function topSurface() { return surfaces[surfaces.length - 1]; }
 
 function renderCount() {
   const n = allPlaces().length;
+  const w = allRoutes().length;
   $('#placeCount').textContent = n || '';
   $('#ixN').textContent = n;
+  const ways = $('#ixWays');
+  if (ways) { ways.textContent = w ? `${w} way${w === 1 ? '' : 's'}` : ''; ways.hidden = !w; }
   const who = store.settings.authorName;
   const small = $('.index-count small');
   if (small) small.textContent = who ? `places · ${who}` : 'places';
@@ -322,7 +333,8 @@ function renderList() {
   if (!places.length) {
     wrap.innerHTML = allPlaces().length === 0
       ? `<div class="ix-empty">Every place that ever <b>resonated</b>, held in one field.
-          <p>Press <b>/</b> and name a place. Drop a photo on the field. Or open a
+          <p>Press <b>/</b> and name a place. Drop a photo, or a <b>gpx</b> from any
+          walking app, on the field. Or open a
           <button class="word-btn" id="emptyDemo" style="font-size:inherit;letter-spacing:0;text-transform:none">specimen atlas</button>.</p>
         </div>`
       : `<div class="ix-empty">Nothing answers this arrangement.
@@ -354,14 +366,54 @@ function renderList() {
       </span>
     </button>`;
   }).join('');
+
+  // ways stand after the marks: same list, plainly told apart
+  const ways = filteredRoutes();
+  if (ways.length) {
+    wrap.insertAdjacentHTML('beforeend', `<div class="ix-band mono">ways · ${ways.length}</div>` + ways.map((r, i) => {
+      const tag = tagById(r.tags[0]);
+      const locale = [r.city, r.country].filter(Boolean).join(' · ');
+      return `<button class="ix way ${r.status === 'wishlist' ? 'wish' : ''} ${r.id === state.selectedRouteId ? 'selected' : ''}"
+        data-rid="${esc(r.id)}" style="--i:${i}">
+        <span class="ix-l1">
+          <span class="ix-no">${r.loop ? '◯' : '⟋'}</span>
+          <span class="ix-name">${esc(r.name)}</span>${r.sample ? '<span class="ix-sample">sample</span>' : ''}
+          <span class="ix-datum">${esc(fmtKm(r.km))}</span>
+        </span>
+        <span class="ix-meta">
+          ${locale ? `<span>${esc(locale)}</span>` : ''}
+          ${Number.isFinite(r.ascent) ? `<span>${r.ascent} m up</span>` : ''}
+          <span>${esc(fmtHours(r.hours))}</span>
+          ${tag ? `<span>${esc(tag.name)}</span>` : ''}
+          ${r.status === 'wishlist' ? '<span>want to walk</span>' : ''}
+        </span>
+      </button>`;
+    }).join(''));
+  }
+
   $$('.ix', wrap).forEach(b => b.addEventListener('click', () => {
     closeSurface('indexOverlay');
-    selectPlace(b.dataset.id, { fly: true });
+    if (b.dataset.rid) selectRoute(b.dataset.rid, { fly: true });
+    else selectPlace(b.dataset.id, { fly: true });
   }));
 }
 
 function syncMarkers() {
   mapView.renderMarkers(filteredPlaces(), tagById, state.selectedId);
+  mapView.renderRoutes(filteredRoutes(), state.selectedRouteId);
+}
+
+// ways obey the same filters the marks do
+function allRoutes() { return store.routes; }
+function routeById(id) { return allRoutes().find(r => r.id === id); }
+
+function filteredRoutes() {
+  return allRoutes().filter(r => {
+    if (state.filters.status === 'visited' && r.status !== 'walked') return false;
+    if (state.filters.status === 'wishlist' && r.status !== 'wishlist') return false;
+    if (state.filters.tags.size && !r.tags.some(t => state.filters.tags.has(t))) return false;
+    return true;
+  });
 }
 
 function renderAll() {
@@ -768,6 +820,218 @@ function seedDemo({ quiet = false } = {}) {
   closeSurface('indexOverlay');
   mapView.fitAll(store.places);
   if (!quiet) toast('a sample atlas. edit anything and it becomes yours');
+}
+
+// ---------- ways: the plate, and the ground drawn as a section ----------
+
+function selectRoute(id, { fly = true } = {}) {
+  const r = routeById(id);
+  if (!r) return;
+  state.selectedRouteId = id;
+  state.selectedId = null;
+  const t = tagById(r.tags[0]);
+  if (t) setWorld({ hue: t.hue, tint: 0.62 }); else applyWorldState();
+  syncMarkers();
+  if (fly) mapView.frameRoute(r);
+  renderRoutePlate(r);
+  openSurface('plate');
+}
+
+// the profile is not a chart. it is a section through the hill: a ridge over
+// close hatching whose weight follows the steepness, so a wall reads as a wall.
+function profileSVG(pf) {
+  if (!pf) return '';
+  const hatch = pf.hatch.map(h =>
+    `<line class="pf-hatch" x1="${h.x.toFixed(1)}" y1="${h.y.toFixed(1)}" x2="${h.x.toFixed(1)}" y2="${pf.height}" style="--g:${h.w.toFixed(2)}"/>`
+  ).join('');
+  return `<svg class="pf" viewBox="0 0 ${pf.width} ${pf.height}" preserveAspectRatio="none" aria-hidden="true">
+      <g class="pf-hatches">${hatch}</g>
+      <path class="pf-ridge" d="${pf.ridge}"/>
+      <circle class="pf-high" cx="${pf.high.x.toFixed(1)}" cy="${pf.high.y.toFixed(1)}" r="7"/>
+      <line class="pf-rule" x1="0" y1="0" x2="0" y2="${pf.height}" hidden/>
+    </svg>`;
+}
+
+function renderRoutePlate(route) {
+  const wrap = $('#plate');
+  const m = {
+    km: route.km, ascent: route.ascent, descent: route.descent,
+    high: route.high, low: route.low, hours: route.hours,
+  };
+  const pf = profile(route.path, { width: 1000, height: 200 });
+  const tagWords = allTags().map(t =>
+    `<button data-rtag="${esc(t.id)}" class="${route.tags.includes(t.id) ? 'on' : ''}">${esc(t.name)}</button>`).join('');
+
+  wrap.innerHTML = `
+    <div class="plate-eyebrow mono">
+      <span>${route.loop ? 'a loop' : 'a way'}${route.sample ? '' : ''}</span>
+      <span>${esc(effort(m))}</span>
+      <button id="pClose">close</button>
+    </div>
+    <h1 class="plate-name" id="pRouteName" contenteditable="plaintext-only" spellcheck="false"
+        role="textbox" aria-label="The name of this way">${esc(route.name)}</h1>
+    ${route.sample ? '<span class="p-sample">sample</span>' : ''}
+    <div class="plate-sub">${esc([route.city, route.country].filter(Boolean).join(' · '))}</div>
+    ${route.provenance ? `<div class="plate-prov prov">after <b>${esc(route.provenance.name)}</b></div>` : ''}
+
+    <dl class="way-measure mono">
+      <div><dt>distance</dt><dd>${esc(fmtKm(m.km))}</dd></div>
+      ${Number.isFinite(m.ascent) ? `<div><dt>ascent</dt><dd>${m.ascent} m</dd></div>` : ''}
+      ${Number.isFinite(m.descent) ? `<div><dt>descent</dt><dd>${m.descent} m</dd></div>` : ''}
+      ${Number.isFinite(m.high) ? `<div><dt>high point</dt><dd>${m.high} m</dd></div>` : ''}
+      <div><dt>on foot</dt><dd>${esc(fmtHours(m.hours))}</dd></div>
+    </dl>
+
+    ${pf ? `
+    <div class="plate-sec">
+      <div class="plate-sec-head"><span>the ground</span><span class="pf-read mono" id="pfRead"></span></div>
+      <div class="pf-wrap" id="pfWrap" role="img"
+        aria-label="Elevation along the way: ${Math.round(m.low)} to ${Math.round(m.high)} metres over ${esc(fmtKm(m.km))}">
+        ${profileSVG(pf)}
+      </div>
+      <div class="pf-axis mono"><span>0</span><span>${esc(fmtKm(m.km))}</span></div>
+    </div>` : ''}
+
+    <div class="plate-words" id="pRouteStatus">
+      <button data-rst="walked" aria-pressed="${route.status === 'walked'}">walked</button>
+      <button data-rst="wishlist" aria-pressed="${route.status === 'wishlist'}">want to walk</button>
+    </div>
+    <div class="stars-line" id="pRouteStars">
+      ${[1, 2, 3, 4, 5].map(i => `<button data-rstar="${i}" class="${route.rating >= i ? 'on' : ''}" aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('')}
+    </div>
+
+    <div class="plate-sec">
+      <div class="plate-sec-head"><span>tags</span></div>
+      <div class="plate-words" id="pRouteTags">${tagWords}</div>
+    </div>
+
+    <div class="plate-sec">
+      <div class="plate-sec-head"><span>notes</span></div>
+      <textarea class="note-input" id="pRouteNote" aria-label="Your note on this way"
+        placeholder="When to walk it, where to start, what it asks of you…">${esc(route.note)}</textarea>
+    </div>
+
+    <div class="plate-acts">
+      <button class="word-btn quiet" id="pRouteGpx">export gpx</button>
+      <button class="word-btn quiet" id="pRouteRemove">remove</button>
+    </div>`;
+
+  const save = (patch) => {
+    const saved = store.updateRoute(route.id, { ...patch, sample: false });
+    if (!saved) { renderRoutePlate(routeById(route.id) || route); return false; }
+    syncMarkers(); renderCount(); renderList();
+    return true;
+  };
+
+  const nameEl = $('#pRouteName');
+  nameEl.addEventListener('blur', () => {
+    const v = nameEl.textContent.trim();
+    if (v && v !== route.name) save({ name: v });
+    else nameEl.textContent = route.name;
+  });
+  $('#pClose').addEventListener('click', () => { state.selectedRouteId = null; popSurface(); syncMarkers(); applyWorldState(); });
+  $$('#pRouteStatus button').forEach(b => b.addEventListener('click', () => {
+    if (save({ status: b.dataset.rst })) renderRoutePlate(routeById(route.id));
+  }));
+  $$('#pRouteStars button').forEach(b => b.addEventListener('click', () => {
+    const v = parseInt(b.dataset.rstar, 10);
+    if (save({ rating: route.rating === v ? 0 : v })) renderRoutePlate(routeById(route.id));
+  }));
+  $$('#pRouteTags button').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.rtag;
+    const tags = route.tags.includes(id) ? route.tags.filter(t => t !== id) : [...route.tags, id];
+    if (save({ tags })) renderRoutePlate(routeById(route.id));
+  }));
+  $('#pRouteNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
+  $('#pRouteGpx').addEventListener('click', () => downloadGPX(route));
+  $('#pRouteRemove').addEventListener('click', () => {
+    if (!confirm(`Remove “${route.name}” from your atlas?`)) return;
+    store.removeRoute(route.id);
+    state.selectedRouteId = null;
+    popSurface();
+    renderAll();
+    toast('the way is gone');
+  });
+
+  if (pf) bindProfile(pf);
+}
+
+// a finger along the section puts a light on the hill, and says where it is
+function bindProfile(pf) {
+  const wrap = $('#pfWrap');
+  const read = $('#pfRead');
+  const rule = wrap.querySelector('.pf-rule');
+  if (!wrap) return;
+
+  const move = (clientX) => {
+    const box = wrap.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+    const at = pf.at(t * pf.total);
+    rule.hidden = false;
+    rule.setAttribute('x1', (t * pf.width).toFixed(1));
+    rule.setAttribute('x2', (t * pf.width).toFixed(1));
+    read.textContent = `${fmtKm(t * pf.total)} · ${Math.round(at.ele)} m`;
+    mapView.setRouteCursor(at.lat, at.lng);
+  };
+  const leave = () => {
+    rule.hidden = true;
+    read.textContent = '';
+    mapView.setRouteCursor(null);
+  };
+
+  wrap.addEventListener('pointermove', (e) => move(e.clientX));
+  wrap.addEventListener('pointerdown', (e) => { wrap.setPointerCapture?.(e.pointerId); move(e.clientX); });
+  wrap.addEventListener('pointerleave', leave);
+  wrap.addEventListener('pointercancel', leave);
+}
+
+// ---------- taking a way in ----------
+
+async function addFromGPX(file) {
+  let text;
+  try { text = await file.text(); } catch { return toast('could not read that file'); }
+  const parsed = parseGPX(text);
+  if (!parsed) return toast('that file has no track in it');
+
+  const m = measure(parsed.points);
+  const path = simplify(parsed.points, 0.012);
+  const mid = path[Math.floor(path.length / 2)];
+  const route = newRoute({
+    name: parsed.name || file.name.replace(/\.gpx$/i, '') || 'Untitled way',
+    path,
+    km: m.km, ascent: m.ascent, descent: m.descent,
+    high: m.high, low: m.low, hours: m.hours, loop: m.loop,
+    walkedAt: parsed.walkedAt,
+    status: parsed.walkedAt ? 'walked' : 'wishlist',
+  });
+  const made = store.addRoute(route);
+  if (!made) return;
+  renderAll();
+  selectRoute(made.id);
+  toast(`${fmtKm(m.km)}${Number.isFinite(m.ascent) ? `, ${m.ascent} m up` : ''}. ${effort(m)}`);
+
+  // the ground names itself, once, quietly
+  try {
+    const rev = await reverseGeo(mid.lat, mid.lng);
+    if (rev) {
+      store.updateRoute(made.id, { city: rev.city || '', country: rev.country || '' });
+      if (state.selectedRouteId === made.id) renderRoutePlate(routeById(made.id));
+    }
+  } catch { /* the walk stands without a name for its valley */ }
+}
+
+function downloadGPX(route) {
+  const pts = route.path.map(p =>
+    `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}">${Number.isFinite(p.ele) ? `<ele>${p.ele.toFixed(1)}</ele>` : ''}</trkpt>`
+  ).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Resonate" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>${esc(route.name)}</name><trkseg>
+${pts}
+  </trkseg></trk>
+</gpx>`;
+  const safe = route.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) || 'way';
+  download(`${safe}.gpx`, gpx, 'application/gpx+xml');
 }
 
 // ---------- correspondents ----------
@@ -1235,10 +1499,12 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   });
+  const nWays = (opts.routes || []).length;
   const signed = [
     author ? `kept by ${author}` : '',
     fmtDate(new Date().toISOString()).toLowerCase(),
-    `${places.length} place${places.length === 1 ? '' : 's'}`,
+    places.length ? `${places.length} place${places.length === 1 ? '' : 's'}` : '',
+    nWays ? `${nWays} way${nWays === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(' · ');
 
   let no = 0;
@@ -1256,6 +1522,22 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     </article>`;
   };
 
+  const ways = (opts.routes || []).map((r, i) => {
+    const pf = profile(r.path, { width: 1000, height: 150, columns: 96 });
+    const meta = [
+      fmtKm(r.km),
+      Number.isFinite(r.ascent) ? `${r.ascent} m up` : '',
+      fmtHours(r.hours),
+      r.loop ? 'a loop' : '',
+    ].filter(Boolean).join(' · ');
+    return `<article class="sh-entry">
+      <div class="sh-line"><span class="sh-no mono">${r.loop ? 'O' : '/'}</span><h3 class="sh-name">${esc(r.name)}</h3></div>
+      <div class="sh-meta">${esc(meta)}</div>
+      ${r.note ? `<p class="sh-note">${esc(r.note).replace(/\n/g, '<br>')}</p>` : ''}
+      ${pf ? `<div class="sh-profile">${profileSVG(pf)}</div>` : ''}
+    </article>`;
+  }).join('');
+
   $('#sheet').innerHTML = `
     <header class="sh-head">
       <div class="sh-mast mono">resonate</div>
@@ -1266,16 +1548,21 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     ${[...groups.entries()].map(([city, list]) =>
       `${groups.size > 1 || city !== 'off the map' ? `<h2 class="sh-city mono">${esc(city.toLowerCase())}</h2>` : ''}
        ${list.map(entry).join('')}`).join('')}
+    ${ways ? `<h2 class="sh-city mono">ways</h2>${ways}` : ''}
     <footer class="sh-colophon mono">resonate · jonashertner.github.io/resonate</footer>`;
 }
 
 function atlasSheetOpts() {
   const author = store.settings.authorName;
-  return { title: author ? `the atlas of ${author}` : 'an atlas', places: filteredPlaces() };
+  return {
+    title: author ? `the atlas of ${author}` : 'an atlas',
+    places: filteredPlaces(),
+    routes: filteredRoutes(),
+  };
 }
 
 function printSheet(opts) {
-  if (!opts.places.length) return toast('nothing to print yet');
+  if (!opts.places.length && !(opts.routes || []).length) return toast('nothing to print yet');
   buildSheet(opts);
   document.title = `resonate — ${opts.title}`;
   window.print();
@@ -1429,7 +1716,8 @@ async function shareMap() {
   const places = allPlaces();
   if (!places.length) return toast('nothing to hand over yet');
   const author = await ensureAuthor();
-  const url = makeShareUrl(allTags(), places, author);
+  const routes = allRoutes();
+  const url = makeShareUrl(allTags(), places, author, routes);
   const bytes = url.length;
   const withNotes = places.filter(p => p.note).length;
   const withLinks = places.filter(p => p.url).length;
@@ -1442,6 +1730,7 @@ async function shareMap() {
       <div class="sec-head">what travels</div>
       <ul class="sh-list">
         <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
+        ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: the whole line walked, and its climb</li>` : ''}
         <li>addresses, cities, countries, tags, been or want to go, stars</li>
         ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
         ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
@@ -1639,6 +1928,7 @@ function renderKeys() {
     ['+ · −', 'zoom'], ['0', 'frame everything'], ['t', 'day / night'],
     ['g', 'find me'], ['s', 'share this atlas'], ['1–9', 'toggle tag worlds'],
     ['right-click', 'propose a place'], ['drop a photo', 'file it by its own fix'],
+    ['drop a gpx', 'a walk becomes a way'],
   ];
   $('#keysBody').innerHTML = `<div class="keys-grid">
     ${rows.map(([k, d]) => `<div class="key-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
@@ -1673,6 +1963,9 @@ const VERBS = {
   dark: { run: () => setTheme('dark'), hint: 'night field' },
   light: { run: () => setTheme('light'), hint: 'day field' },
   photo: { run: () => $('#shootFile').click(), hint: 'a photo becomes a place' },
+  hike: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
+  route: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
+  walk: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
   export: { run: () => download('resonate-atlas.json', store.exportJSON(), 'application/json'), hint: 'your data, yours' },
   print: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   pdf: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
@@ -2033,6 +2326,7 @@ function init() {
   setWriteFailedHandler(() => toast('this browser refused to save. export your atlas before you lose it', 6000));
   store.load();
 
+  mapView.setRouteClickHandler((id) => selectRoute(id, { fly: false }));
   mapView.initMap({
     onMarkerClick: (id) => selectPlace(id, { fly: false }),
     onCorrClick: (corrId, placeId) => openForeignPlate(corrId, placeId),
@@ -2076,19 +2370,19 @@ function init() {
     setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
   }
 
-  // the name waits in the middle of the field until the field is used
-  const leaveHero = () => {
+  setHeroExit(() => {
     if (!document.body.classList.contains('hero')) return;
     document.body.classList.remove('hero');
     $('#fmHint').hidden = true;
-  };
+  });
   if (!location.hash.startsWith('#m=')) {
     document.body.classList.add('hero');
-    mapView.onFirstUse(leaveHero);
+    const exit = () => leaveHero();
+    mapView.onFirstUse(exit);
     ['keydown', 'wheel'].forEach(ev =>
-      document.addEventListener(ev, leaveHero, { once: true, passive: true }));
-    $('#fmCommand').addEventListener('click', leaveHero, { once: true });
-    $('#fmIndex').addEventListener('click', leaveHero, { once: true });
+      document.addEventListener(ev, exit, { once: true, passive: true }));
+    $('#fmCommand').addEventListener('click', exit, { once: true });
+    $('#fmIndex').addEventListener('click', exit, { once: true });
   }
 
   // plain words, then a choice: nothing is seeded and nobody is named until
@@ -2193,6 +2487,11 @@ function init() {
     e.target.value = '';
     if (f) addFromPhoto(f);
   });
+  $('#gpxFile').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) addFromGPX(f);
+  });
   let dragDepth = 0;
   window.addEventListener('dragover', (e) => { e.preventDefault(); });
   window.addEventListener('dragenter', (e) => { e.preventDefault(); if (++dragDepth === 1) document.body.classList.add('dropping'); });
@@ -2201,8 +2500,11 @@ function init() {
     e.preventDefault();
     dragDepth = 0;
     document.body.classList.remove('dropping');
-    const f = [...(e.dataTransfer?.files || [])].find(x => x.type.startsWith('image/'));
-    if (f) addFromPhoto(f);
+    const files = [...(e.dataTransfer?.files || [])];
+    const gpx = files.find(x => /\.gpx$/i.test(x.name) || x.type.includes('gpx'));
+    if (gpx) return addFromGPX(gpx);
+    const img = files.find(x => x.type.startsWith('image/'));
+    if (img) addFromPhoto(img);
   });
 
   // mobile: swipe up from the bottom edge = index

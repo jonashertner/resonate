@@ -1,11 +1,13 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, SCHEMA_VERSION } from './schema.js?v=rf27';
+import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf28';
+import { measure, simplify } from './route.js?v=rf28';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
 const K_SETTINGS = 'resonate.settings.v1';
 const K_CORR = 'resonate.correspondents.v1';
+const K_ROUTES = 'resonate.routes.v1';
 
 // the tag wheel: eight hue stations that survive full-viewport takeover.
 // hue is the stored truth; hex is kept only for interop with old exports/links.
@@ -97,6 +99,31 @@ export function newPlace(partial = {}) {
   };
 }
 
+export function newRoute(partial = {}) {
+  const now = new Date().toISOString();
+  const path = simplify(Array.isArray(partial.path) ? partial.path : [], 0.012);
+  const m = measure(path);
+  return {
+    id: uid(),
+    kind: 'route',
+    name: 'Untitled way',
+    path,
+    city: '', country: '',
+    tags: [],
+    status: 'wishlist',
+    rating: 0,
+    note: '', url: '',
+    km: m.km, ascent: m.ascent, descent: m.descent,
+    high: m.high, low: m.low, hours: m.hours, loop: m.loop,
+    createdAt: now,
+    updatedAt: now,
+    walkedAt: '',
+    ...partial,
+    path,
+    ...(partial.id ? {} : { id: uid() }),
+  };
+}
+
 export function newTag(partial = {}) {
   const t = {
     id: uid(),
@@ -113,12 +140,14 @@ const DEFAULT_SETTINGS = { theme: 'auto', lastView: null, seeded: false, authorN
 
 export const store = {
   places: [],
+  routes: [],
   tags: [],
   correspondents: [],
   settings: { ...DEFAULT_SETTINGS },
 
   load() {
     this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean);
+    this.routes = normRoutes(read(K_ROUTES, []));
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
     this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
@@ -134,6 +163,30 @@ export const store = {
   saveTags() { return write(K_TAGS, this.tags); },
   saveSettings() { return write(K_SETTINGS, this.settings); },
   saveCorrespondents() { return write(K_CORR, this.correspondents); },
+  saveRoutes() { return write(K_ROUTES, this.routes); },
+
+  routeById(id) { return this.routes.find(r => r.id === id); },
+
+  addRoute(route) {
+    this.routes.unshift(route);
+    if (!this.saveRoutes()) { this.routes.shift(); return null; }
+    return route;
+  },
+
+  updateRoute(id, patch) {
+    const r = this.routeById(id);
+    if (!r) return null;
+    const before = { ...r };
+    Object.assign(r, patch, { updatedAt: new Date().toISOString() });
+    if (!this.saveRoutes()) { Object.assign(r, before); return null; }
+    return r;
+  },
+
+  removeRoute(id) {
+    const before = this.routes;
+    this.routes = this.routes.filter(r => r.id !== id);
+    if (!this.saveRoutes()) this.routes = before;
+  },
 
   // ---------- correspondents: kept atlases from people whose taste you've measured ----------
 
@@ -221,6 +274,7 @@ export const store = {
   // erase means erase: every resonate key leaves the device
   clearAll() {
     this.places = [];
+    this.routes = [];
     this.tags = [];
     this.correspondents = [];
     try {
@@ -253,6 +307,14 @@ export const store = {
         added++;
       }
     });
+    const routeIds = new Set(this.routes.map(r => r.id));
+    data.routes.forEach(r => {
+      if (!routeIds.has(r.id)) {
+        this.routes.push(newRoute(r));
+        routeIds.add(r.id);
+        added++;
+      }
+    });
     // an export carries the whole atlas back, correspondents and signature included
     const corrIds = new Set(this.correspondents.map(c => c.id));
     data.correspondents.forEach(c => {
@@ -272,6 +334,7 @@ export const store = {
     this.saveSettings();
     this.savePlaces();
     this.saveTags();
+    this.saveRoutes();
     this.saveCorrespondents();
     return added;
   },
@@ -283,6 +346,7 @@ export const store = {
       exportedAt: new Date().toISOString(),
       tags: this.tags,
       places: this.places,
+      routes: this.routes,
       correspondents: this.correspondents,
       settings: this.settings,
     }, null, 2);

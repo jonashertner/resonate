@@ -5,9 +5,13 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-export const SCHEMA_VERSION = 2;
+import { decodePath } from './route.js?v=rf28';
+
+export const SCHEMA_VERSION = 3;
 
 export const LIMITS = {
+  routes: 200,
+  routePoints: 3000,
   places: 500,
   tags: 64,
   correspondents: 64,
@@ -92,6 +96,81 @@ export function normPlace(raw, i = 0) {
   return out;
 }
 
+// a route arrives either as a list of points or as an encoded line; both are
+// bounded here, because a line is the one thing in this app that can be long
+export function normRoute(raw, i = 0, decode = null) {
+  if (!isObj(raw)) return null;
+  const r = safeKeys(raw);
+
+  let path = [];
+  if (Array.isArray(r.path)) {
+    path = r.path;
+  } else if (typeof r.p === 'string' && decode) {
+    path = decode(r.p);
+  }
+  path = (Array.isArray(path) ? path : [])
+    .slice(0, LIMITS.routePoints)
+    .map(pt => {
+      if (!isObj(pt)) return null;
+      const lat = Number(pt.lat), lng = Number(pt.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      const ele = Number(pt.ele);
+      const out = { lat, lng };
+      if (Number.isFinite(ele) && Math.abs(ele) <= 9000) out.ele = ele;
+      return out;
+    })
+    .filter(Boolean);
+  if (path.length < 2) return null;
+
+  const nn = (v, lim) => { const n = Number(v); return Number.isFinite(n) ? Math.max(-lim, Math.min(lim, n)) : null; };
+
+  const out = {
+    id: id(r.id, `r${i}`),
+    kind: 'route',
+    name: str(r.name, LIMITS.name) || 'Untitled way',
+    path,
+    city: str(r.city, 120),
+    country: str(r.country, 120),
+    tags: Array.isArray(r.tags)
+      ? r.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
+      : [],
+    status: r.status === 'walked' ? 'walked' : 'wishlist',
+    rating: Math.max(0, Math.min(5, Math.floor(Number(r.rating) || 0))),
+    note: str(r.note, LIMITS.note),
+    url: /^https?:\/\//i.test(String(r.url ?? '')) ? str(r.url, LIMITS.url) : '',
+    km: nn(r.km, 100000),
+    ascent: nn(r.ascent, 30000),
+    descent: nn(r.descent, 30000),
+    high: nn(r.high, 9000),
+    low: nn(r.low, 9000),
+    hours: nn(r.hours, 400),
+    loop: r.loop === true,
+    createdAt: str(r.createdAt, 40),
+    updatedAt: str(r.updatedAt, 40),
+    walkedAt: str(r.walkedAt, 40),
+    sample: r.sample === true,
+  };
+  if (isObj(r.provenance)) {
+    out.provenance = {
+      name: str(r.provenance.name, LIMITS.author),
+      sig: Number(r.provenance.sig) || 0,
+      adoptedAt: str(r.provenance.adoptedAt, 40),
+    };
+  }
+  return out;
+}
+
+export function normRoutes(arr, decode = null) {
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (let i = 0; i < arr.length && out.length < LIMITS.routes; i++) {
+    const v = normRoute(arr[i], i, decode);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
 const HEX = /^#[0-9a-fA-F]{3,8}$/;
 
 export function normTag(raw, i = 0) {
@@ -164,13 +243,15 @@ export function normPayload(raw) {
   }
 
   const places = normPlaces(p.places);
-  if (!places.length) return null;
+  const routes = normRoutes(p.routes, decodePath);
+  if (!places.length && !routes.length) return null;
   const base = {
     v: Number.isFinite(v) ? v : 1,
     kind,
     author: str(p.author, LIMITS.author),
     tags: normTags(p.tags),
     places,
+    routes,
   };
   if (kind === 'folio') {
     const title = str(p.title, LIMITS.title).trim();
@@ -187,6 +268,7 @@ export function normImport(raw) {
   return {
     tags: normTags(d.tags),
     places: normPlaces(d.places),
+    routes: normRoutes(d.routes, decodePath),
     correspondents: normList(d.correspondents, normCorrespondent, LIMITS.correspondents),
     settings: normSettings(d.settings),
   };

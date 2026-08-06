@@ -158,3 +158,107 @@ test('a photo that is not a photo does not reach the atlas', () => {
   const p = schema.normPlace({ lat: 1, lng: 1, photos: ['data:image/png;base64,AAA', 'https://x.test/a.png', 42] });
   assert.deepEqual(p.photos, ['data:image/png;base64,AAA']);
 });
+
+// ---------- ways ----------
+
+const route = await import('../js/route.js?v=test');
+
+test('the line keeps its shape and loses its noise', () => {
+  // a straight run with jitter: most points say nothing and should go
+  const pts = [];
+  for (let i = 0; i <= 200; i++) {
+    pts.push({ lat: 46 + i * 0.0002, lng: 8 + (i % 2 ? 0.000004 : -0.000004), ele: 1000 + i });
+  }
+  const s = route.simplify(pts, 0.012);
+  assert.ok(s.length < pts.length / 5, `expected heavy thinning, got ${s.length} of ${pts.length}`);
+  assert.deepEqual(s[0], pts[0]);
+  assert.deepEqual(s[s.length - 1], pts[pts.length - 1]);
+});
+
+test('thinning the line does not flatten the climb', () => {
+  // a walk up to a col and down the other side: simplifying from above must
+  // not lose the summit, which is what makes a walk what it is
+  const pts = [];
+  for (let i = 0; i <= 900; i++) {
+    const t = i / 900;
+    const ele = t < 0.55
+      ? 1180 + (2260 - 1180) * Math.pow(t / 0.55, 1.15)
+      : 2260 - (2260 - 1420) * Math.pow((t - 0.55) / 0.45, 0.9);
+    pts.push({ lat: 46 + i * 0.0002, lng: 8 + i * 0.00021, ele });
+  }
+  const full = route.measure(pts);
+  const thin = route.measure(route.simplify(pts, 0.012));
+  assert.ok(thin.length !== 0);
+  assert.ok(Math.abs(thin.high - full.high) <= 5, `summit lost: ${thin.high} vs ${full.high}`);
+  assert.ok(Math.abs(thin.ascent - full.ascent) / full.ascent < 0.08,
+    `climb flattened: ${thin.ascent} vs ${full.ascent}`);
+  assert.ok(Math.abs(thin.km - full.km) / full.km < 0.02, `distance drifted: ${thin.km} vs ${full.km}`);
+});
+
+test('a climb is measured, and a barometer twitch is not', () => {
+  // 100 steps up 5 m each, with one metre of noise on every reading
+  const pts = [];
+  for (let i = 0; i <= 100; i++) {
+    pts.push({ lat: 46 + i * 0.0009, lng: 8, ele: 1000 + i * 5 + (i % 2 ? 1 : -1) });
+  }
+  const m = route.measure(pts);
+  assert.ok(m.km > 9 && m.km < 11, `distance ${m.km}`);
+  assert.ok(Math.abs(m.ascent - 500) < 40, `ascent ${m.ascent} should be near 500`);
+  assert.ok(m.descent < 40, `descent ${m.descent} should be near nothing`);
+  // the summit is what the instrument read, not a peak flattened by smoothing
+  assert.ok(Math.abs(m.high - 1500) <= 2, `high ${m.high} should be the real summit`);
+  assert.ok(Math.abs(m.low - 1000) <= 2, `low ${m.low}`);
+  assert.ok(m.hours > 0 && m.hours < 24);
+  assert.equal(m.loop, false);
+});
+
+test('a loop knows it is a loop', () => {
+  const pts = [];
+  for (let i = 0; i <= 60; i++) {
+    const a = (i / 60) * Math.PI * 2;
+    pts.push({ lat: 46 + Math.sin(a) * 0.01, lng: 8 + Math.cos(a) * 0.01, ele: 800 });
+  }
+  assert.equal(route.measure(pts).loop, true);
+});
+
+test('a line survives being carried in a link', () => {
+  const pts = [
+    { lat: 46.5721, lng: 8.0034, ele: 1204 },
+    { lat: 46.5799, lng: 8.0121, ele: 1388 },
+    { lat: 46.5844, lng: 8.0203, ele: 1502 },
+  ];
+  const back = route.decodePath(route.encodePath(pts));
+  assert.equal(back.length, 3);
+  back.forEach((p, i) => {
+    assert.ok(Math.abs(p.lat - pts[i].lat) < 1e-5, `lat ${p.lat}`);
+    assert.ok(Math.abs(p.lng - pts[i].lng) < 1e-5, `lng ${p.lng}`);
+    assert.equal(p.ele, pts[i].ele);
+  });
+});
+
+test('an encoded line is far smaller than the points it stands for', () => {
+  const pts = Array.from({ length: 800 }, (_, i) => ({ lat: 46 + i * 0.0001, lng: 8 + i * 0.0001, ele: 1000 + (i % 60) }));
+  const enc = route.encodePath(pts);
+  assert.ok(enc.length < JSON.stringify(pts).length / 6,
+    `encoded ${enc.length} vs json ${JSON.stringify(pts).length}`);
+});
+
+test('a hostile line is refused like anything else from outside', () => {
+  assert.equal(schema.normRoute({ path: [{ lat: 1, lng: 1 }] }), null, 'one point is not a way');
+  assert.equal(schema.normRoute({ path: 'nope' }), null);
+  assert.equal(schema.normRoute(null), null);
+  const r = schema.normRoute({
+    path: [{ lat: 1, lng: 1 }, { lat: 99, lng: 1 }, { lat: 2, lng: 2 }],
+    name: 'x'.repeat(999), url: 'javascript:alert(1)', rating: 1e9, km: 1e12,
+  });
+  assert.equal(r.path.length, 2, 'the off-globe point is dropped');
+  assert.equal(r.url, '');
+  assert.equal(r.rating, 5);
+  assert.ok(r.km <= 100000);
+});
+
+test('a way in a link is bounded', () => {
+  const many = Array.from({ length: 9000 }, (_, i) => ({ lat: 46 + i * 1e-5, lng: 8 }));
+  const r = schema.normRoute({ path: many });
+  assert.equal(r.path.length, schema.LIMITS.routePoints);
+});

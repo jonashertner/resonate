@@ -2,17 +2,19 @@
 
 /* global LZString */
 
-import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf27';
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf28';
+import { encodePath, simplify } from './route.js?v=rf28';
 
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
 }
 
 // a folio: a composed slice with a title and a dedication — the atomic recommendation
-export function makeFolioUrl({ title, dedication, author, tags, places }) {
+export function makeFolioUrl({ title, dedication, author, tags, places, routes = [] }) {
   return pack({
     v: SCHEMA_VERSION,
     kind: 'folio',
+    routes: packRoutes(routes),
     title: String(title || '').slice(0, 80),
     dedication: String(dedication || '').slice(0, 140),
     author: String(author || '').slice(0, 60),
@@ -35,10 +37,23 @@ export function makeAskUrl({ from, q }) {
   });
 }
 
-export function makeShareUrl(tags, places, author = '') {
+// a link carries the shape of a way, not every reading of it: coarser than
+// what is kept on the device, so the link stays a link
+function packRoutes(routes) {
+  return (routes || []).map(r => ({
+    id: r.id, name: r.name, city: r.city, country: r.country,
+    tags: r.tags, status: r.status, rating: r.rating, note: r.note, url: r.url,
+    km: r.km, ascent: r.ascent, descent: r.descent, high: r.high, low: r.low,
+    hours: r.hours, loop: r.loop,
+    p: encodePath(simplify(r.path, 0.03).slice(0, 900)),
+  }));
+}
+
+export function makeShareUrl(tags, places, author = '', routes = []) {
   const payload = {
     v: SCHEMA_VERSION,
     kind: 'atlas',
+    routes: packRoutes(routes),
     author: String(author || '').slice(0, 60),
     tags: tags.map(t => ({ id: t.id, name: t.name, emoji: t.emoji, color: t.color })),
     // photos stay private on the device — they never travel in the link

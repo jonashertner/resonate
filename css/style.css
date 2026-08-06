@@ -1100,3 +1100,110 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   border: 1px solid var(--ink-3); border-radius: 2px; padding: 1px 5px; margin-left: 8px;
   color: var(--ink-2);
 }
+
+/* ---------- ways: the line through the field ---------- */
+
+/* the casing carries the field's own colour so no linework can break the way */
+.way-casing { stroke: var(--field); fill: none; opacity: 0.92; }
+.way {
+  stroke: var(--ink); fill: none;
+  transition: stroke-width 220ms var(--e-reflex);
+}
+.way.wish { stroke-dasharray: 1 7; stroke-linecap: round; }
+.way.sel { stroke: var(--ink); }
+.way:hover { cursor: pointer; }
+/* a selected way is drawn on, from its beginning */
+.way.sel { stroke-dasharray: 4000; animation: way-draw 1400ms var(--e-enter) forwards; }
+@keyframes way-draw { from { stroke-dashoffset: 4000; } to { stroke-dashoffset: 0; } }
+.way.sel.wish { animation: none; stroke-dasharray: 1 7; }
+
+.way-cap-icon { background: none; border: 0; }
+.way-cap { color: var(--ink); }
+.wc-halo { fill: var(--field); stroke: var(--field); stroke-width: 3.4; }
+.wc-ring { fill: var(--field); stroke: currentColor; stroke-width: 1.8; }
+.way-cap.end .wc-ring { fill: currentColor; }
+
+.way-cursor-icon { background: none; border: 0; }
+.way-cursor { color: var(--ink); }
+.wcur-halo { fill: none; stroke: var(--field); stroke-width: 4; }
+.wcur-ring { fill: none; stroke: currentColor; stroke-width: 2; }
+.wcur-dot { fill: currentColor; }
+
+/* the measure: what the way asks of you, set as a table of figures */
+.way-measure {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 14px 18px;
+  margin: 22px 0 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--ink-4);
+  border-bottom: 1px solid var(--ink-4);
+}
+.way-measure dt {
+  font-size: 8.5px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ink-2); margin-bottom: 5px;
+}
+.way-measure dd {
+  font-family: var(--font);
+  font-size: 20px; font-variation-settings: 'opsz' 40, 'wght' 560;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the ground, drawn as a section: a ridge over hatching that thickens with
+   the steepness, so a wall reads as a wall */
+.pf-wrap {
+  position: relative;
+  margin-top: 10px;
+  height: 132px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.pf { display: block; width: 100%; height: 100%; overflow: visible; }
+.pf-hatch {
+  stroke: var(--ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: calc(0.1 + var(--g, 0) * 0.5);
+}
+.pf-ridge {
+  fill: none; stroke: var(--ink); stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.pf-high { fill: var(--field); stroke: var(--ink); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.pf-rule { stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.75; }
+.pf-read { font-size: 10px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-axis {
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+  font-size: 9px; letter-spacing: 0.12em; color: var(--ink-2);
+}
+
+/* a way in the index */
+.ix-band {
+  margin: 26px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ink-4);
+  font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--ink-2);
+  break-inside: avoid;
+}
+.ix.way .ix-no { letter-spacing: 0; }
+.ix-ways {
+  display: block; margin-top: 4px;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .way.sel { animation: none; stroke-dasharray: none; }
+}
+
+/* the section prints as ground, in ink */
+@media print {
+  .sh-profile { break-inside: avoid; margin: 2mm 0 3mm; }
+  .sh-profile svg { width: 100%; height: 26mm; display: block; }
+  .sh-profile .pf-hatch { stroke: #000; opacity: calc(0.12 + var(--g, 0) * 0.45); }
+  .sh-profile .pf-ridge { stroke: #000; stroke-width: 0.7; fill: none; }
+  .sh-profile .pf-high { fill: #fff; stroke: #000; stroke-width: 0.6; }
+  .sh-measure { font-size: 9pt; margin-top: 1mm; }
+}

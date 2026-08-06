@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf27">
+<link rel="stylesheet" href="css/style.css?v=rf28">
 </head>
 <body class="boot">
 
@@ -53,7 +53,7 @@
 <section class="index" id="indexOverlay" hidden aria-label="Index of places">
   <button class="index-x" id="indexClose">close</button>
   <header class="index-head">
-    <h1 class="index-count"><span id="ixN">0</span><small>places</small></h1>
+    <h1 class="index-count"><span id="ixN">0</span><small>places</small><small class="ix-ways mono" id="ixWays" hidden></small></h1>
     <nav class="index-go" id="indexGo" aria-label="Go to">
       <button data-go="folio"><span class="go-word">folio</span><span class="go-sub">hand a set of places to one person</span></button>
       <button data-go="newsstand"><span class="go-word">newsstand</span><span class="go-sub">sample folios, ranked against your atlas. beta</span></button>
@@ -122,6 +122,9 @@
 
     <div class="sec-head">what it keeps</div>
     <p>Your places, tags, notes, stars, photos. All of it stays on your device, in this browser, under this address. Photos never leave it. We collect nothing and we cannot read your atlas.</p>
+
+    <div class="sec-head">ways</div>
+    <p>A walk is not a point. Drop a gpx from any walking app on the field and it becomes a way: the line, its distance, its climb, the hour it asks of you, and the ground drawn as a section you can run a finger along. Ways are kept, handed over and printed like everything else.</p>
 
     <div class="sec-head">who else sees something</div>
     <p>Three services answer this page, and each sees your address and the request you made, as any website's would.</p>
@@ -203,10 +206,11 @@
 <input type="file" id="importFile" accept="application/json,.json" hidden>
 <input type="file" id="photoFile" accept="image/*" hidden>
 <input type="file" id="shootFile" accept="image/*" capture="environment" hidden>
+<input type="file" id="gpxFile" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf27"></script>
+<script type="module" src="js/app.js?v=rf28"></script>
 </body>
 </html>

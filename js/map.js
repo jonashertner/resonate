@@ -13,7 +13,10 @@ let map;
 let tileLayer;
 let clusterGroup;
 let corrLayer;
+let routeLayer;
+let routeCursor;
 let locateMarker;
+const routesById = new Map();
 const markersById = new Map();
 const nameById = new Map();
 let labelsOn = false;
@@ -58,6 +61,10 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
     map.flyToBounds(e.layer.getBounds(), { ...overlayPadding(), maxZoom: 16, duration: 0.5 });
   });
 
+  // ways go under the marks: a line is ground, a mark is a decision
+  routeLayer = L.layerGroup();
+  map.addLayer(routeLayer);
+
   corrLayer = L.layerGroup();
   map.addLayer(corrLayer);
   markersById._onCorrClick = onCorrClick;
@@ -75,6 +82,95 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
 
   markersById._onMarkerClick = onMarkerClick;
   return map;
+}
+
+// ---------- ways: the line, cased so it reads over any ground ----------
+
+let onRouteClick = null;
+export function setRouteClickHandler(fn) { onRouteClick = fn; }
+
+export function renderRoutes(routes, selectedId) {
+  if (!routeLayer) return;
+  routeLayer.clearLayers();
+  routesById.clear();
+  (routes || []).forEach(r => {
+    if (!Array.isArray(r.path) || r.path.length < 2) return;
+    const latlngs = r.path.map(p => [p.lat, p.lng]);
+    const sel = r.id === selectedId;
+
+    // the casing carries the field's own colour, so linework beneath can
+    // never break the line; the way itself is drawn over it
+    const casing = L.polyline(latlngs, {
+      className: 'way-casing',
+      interactive: false,
+      weight: sel ? 11 : 8,
+      opacity: 1,
+      lineJoin: 'round', lineCap: 'round',
+    });
+    const way = L.polyline(latlngs, {
+      className: `way${sel ? ' sel' : ''}${r.status === 'wishlist' ? ' wish' : ''}`,
+      weight: sel ? 4.4 : 3,
+      opacity: 1,
+      lineJoin: 'round', lineCap: 'round',
+    });
+    way.on('click', (e) => { L.DomEvent.stop(e); onRouteClick?.(r.id); });
+
+    // where it begins and where it ends
+    const cap = (ll, cls) => L.marker(ll, {
+      interactive: false,
+      icon: L.divIcon({
+        className: 'way-cap-icon',
+        html: `<div class="way-cap ${cls}"><svg width="18" height="18" viewBox="0 0 18 18">
+            <circle cx="9" cy="9" r="6" class="wc-halo"/>
+            <circle cx="9" cy="9" r="6" class="wc-ring"/>
+          </svg></div>`,
+        iconSize: [18, 18], iconAnchor: [9, 9],
+      }),
+    });
+
+    routeLayer.addLayer(casing);
+    routeLayer.addLayer(way);
+    if (!r.loop) {
+      routeLayer.addLayer(cap(latlngs[0], 'start'));
+      routeLayer.addLayer(cap(latlngs[latlngs.length - 1], 'end'));
+    } else {
+      routeLayer.addLayer(cap(latlngs[0], 'start'));
+    }
+    routesById.set(r.id, way);
+  });
+}
+
+// a finger on the profile puts a light on the hill
+export function setRouteCursor(lat, lng) {
+  if (!routeLayer) return;
+  if (lat === null || lat === undefined) {
+    if (routeCursor) { routeLayer.removeLayer(routeCursor); routeCursor = null; }
+    return;
+  }
+  if (!routeCursor) {
+    routeCursor = L.marker([lat, lng], {
+      interactive: false,
+      zIndexOffset: 800,
+      icon: L.divIcon({
+        className: 'way-cursor-icon',
+        html: `<div class="way-cursor"><svg width="26" height="26" viewBox="0 0 26 26">
+            <circle cx="13" cy="13" r="8" class="wcur-halo"/>
+            <circle cx="13" cy="13" r="8" class="wcur-ring"/>
+            <circle cx="13" cy="13" r="2.6" class="wcur-dot"/>
+          </svg></div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+      }),
+    });
+    routeLayer.addLayer(routeCursor);
+  } else {
+    routeCursor.setLatLng([lat, lng]);
+  }
+}
+
+export function frameRoute(route) {
+  if (!map || !Array.isArray(route?.path) || route.path.length < 2) return;
+  const b = L.latLngBounds(route.path.map(p => [p.lat, p.lng]));
+  map.flyToBounds(b, { ...overlayPadding(), maxZoom: 16, duration: 0.7 });
 }
 
 // the first time a hand touches the field, whoever is waiting is told
