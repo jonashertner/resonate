@@ -999,3 +999,68 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
     font-size: 7.5pt; letter-spacing: 0.12em;
   }
 }
+
+/* ---------- the threshold: plain words, then a choice ---------- */
+.intro-skip {
+  position: absolute; z-index: 3;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  padding: 10px 18px;
+  font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+  font-variation-settings: 'wght' 500;
+  color: rgba(247, 242, 232, 0.92);
+  border: 1px solid rgba(247, 242, 232, 0.38);
+  border-radius: 999px;
+  background: rgba(10, 7, 5, 0.34);
+  transition: border-color 200ms var(--e-reflex), background 200ms var(--e-reflex);
+}
+.intro-skip:hover { border-color: rgba(247, 242, 232, 0.8); background: rgba(10, 7, 5, 0.55); }
+
+.threshold {
+  position: fixed; inset: 0; z-index: 240;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 14px;
+  padding: max(28px, env(safe-area-inset-top)) clamp(24px, 7vw, 108px) max(28px, env(safe-area-inset-bottom));
+  background: var(--field);
+  animation: threshold-in 700ms var(--e-enter) both;
+}
+@keyframes threshold-in { from { opacity: 0; } }
+.th-what {
+  font-size: clamp(30px, 6.4vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'opsz' 96, 'wdth' 88, 'wght' 620;
+  max-width: 17ch;
+}
+.th-plain { font-size: clamp(16px, 2.1vw, 21px); max-width: 42ch; color: var(--ink); }
+.th-quiet { font-size: clamp(14px, 1.7vw, 17px); max-width: 42ch; color: var(--ink-2); }
+.th-go { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 18px; }
+.th-go .word-btn { font-size: clamp(15px, 1.9vw, 19px); }
+.th-how {
+  margin-top: 10px; align-self: start;
+  font-size: 13px; color: var(--ink-2);
+  border-bottom: 1px solid var(--ink-3); padding-bottom: 2px;
+}
+.th-how:hover { color: var(--ink); border-color: var(--ink); }
+
+/* a sample place says so until you make it yours */
+.ix-sample, .p-sample {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-3); border: 1px solid var(--ink-4); border-radius: 2px;
+  padding: 1px 5px; margin-left: 8px; white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) { .threshold { animation: none; } }
+
+/* ---------- handing over ---------- */
+.sh-what { margin-bottom: 20px; }
+.sh-list { list-style: none; margin: 0 0 16px; }
+.sh-list li { font-size: 15px; padding: 3px 0 3px 16px; position: relative; color: var(--ink-2); }
+.sh-list li::before { content: ''; position: absolute; left: 2px; top: 12px; width: 6px; height: 1px; background: var(--ink-3); }
+.sh-list b { color: var(--ink); font-variation-settings: 'wght' 620; }
+.sh-warn { font-size: 14.5px; color: var(--ink); margin: 14px 0 8px; max-width: 46ch; }
+.sh-size { font-size: 11px; color: var(--ink-2); letter-spacing: 0.04em; }
+.beta-mark {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+  border: 1px solid var(--ink-3); border-radius: 2px; padding: 1px 5px; margin-left: 8px;
+  color: var(--ink-2);
+}

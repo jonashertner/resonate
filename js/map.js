@@ -42,9 +42,10 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
       const n = cluster.getChildCount();
       const s = n < 10 ? 36 : n < 50 ? 42 : 48;
       return L.divIcon({
-        html: `<div class="station"><svg width="${s}" height="${s}" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="17.5" class="st-ring"/>
-          </svg><span class="station-n">${n}</span></div>`,
+        html: `<div class="station" role="img" aria-label="${n} places here, together">
+            <svg width="${s}" height="${s}" viewBox="0 0 40 40" aria-hidden="true">
+              <circle cx="20" cy="20" r="17.5" class="st-ring"/>
+            </svg><span class="station-n">${n}</span></div>`,
         className: 'station-icon',
         iconSize: [s, s],
       });
@@ -139,6 +140,9 @@ export function renderMarkers(places, _tagById, selectedId) {
     const marker = L.marker([place.lat, place.lng], {
       icon: makeIcon(place, place.id === selectedId),
       riseOnHover: true,
+      keyboard: true,
+      alt: place.name,
+      title: place.name,
     });
     marker.on('click', () => markersById._onMarkerClick?.(place.id));
     markersById.set(place.id, marker);

@@ -76,6 +76,9 @@ export function normPlace(raw, i = 0) {
     photos,
     createdAt: str(p.createdAt, 40),
     updatedAt: str(p.updatedAt, 40),
+    // a seeded place is marked until it is adopted or edited; the flag is
+    // local only and never travels in a link
+    sample: p.sample === true,
   };
 
   // provenance reaches an attribute in the marker: rebuilt, never carried

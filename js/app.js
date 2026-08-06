@@ -3,13 +3,13 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf22';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf22';
-import * as mapView from './map.js?v=rf22';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf22';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf22';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf22';
-import { exifGPS } from './exif.js?v=rf22';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf23';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf23';
+import * as mapView from './map.js?v=rf23';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf23';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf23';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf23';
+import { exifGPS } from './exif.js?v=rf23';
 
 // ---------- helpers ----------
 
@@ -192,11 +192,21 @@ function focusables(el) {
   return [...el.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null || n === document.activeElement);
 }
 
+// whichever dialog is in front holds the focus: the surface stack, or a
+// report or prompt raised beside it
+function frontDialog() {
+  for (const id of ['nameAsk', 'threshold', 'reportOverlay']) {
+    const el = document.getElementById(id);
+    if (el && !el.hidden) return el;
+  }
+  const id = topSurface();
+  return id ? surfaceEl(id) : null;
+}
+
 function trapFocus(e) {
   if (e.key !== 'Tab') return;
-  const id = topSurface();
-  if (!id) return;
-  const el = surfaceEl(id);
+  const el = frontDialog();
+  if (!el) return;
   const items = focusables(el);
   if (!items.length) return;
   const first = items[0];
@@ -310,10 +320,10 @@ function renderList() {
     const datum = p.rating > 0 ? starsText(p.rating) : fmtDistance(haversineKm(center, p));
     const prov = p.provenance ? `<span class="prov">after <b>${esc(p.provenance.name)}</b></span>` : '';
     return `<button class="ix ${p.status === 'wishlist' ? 'wish' : ''} ${p.id === state.selectedId ? 'selected' : ''}"
-      data-id="${esc(p.id)}" role="listitem" style="--i:${i}">
+      data-id="${esc(p.id)}" style="--i:${i}">
       <span class="ix-l1">
         <span class="ix-no">${fmtNo(nos.get(p.id))}</span>
-        <span class="ix-name">${esc(p.name)}</span>
+        <span class="ix-name">${esc(p.name)}</span>${p.sample ? '<span class="ix-sample">sample</span>' : ''}
         <span class="ix-datum">${datum}</span>
       </span>
       <span class="ix-meta">
@@ -386,7 +396,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   const stars = [1, 2, 3, 4, 5].map(i =>
     `<button data-star="${i}" class="${place.rating >= i ? 'on' : ''}" ${ro ? 'disabled' : ''} aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('');
   const photos = (place.photos || []).map((src, i) => `
-    <figure class="fig"><img src="${esc(src)}" alt="">
+    <figure class="fig"><img src="${esc(src)}" alt="Photograph ${i + 1} of ${esc(place.name)}">
       ${ro ? '' : `<button class="ph-x" data-phx="${i}">remove</button>`}</figure>`).join('');
   const canDictate = !ro && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
@@ -396,7 +406,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       <button id="pCoords" title="Copy coordinates">${fmtDMS(place.lat, place.lng)}</button>
       <button id="pClose">close</button>
     </div>
-    <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false"'}>${esc(place.name)}</h1>
+    <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="The name of this place"'}>${esc(place.name)}</h1>${place.sample && !ro ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([place.address, place.city, place.country].filter(Boolean).slice(0, 2).join(' · '))}</div>
     ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b> · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
 
@@ -421,7 +431,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
       <div class="plate-sec">
         <div class="plate-sec-head"><span>notes</span>${canDictate ? '<button class="dictate" id="pDictate">◉ dictate</button>' : ''}</div>
-        <textarea class="note-input" id="pNote" placeholder="What makes it worth remembering…">${esc(place.note)}</textarea>
+        <textarea class="note-input" id="pNote" aria-label="Your note on this place" placeholder="What makes it worth remembering…">${esc(place.note)}</textarea>
       </div>
 
       <div class="plate-sec">
@@ -433,7 +443,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
       <div class="plate-sec">
         <div class="plate-sec-head"><span>link</span></div>
-        <input class="text-input" id="pUrl" type="url" placeholder="https://…" value="${esc(place.url)}">
+        <input class="text-input" id="pUrl" type="url" aria-label="A link for this place" placeholder="https://…" value="${esc(place.url)}">
       </div>
 
       <div class="plate-acts">
@@ -462,11 +472,14 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     return;
   }
 
+  // the store decides whether an edit happened; the view only reports it.
+  // a write the device refused must never look like a write that succeeded.
   const save = (patch) => {
-    store.updatePlace(place.id, patch);
-    Object.assign(place, patch);
-    mapView.refreshMarkerIcon(place, tagById, true);
+    const saved = store.updatePlace(place.id, { ...patch, sample: false });
+    if (!saved) { renderPlate(placeById(place.id) || place, { edit: true }); return false; }
+    mapView.refreshMarkerIcon(saved, tagById, true);
     renderCount(); renderChips();
+    return true;
   };
 
   const nameEl = $('#pName');
@@ -724,16 +737,17 @@ function commitAdd() {
   selectPlace(place.id, { fly: false, edit: true });
 }
 
-function seedDemo() {
+function seedDemo({ quiet = false } = {}) {
   const demo = demoData();
   demo.tags.forEach(t => store.addTag(t));
-  demo.places.forEach(p => store.addPlace(p));
+  // every seeded place carries the word sample until it is adopted or edited
+  demo.places.forEach(p => store.addPlace({ ...p, sample: true }));
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
   closeSurface('indexOverlay');
   mapView.fitAll(store.places);
-  toast('a specimen atlas. make it yours');
+  if (!quiet) toast('a sample atlas. edit anything and it becomes yours');
 }
 
 // ---------- correspondents ----------
@@ -823,7 +837,7 @@ function renderVoices() {
           <circle class="corr-arcs" cx="15" cy="15" r="9" pathLength="360"/>
           <circle class="corr-pole" cx="15" cy="15" r="1.8"/>
         </svg>
-        <h3 class="corr-name" contenteditable="plaintext-only" spellcheck="false">${esc(c.name)}</h3>
+        <h3 class="corr-name" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="This voice's name">${esc(c.name)}</h3>
       </div>
       <div class="corr-meta">since ${fmtDate(c.addedAt)} · ${c.places.length} marks · ${v.word}</div>
       <div class="corr-ev">${ev.map(l => `<div>${l}</div>`).join('')}</div>
@@ -1067,13 +1081,35 @@ function holdAlready(p) {
   });
 }
 
-async function ensureAuthor() {
-  if (!store.settings.authorName) {
-    const name = prompt('Sign as…', '') || '';
-    store.settings.authorName = name;
-    store.saveSettings();
-  }
-  return store.settings.authorName;
+// a signature is asked for at the moment it is used, never at the door
+function ensureAuthor() {
+  if (store.settings.authorName) return Promise.resolve(store.settings.authorName);
+  const ask = $('#nameAsk');
+  const input = $('#nameAskInput');
+  return new Promise((resolve) => {
+    const done = (name) => {
+      go.removeEventListener('click', onGo);
+      later.removeEventListener('click', onLater);
+      input.removeEventListener('keydown', onKey);
+      if (name) { store.settings.authorName = name; store.saveSettings(); renderCount(); }
+      dropDialog(ask);
+      resolve(store.settings.authorName || '');
+    };
+    const onGo = () => done(input.value.trim());
+    const onLater = () => done('');
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(input.value.trim()); }
+      if (e.key === 'Escape') { e.preventDefault(); done(''); }
+    };
+    const go = $('#nameAskGo');
+    const later = $('#nameAskLater');
+    go.addEventListener('click', onGo);
+    later.addEventListener('click', onLater);
+    input.addEventListener('keydown', onKey);
+    input.value = '';
+    raiseDialog(ask, 'Your name');
+    input.focus();
+  });
 }
 
 function openFolioComposer({ title = '', dedication = '', places = null } = {}) {
@@ -1351,20 +1387,66 @@ function queryMyAtlas(q) {
 
 // ---------- share ----------
 
+// a link is a disclosure: it is read before it is made, never after.
+// long fragments break in messaging apps and histories long before a browser
+// refuses them, so a large atlas is offered as a file instead.
+const LINK_SOFT_LIMIT = 8000;
+const LINK_HARD_LIMIT = 16000;
+
+function handOver(url, what) {
+  const send = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ text: url }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast(`${what} copied`); }
+    catch { window.prompt('Copy this:', url); }
+  };
+  send();
+}
+
 async function shareMap() {
-  let author = store.settings.authorName;
-  if (!author) {
-    author = prompt('Sign your atlas as…', '') || '';
-    store.settings.authorName = author;
-    store.saveSettings();
-  }
-  const url = makeShareUrl(allTags(), allPlaces(), author);
-  try {
-    await navigator.clipboard.writeText(url);
-    toast('link copied. your whole atlas travels in it');
-  } catch {
-    prompt('Copy this link:', url);
-  }
+  const places = allPlaces();
+  if (!places.length) return toast('nothing to hand over yet');
+  const author = await ensureAuthor();
+  const url = makeShareUrl(allTags(), places, author);
+  const bytes = url.length;
+  const withNotes = places.filter(p => p.note).length;
+  const withLinks = places.filter(p => p.url).length;
+  const tooLong = bytes > LINK_HARD_LIMIT;
+  const long = bytes > LINK_SOFT_LIMIT;
+
+  const body = $('#shareBody');
+  body.innerHTML = `
+    <div class="sh-what">
+      <div class="sec-head">what travels</div>
+      <ul class="sh-list">
+        <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
+        <li>addresses, cities, countries, tags, been or want to go, stars</li>
+        ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
+        ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
+        <li>${author ? `signed <b>${esc(author)}</b>` : 'unsigned'}</li>
+      </ul>
+      <div class="sec-head">what stays</div>
+      <ul class="sh-list"><li>your photos. they never leave this device.</li></ul>
+      <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
+      a link cannot be recalled once it is sent.</p>
+      <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}</p>
+    </div>
+    <div class="word-row">
+      ${tooLong ? '' : '<button class="word-btn" id="shGo">hand over the whole atlas</button>'}
+      <button class="word-btn ${tooLong ? '' : 'quiet'}" id="shFolio">compose a folio instead</button>
+      <button class="word-btn quiet" id="shFile">send a file instead</button>
+    </div>
+    ${tooLong ? '<p class="sh-warn">This atlas is too long to travel as a link. Hand over a folio, or send the file.</p>' : ''}`;
+
+  $('#shGo')?.addEventListener('click', () => { closeSurface('shareOverlay'); handOver(url, 'your atlas'); });
+  $('#shFolio').addEventListener('click', () => { closeSurface('shareOverlay'); openFolioComposer(); });
+  $('#shFile').addEventListener('click', () => {
+    closeSurface('shareOverlay');
+    download('resonate-atlas.json', store.exportJSON(), 'application/json');
+  });
+  openSurface('shareOverlay');
 }
 
 // ---------- posters: census & kept ----------
@@ -1503,7 +1585,8 @@ function renderTags() {
   $('#tagAdd').addEventListener('click', () => {
     const name = $('#tagName').value.trim();
     if (!name) return $('#tagName').focus();
-    store.addTag(newTag({ name, hue: picked.hue, color: picked.hex }));
+    const made = store.addTag(newTag({ name, hue: picked.hue, color: picked.hex }));
+    if (!made) return;
     renderTags(); renderChips();
     toast(`tag “${name}” added`);
   });
@@ -1914,6 +1997,7 @@ function runIntro(onDone) {
   startScene();
 
   el.addEventListener('click', finish);
+  $('#introSkip')?.addEventListener('click', (e) => { e.stopPropagation(); finish(); });
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') { finish(); document.removeEventListener('keydown', esc); }
   });
@@ -1924,16 +2008,6 @@ function runIntro(onDone) {
 function init() {
   setWriteFailedHandler(() => toast('this browser refused to save. export your atlas before you lose it', 6000));
   store.load();
-
-  // testing phase: a specimen atlas is the default start
-  if (!store.places.length && !store.settings.seeded) {
-    const demo = demoData();
-    demo.tags.forEach(t => store.addTag(t));
-    demo.places.forEach(p => store.addPlace(p));
-    store.settings.seeded = true;
-    store.saveSettings();
-    setTimeout(() => toast('a specimen atlas to start. make it yours'), 1400);
-  }
 
   mapView.initMap({
     onMarkerClick: (id) => selectPlace(id, { fly: false }),
@@ -1959,7 +2033,7 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
-  runIntro(() => { $('#nameAskInput') && maybeAskName(); });
+  runIntro(() => { if (!store.settings.chosen) openThreshold(); });
   if (!store.settings.indexSeen && !store.settings.hintShown) {
     $('#fmHint').hidden = false;
     store.settings.hintShown = true;
@@ -1982,29 +2056,27 @@ function init() {
     $('#fmIndex').addEventListener('click', leaveHero, { once: true });
   }
 
-  function maybeAskName() {
-    if (store.settings.authorName || store.settings.namedAsked) return;
-    const ask = $('#nameAsk');
-    // someone arriving on a link is answering a person, not opening an atlas:
-    // the report has the floor, and the name can be asked another time
-    setTimeout(() => {
-      if (!$('#reportOverlay').hidden) return;
-      raiseDialog(ask, 'Your name');
-    }, 900);
-    const done = (name) => {
-      store.settings.namedAsked = true;
-      if (name) { store.settings.authorName = name; renderCount(); }
+  // plain words, then a choice: nothing is seeded and nobody is named until
+  // the visitor has said which start they want
+  function openThreshold() {
+    const th = $('#threshold');
+    const done = (fn) => {
+      store.settings.chosen = true;
       store.saveSettings();
-      dropDialog(ask);
-      if (name) toast(`welcome, ${name}. the field is yours`);
+      dropDialog(th);
+      fn?.();
     };
-    $('#nameAskGo').addEventListener('click', () => done($('#nameAskInput').value.trim()));
-    $('#nameAskLater').addEventListener('click', () => done(''));
-    $('#nameAskInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') done($('#nameAskInput').value.trim());
-      if (e.key === 'Escape') done('');
-    });
+    $('#thSample').addEventListener('click', () => done(() => {
+      seedDemo();
+      toast('a sample atlas. edit anything and it becomes yours');
+    }));
+    $('#thEmpty').addEventListener('click', () => done(() => {
+      toast('the field is yours. press the middle, or find or add below');
+    }));
+    $('#thHow').addEventListener('click', () => done(() => openSurface('howOverlay')));
+    raiseDialog(th, 'What Resonate is');
   }
+
   setTimeout(() => document.body.classList.remove('boot'), 700);
   document.body.classList.add('greet');
   setTimeout(() => document.body.classList.remove('greet'), 5600);
