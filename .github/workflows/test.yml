@@ -1,0 +1,28 @@
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: every module parses
+        run: |
+          for f in js/*.js sw.js; do node --check "$f" || exit 1; done
+      - name: the invariants a hostile link must not break
+        run: node --test test/*.test.mjs
+      - name: no em-dash reaches a reader
+        run: |
+          if grep -rn '—' index.html; then
+            echo "an em-dash is in the page copy"
+            exit 1
+          fi

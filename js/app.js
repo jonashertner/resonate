@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf15';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf15';
-import * as mapView from './map.js?v=rf15';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf15';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf15';
-import { exifGPS } from './exif.js?v=rf15';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf16';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf16';
+import * as mapView from './map.js?v=rf16';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf16';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf16';
+import { exifGPS } from './exif.js?v=rf16';
 
 // ---------- helpers ----------
 

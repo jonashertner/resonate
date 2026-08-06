@@ -31,9 +31,22 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-      # this site's deployments have been taking well past the action's
-      # ten minute default, and were being aborted after they had succeeded
+      # this site's deployments run past the action's ten minute ceiling and
+      # land anyway, so the wait is allowed to give up and the site itself
+      # is asked whether the commit arrived
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
-        with:
-          timeout: 1500000
+      - name: wait until the site serves this build
+        run: |
+          mark=$(grep -oE 'v=rf[0-9]+' index.html | head -1)
+          echo "looking for $mark"
+          for i in $(seq 1 60); do
+            if curl -fsS "https://jonashertner.github.io/resonate/?ci=$i" | grep -q "$mark"; then
+              echo "live after $((i * 30))s"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "the site never served $mark"
+          exit 1
