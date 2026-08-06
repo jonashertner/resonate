@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf6';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf6';
-import * as mapView from './map.js?v=rf6';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf6';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf6';
-import { exifGPS } from './exif.js?v=rf6';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf7';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf7';
+import * as mapView from './map.js?v=rf7';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf7';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf7';
+import { exifGPS } from './exif.js?v=rf7';
 
 // ---------- helpers ----------
 
@@ -189,6 +189,9 @@ function renderCount() {
   const n = allPlaces().length;
   $('#placeCount').textContent = n || '';
   $('#ixN').textContent = n;
+  const who = store.settings.authorName;
+  const small = $('.index-count small');
+  if (small) small.textContent = who ? `places · ${who}` : 'places';
 }
 
 function renderChips() {
@@ -267,6 +270,11 @@ function renderAll() {
 function openIndex() {
   renderList();
   openSurface('indexOverlay');
+  if (!store.settings.indexSeen) {
+    store.settings.indexSeen = true;
+    store.saveSettings();
+    $('#fmHint').hidden = true;
+  }
 }
 
 function clearFilters() {
@@ -1491,6 +1499,16 @@ function renderPaletteResults(q) {
 function init() {
   store.load();
 
+  // testing phase: a specimen atlas is the default start
+  if (!store.places.length && !store.settings.seeded) {
+    const demo = demoData();
+    demo.tags.forEach(t => store.addTag(t));
+    demo.places.forEach(p => store.addPlace(p));
+    store.settings.seeded = true;
+    store.saveSettings();
+    setTimeout(() => toast('a specimen atlas to start. make it yours'), 1400);
+  }
+
   mapView.initMap({
     onMarkerClick: (id) => selectPlace(id, { fly: false }),
     onCorrClick: (corrId, placeId) => openForeignPlate(corrId, placeId),
@@ -1515,7 +1533,28 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
+  if (!store.settings.indexSeen) $('#fmHint').hidden = false;
+
+  if (!store.settings.authorName && !store.settings.namedAsked) {
+    const ask = $('#nameAsk');
+    setTimeout(() => { ask.hidden = false; $('#nameAskInput').focus(); }, 1600);
+    const done = (name) => {
+      store.settings.namedAsked = true;
+      if (name) { store.settings.authorName = name; renderCount(); }
+      store.saveSettings();
+      ask.hidden = true;
+      if (name) toast(`welcome, ${name}. the field is yours`);
+    };
+    $('#nameAskGo').addEventListener('click', () => done($('#nameAskInput').value.trim()));
+    $('#nameAskLater').addEventListener('click', () => done(''));
+    $('#nameAskInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') done($('#nameAskInput').value.trim());
+      if (e.key === 'Escape') done('');
+    });
+  }
   setTimeout(() => document.body.classList.remove('boot'), 700);
+  document.body.classList.add('greet');
+  setTimeout(() => document.body.classList.remove('greet'), 5600);
 
   // shared atlas → the resonance report
   const payload = parseShareHash();

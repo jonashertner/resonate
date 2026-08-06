@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf6">
+<link rel="stylesheet" href="css/style.css?v=rf7">
 </head>
 <body class="boot">
 
@@ -23,7 +23,8 @@
 
   <!-- the four corner marks: the only chrome that exists at rest -->
   <button class="fm fm-nw" id="fmIndex" aria-label="Open the index">
-    Resonate<span class="fm-count mono" id="placeCount"></span>
+    <span class="fm-word">Resonate</span><span class="fm-count mono" id="placeCount"></span>
+    <span class="fm-hint" id="fmHint" hidden>press here. the index holds everything.</span>
   </button>
   <button class="fm fm-s" id="fmCommand" aria-label="Search, add, or command">
     anywhere<kbd class="mono">/</kbd>
@@ -152,6 +153,15 @@
     placeholder="anywhere.  #tag  >verb  @voice" aria-label="Search, add, or command">
 </div>
 
+<div class="name-ask" id="nameAsk" hidden>
+  <label for="nameAskInput">you keep this atlas. what shall it sign as?</label>
+  <input id="nameAskInput" type="text" autocomplete="name" spellcheck="false" maxlength="60" enterkeyhint="done">
+  <div class="word-row">
+    <button class="word-btn" id="nameAskGo">begin</button>
+    <button class="word-btn quiet" id="nameAskLater">later</button>
+  </div>
+</div>
+
 <div class="toast mono" id="toast" hidden></div>
 
 <input type="file" id="importFile" accept="application/json,.json" hidden>
@@ -161,6 +171,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf6"></script>
+<script type="module" src="js/app.js?v=rf7"></script>
 </body>
 </html>
