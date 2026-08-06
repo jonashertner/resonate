@@ -16,7 +16,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # nothing is published that has not passed its tests on this exact revision:
+  # a green deploy used to mean only that the files went out
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: every module parses
+        run: |
+          for f in js/*.js sw.js; do node --check "$f" || exit 1; done
+      - name: the invariants a hostile link must not break
+        run: node --test test/*.test.mjs
+      - name: no em-dash reaches a reader
+        run: |
+          if grep -rn '—' index.html; then
+            echo "an em-dash is in the page copy"
+            exit 1
+          fi
+
   deploy:
+    needs: test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -26,8 +48,9 @@ jobs:
       - name: stage the site, without the repository's machinery
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' \
-                --exclude 'test' --exclude 'node_modules' ./ _site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '.claude' \
+                --exclude '_site' --exclude 'test' --exclude 'node_modules' \
+                ./ _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -68,7 +91,7 @@ jobs:
           done
       - name: the repository's machinery is not published
         run: |
-          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs; do
+          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://jonashertner.github.io/resonate/$p")
             echo "$p $code"
             [ "$code" = 404 ] || exit 1

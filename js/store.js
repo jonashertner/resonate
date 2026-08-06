@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf30';
-import { measure, simplify } from './route.js?v=rf30';
+import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf31';
+import { measure, simplify } from './route.js?v=rf31';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -203,21 +203,23 @@ export const store = {
         .map(p => newPlace({ ...p, photos: [] })),
     };
     this.correspondents.push(c);
-    this.saveCorrespondents();
+    if (!this.saveCorrespondents()) { this.correspondents.pop(); return null; }
     return c;
   },
 
   updateCorrespondent(id, patch) {
     const c = this.correspondents.find(x => x.id === id);
     if (!c) return null;
+    const before = { ...c };
     Object.assign(c, patch);
-    this.saveCorrespondents();
+    if (!this.saveCorrespondents()) { Object.assign(c, before); return null; }
     return c;
   },
 
   removeCorrespondent(id) {
+    const before = this.correspondents;
     this.correspondents = this.correspondents.filter(c => c.id !== id);
-    this.saveCorrespondents();
+    if (!this.saveCorrespondents()) this.correspondents = before;
   },
 
   tagById(id) { return this.tags.find(t => t.id === id); },
@@ -255,8 +257,9 @@ export const store = {
   updateTag(id, patch) {
     const t = this.tagById(id);
     if (!t) return null;
+    const before = { ...t };
     Object.assign(t, patch);
-    this.saveTags();
+    if (!this.saveTags()) { Object.assign(t, before); return null; }
     return t;
   },
 
@@ -291,6 +294,12 @@ export const store = {
   merge(raw) {
     const data = normImport(raw);
     if (!data) return 0;
+    // held so the whole import can be undone if any part of it is refused
+    const before = {
+      places: [...this.places], tags: [...this.tags],
+      routes: [...this.routes], correspondents: [...this.correspondents],
+      settings: { ...this.settings },
+    };
     const tagIds = new Set(this.tags.map(t => t.id));
     const placeIds = new Set(this.places.map(p => p.id));
     let added = 0;
@@ -331,14 +340,38 @@ export const store = {
       this.settings.authorName = data.settings.authorName;
     }
     if (data.settings.theme) this.settings.theme = data.settings.theme;
+    // an import is one act: if any part of it cannot be written, none of it
+    // is kept, and the caller is told nothing came in
+    const ok = this.savePlaces() && this.saveTags() && this.saveRoutes() && this.saveCorrespondents();
+    if (!ok) {
+      this.places = before.places;
+      this.tags = before.tags;
+      this.routes = before.routes;
+      this.correspondents = before.correspondents;
+      this.settings = before.settings;
+      this.savePlaces(); this.saveTags(); this.saveRoutes(); this.saveCorrespondents();
+      return 0;
+    }
     this.saveSettings();
-    this.savePlaces();
-    this.saveTags();
-    this.saveRoutes();
-    this.saveCorrespondents();
     return added;
   },
 
+  // what may be handed to someone else: the atlas without the private layer.
+  // the share surface promises photographs never leave the device, and a file
+  // offered in place of a link has to keep that promise.
+  exportShareJSON() {
+    return JSON.stringify({
+      app: 'resonate',
+      kind: 'share',
+      version: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      tags: this.tags,
+      places: this.places.map(({ photos, ...rest }) => rest),
+      routes: this.routes,
+    }, null, 2);
+  },
+
+  // everything, for yourself: photographs, voices and settings included
   exportJSON() {
     return JSON.stringify({
       app: 'resonate',

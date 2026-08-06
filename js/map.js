@@ -365,7 +365,11 @@ function refreshCorrVisibility() {
   corrData.filter(c => c.visible !== false).forEach(c => {
     const sig = sigAngle(c.id);
     c.places.forEach(p => {
+      const label = `${p.name}, after ${c.name}`;
       const mk = L.marker([p.lat, p.lng], {
+        keyboard: true,
+        alt: label,
+        title: label,
         icon: L.divIcon({
           className: 'mark-icon',
           html: apertureHTML(sig),

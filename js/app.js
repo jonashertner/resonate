@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf30';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf30';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf30';
-import * as mapView from './map.js?v=rf30';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf30';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf30';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf30';
-import { exifGPS } from './exif.js?v=rf30';
+import { store, newPlace, newTag, newRoute, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf31';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf31';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf31';
+import * as mapView from './map.js?v=rf31';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf31';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf31';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf31';
+import { exifGPS } from './exif.js?v=rf31';
 
 // ---------- helpers ----------
 
@@ -599,8 +599,10 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
         if (name) {
           const station = TAG_STATIONS[store.tags.length % TAG_STATIONS.length];
           const tag = store.addTag(newTag({ name, hue: station.hue, color: station.hex }));
-          save({ tags: [...place.tags, tag.id] });
-          applyWorldState();
+          if (tag) {
+            save({ tags: [...place.tags, tag.id] });
+            applyWorldState();
+          }
         }
         renderPlate(place); renderChips(); renderList(); syncMarkers();
       };
@@ -722,7 +724,7 @@ async function addFromPhoto(file) {
     if (r) Object.assign(draft, { name: r.name || draft.name, address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
   } catch { /* offline is fine */ }
   const place = store.addPlace(newPlace({ ...draft, status: 'visited', photos: dataUri ? [dataUri] : [] }));
-  if (!store.savePlaces()) toast('storage is full, photo not kept');
+  if (!place) return toast('this browser refused to keep it. the photograph is large; export and free some room');
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
@@ -769,6 +771,7 @@ function addPlaceFromResult(r) {
     address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode,
     status: 'wishlist',
   }));
+  if (!place) return toast('this browser refused to keep it');
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
@@ -803,6 +806,7 @@ function commitAdd() {
     address: p.address || '', city: p.city || '', country: p.country || '', countryCode: p.countryCode || '',
     status: 'wishlist',
   }));
+  if (!place) return toast('this browser refused to keep it');
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
@@ -1006,7 +1010,7 @@ async function addFromGPX(file) {
     status: parsed.walkedAt ? 'walked' : 'wishlist',
   });
   const made = store.addRoute(route);
-  if (!made) return;
+  if (!made) return toast('this browser refused to keep it. a long walk is large; export and free some room');
   renderAll();
   selectRoute(made.id);
   toast(`${fmtKm(m.km)}${Number.isFinite(m.ascent) ? `, ${m.ascent} m up` : ''}. ${effort(m)}`);
@@ -1058,7 +1062,7 @@ function graftTags(foreignTagIds, foreignTags) {
     const mine = store.tags.find(t => t.name.toLowerCase() === name.toLowerCase());
     if (mine) { out.push(mine.id); continue; }
     const made = store.addTag(newTag({ name, hue: ft.hue, color: ft.color }));
-    out.push(made.id);
+    if (made) out.push(made.id);
   }
   return [...new Set(out)];
 }
@@ -1071,6 +1075,7 @@ function adoptPlace(place, foreign, foreignTags = null) {
     tags: graftTags(place.tags, foreignTags || foreign.tags),
     provenance: { name: foreign.name, sig: foreign.sig, adoptedAt: new Date().toISOString() },
   }));
+  if (!adopted) { toast('this browser refused to keep it'); return null; }
   renderAll();
   // the report still stands in front: select quietly, do not raise a plate behind it
   if (topSurface() === 'plate') closeSurface('plate');
@@ -1127,7 +1132,7 @@ function renderVoices() {
       <div class="corr-meta">since ${fmtDate(c.addedAt)} · ${c.places.length} marks · ${v.word}</div>
       <div class="corr-ev">${ev.map(l => `<div>${l}</div>`).join('')}</div>
       <div class="corr-ctl">
-        <div class="hue-stations" role="radiogroup" aria-label="Their color">
+        <div class="hue-stations" role="group" aria-label="Their color">
           ${TAG_STATIONS.map(s => `<button data-hue="${s.hue}" aria-pressed="${c.hue === s.hue}">${s.name}</button>`).join('')}
         </div>
         <button class="word-btn quiet" data-vis>${c.visible === false ? 'muted' : 'audible'}</button>
@@ -1337,7 +1342,8 @@ function openAtlasReport(payload) {
   $('#rpKeep').addEventListener('click', () => {
     const finalName = prompt('Keep this atlas under which name?', name === 'an unsigned atlas' ? '' : name);
     if (finalName === null) return;
-    store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
+    const kept = store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
+    if (!kept) return toast('this browser refused to keep them');
     pushCorrespondentsToMap();
     clearShareHash();
     dropDialog(el);
@@ -1738,15 +1744,18 @@ async function shareMap() {
         <li>${author ? `signed <b>${esc(author)}</b>` : 'unsigned'}</li>
       </ul>
       <div class="sec-head">what stays</div>
-      <ul class="sh-list"><li>your photos. they never leave this device.</li></ul>
+      <ul class="sh-list">
+        <li>your photographs. they never leave this device, by link or by file.</li>
+        <li>your voices, and everything under yours.</li>
+      </ul>
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
       a link cannot be recalled once it is sent.</p>
       <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}</p>
     </div>
     <div class="word-row">
-      ${tooLong ? '' : '<button class="word-btn" id="shGo">hand over the whole atlas</button>'}
-      <button class="word-btn ${tooLong ? '' : 'quiet'}" id="shFolio">compose a folio instead</button>
-      <button class="word-btn quiet" id="shFile">send a file instead</button>
+      <button class="word-btn" id="shFolio">compose a folio</button>
+      ${tooLong ? '' : '<button class="word-btn quiet" id="shGo">hand over the whole atlas</button>'}
+      <button class="word-btn quiet" id="shFile">send it as a file</button>
     </div>
     ${tooLong ? '<p class="sh-warn">This atlas is too long to travel as a link. Hand over a folio, or send the file.</p>' : ''}`;
 
@@ -1754,7 +1763,9 @@ async function shareMap() {
   $('#shFolio').addEventListener('click', () => { closeSurface('shareOverlay'); openFolioComposer(); });
   $('#shFile').addEventListener('click', () => {
     closeSurface('shareOverlay');
-    download('resonate-atlas.json', store.exportJSON(), 'application/json');
+    // the same promise as the link: no photographs, no voices, no settings
+    download('resonate-atlas.json', store.exportShareJSON(), 'application/json');
+    toast('a file of the same places. your photos stayed here');
   });
   openSurface('shareOverlay');
 }
@@ -1810,13 +1821,13 @@ function renderSettings() {
     <div class="set-sec">
       <div class="sec-head">your data</div>
       <div class="word-row">
-        <button class="word-btn quiet" id="expJson">export json</button>
+        <button class="word-btn quiet" id="expJson">export everything</button>
         <button class="word-btn quiet" id="expGeo">export geojson</button>
         <button class="word-btn quiet" id="expPdf">print, or save as pdf</button>
         <button class="word-btn quiet" id="impJson">import</button>
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
-      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. Export before switching devices, or send yourself the share link.</div>
+      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. <b>Export everything</b> is your backup: it carries your photographs, your voices and your settings, so keep it to yourself. A file handed to someone else, from <b>hand over</b>, carries none of those.</div>
     </div>`;
 
   $('#authorName').addEventListener('change', (e) => {
@@ -2181,13 +2192,15 @@ const FILM_IN = 1.6;      // enter the evening already in motion
 const FILM_TAIL = 0.9;    // the dissolve opens this long before the last frame,
                           // so the face at the end of the shot is still there
 
-function runIntro(onDone) {
+function runIntro(onDone, { brief = false, skip = false } = {}) {
   const el = $('#intro');
   const video = $('#introVideo');
   const canvas = $('#introCanvas');
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // the evening opens every visit, not only the first
-  if (RM) { onDone(); return; }
+  // the evening opens every visit, but only the first one plays out. someone
+  // arriving on a link came for the sender, and gets no film at all.
+  if (skip || RM) { store.settings.introSeen = true; store.saveSettings(); onDone(); return; }
+  el.classList.toggle('brief', brief);
   el.hidden = false;
   let raf = 0;
   let finished = false;
@@ -2245,6 +2258,9 @@ function runIntro(onDone) {
   const finish = () => {
     if (finished) return;
     finished = true;
+    // whatever ended the film, its listeners go with it: a capturing key
+    // handler left behind would swallow the next Enter in the whole app
+    cleanupIntro();
     store.settings.introSeen = true;
     store.saveSettings();
     document.body.classList.add('entering');
@@ -2256,13 +2272,28 @@ function runIntro(onDone) {
       el.hidden = true;
       document.body.classList.remove('entering');
       onDone();
-    }, DISSOLVE_S * 1000);
+    }, (brief ? 0.6 : DISSOLVE_S) * 1000);
   };
 
   // the film is the evening; the drawn scene only stands in until it arrives,
   // or for good if it never does
   let filmUp = false;
-  cutoff = setTimeout(finish, 6200);
+  cutoff = setTimeout(finish, brief ? 1600 : 6200);
+
+  // Enter, Escape and Space belong to the film while it is running, and are
+  // handed back the moment it is not
+  function onIntroKey(e) {
+    if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    finish();
+  }
+  function cleanupIntro() {
+    document.removeEventListener('keydown', onIntroKey, true);
+    video.removeEventListener('playing', armCutoff);
+    video.removeEventListener('seeked', armCutoff);
+    clearTimeout(cutoff);
+  }
 
   const armCutoff = () => {
     if (finished) return;
@@ -2312,13 +2343,7 @@ function runIntro(onDone) {
 
   el.addEventListener('click', finish);
   $('#introSkip')?.addEventListener('click', (e) => { e.stopPropagation(); finish(); });
-  document.addEventListener('keydown', function esc(e) {
-    if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== ' ') return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    document.removeEventListener('keydown', esc, true);
-    finish();
-  }, true);
+  document.addEventListener('keydown', onIntroKey, true);
 }
 
 // ---------- init ----------
@@ -2363,7 +2388,7 @@ function init() {
   runIntro(() => {
     if (store.settings.chosen || store.places.length || payload) return;
     openThreshold();
-  });
+  }, { brief: !!store.settings.introSeen, skip: !!payload });
   if (!store.settings.indexSeen && !store.settings.hintShown) {
     $('#fmHint').hidden = false;
     store.settings.hintShown = true;
@@ -2536,7 +2561,12 @@ function init() {
   document.addEventListener('keydown', (e) => {
     const inField = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) ||
       document.activeElement?.isContentEditable;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); togglePalette(); return; }
+    // the command line is a shortcut like any other: it may not open behind
+    // a dialog that has the floor. escape alone reaches past everything.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (modalUp() && topSurface() !== 'paletteOverlay') return;
+      e.preventDefault(); togglePalette(); return;
+    }
     if (e.key === 'Escape') {
       if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
       if (state.visiting) { clearShareHash(); location.reload(); return; }

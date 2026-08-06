@@ -51,8 +51,8 @@
 }
 
 @supports not (color: oklch(0% 0 0)) {
-  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #685D7A; --ink-3: #8B819C; --ink-4: #CCC7D4; --counter: #2F6B4F; }
-  :root[data-theme="dark"] { --field: #1D1526; --ink: #EAE3D2; --ink-2: #AFB59F; --ink-3: #6F7466; --ink-4: #4A4E43; --counter: #C9A0E8; }
+  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #5D5372; --ink-3: #6E6484; --ink-4: #C4BED0; --counter: #2F6B4F; }
+  :root[data-theme="dark"] { --field: #1D1526; --ink: #EAE3D2; --ink-2: #C3C8B5; --ink-3: #A9AE9B; --ink-4: #55594D; --counter: #C9A0E8; }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -987,6 +987,7 @@ body.greet .fm-word { animation: word-pulse 1.8s ease-in-out 3; }
 /* the name fills the screen: textLength holds it to the width at any size.
    wide screens take it in one line, narrow ones break it in two. */
 #intro.dissolve { animation: intro-out 1.4s ease forwards; pointer-events: none; }
+#intro.brief.dissolve { animation-duration: 0.6s; }
 @keyframes intro-out { to { opacity: 0; } }
 body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 @keyframes field-enter { from { transform: scale(1.045); opacity: 0.6; } }
