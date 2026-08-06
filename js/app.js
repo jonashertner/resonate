@@ -3,13 +3,13 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf26';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf26';
-import * as mapView from './map.js?v=rf26';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf26';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf26';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf26';
-import { exifGPS } from './exif.js?v=rf26';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf27';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf27';
+import * as mapView from './map.js?v=rf27';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf27';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf27';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf27';
+import { exifGPS } from './exif.js?v=rf27';
 
 // ---------- helpers ----------
 
@@ -175,10 +175,13 @@ function modalUp() {
 // while anything covers the field, it is not reachable by tab, by screen
 // reader, or by pointer
 function setBackgroundInert(on) {
-  const app = $('#app');
-  if (!app) return;
-  if (on) { app.setAttribute('inert', ''); app.setAttribute('aria-hidden', 'true'); }
-  else { app.removeAttribute('inert'); app.removeAttribute('aria-hidden'); }
+  // the plate is a sibling of the field, not a child: a modal has to reach
+  // both, or a column left standing behind it stays clickable
+  [$('#app'), $('#plate')].forEach(el => {
+    if (!el) return;
+    if (on) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
+    else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+  });
 }
 
 // a dialog that does not live on the surface stack still behaves like one
@@ -1080,7 +1083,7 @@ function openAtlasReport(payload) {
   $('#rpLook').addEventListener('click', () => {
     state.visiting = { id: 'visit-' + Date.now(), name, hue: 278, visible: true, tags: theirs.tags, places: theirs.places };
     mapView.setCorrespondents([...store.correspondents, state.visiting]);
-    el.hidden = true;
+    dropDialog(el);
     mapView.fitAll(theirs.places);
     toast('visiting. your atlas is untouched. esc to leave');
   });
@@ -2205,7 +2208,10 @@ function init() {
   // mobile: swipe up from the bottom edge = index
   let edgeY = 0;
   addEventListener('touchstart', (e) => {
-    const y = e.touches[0].clientY;
+    if (modalUp() || surfaces.length) { edgeY = 0; return; }
+    const t = e.touches[0];
+    if (document.elementFromPoint(t.clientX, t.clientY)?.closest('.fm')) { edgeY = 0; return; }
+    const y = t.clientY;
     edgeY = (innerHeight - y < 34 && innerHeight - y > 6) ? y : 0;
   }, { passive: true });
   addEventListener('touchmove', (e) => {
@@ -2229,6 +2235,8 @@ function init() {
       if (popSurface()) return;
     }
     if (inField) return;
+    // a shortcut may not act on a field that a dialog has taken out of reach
+    if (modalUp()) return;
     if (e.key === '/') { e.preventDefault(); togglePalette(); return; }
     const acc = [...accessionMap().entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id);
     const step = (d) => {

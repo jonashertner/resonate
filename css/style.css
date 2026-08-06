@@ -22,7 +22,7 @@
   --field: oklch(var(--L-f) var(--C-f) var(--field-hue));
   --ink: oklch(var(--L-i) var(--C-i) var(--hue));
   --ink-2: color-mix(in oklch, var(--ink) 84%, var(--field));
-  --ink-3: color-mix(in oklch, var(--ink) 52%, var(--field));
+  --ink-3: color-mix(in oklch, var(--ink) 62%, var(--field));
   --ink-4: color-mix(in oklch, var(--ink) 24%, var(--field));
   --counter: oklch(var(--L-i) max(var(--C-i), 0.09) calc(var(--hue) + 150));
   --scrim: color-mix(in srgb, var(--field) 75%, transparent);
@@ -51,7 +51,7 @@
 }
 
 @supports not (color: oklch(0% 0 0)) {
-  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #685D7A; --ink-3: #ABA3B8; --ink-4: #CCC7D4; --counter: #2F6B4F; }
+  :root { --field: #F1EFE8; --ink: #3E2E57; --ink-2: #685D7A; --ink-3: #8B819C; --ink-4: #CCC7D4; --counter: #2F6B4F; }
   :root[data-theme="dark"] { --field: #1D1526; --ink: #EAE3D2; --ink-2: #AFB59F; --ink-3: #6F7466; --ink-4: #4A4E43; --counter: #C9A0E8; }
 }
 
@@ -579,7 +579,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .plate-words button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
 
 .stars-line { display: flex; gap: 4px; margin-top: 18px; }
-.stars-line button { font-size: 17px; line-height: 1; color: var(--ink-4); padding: 3px 2px; transition: color var(--mo-reflex); }
+.stars-line button { font-size: 17px; line-height: 1; color: var(--ink-3); padding: 3px 2px; transition: color var(--mo-reflex); }
 .stars-line button.on { color: var(--ink); }
 .stars-line button:hover { color: var(--ink-2); }
 
@@ -871,8 +871,8 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   .stars-line button { font-size: 20px; padding: 6px 4px; }
 
   .plate {
-    top: auto; left: 0; right: 0; width: 100%;
-    height: 66vh;
+    top: auto; bottom: 0; left: 0; right: 0; width: 100%;
+    height: min(66vh, calc(var(--app-h) - 96px));
     padding: 84px 20px 40px;
     background: linear-gradient(0deg, var(--field) calc(100% - 90px), transparent);
   }
@@ -882,7 +882,11 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
     border-top: 1.5px solid var(--ink-3);
   }
   .plate-name { font-size: 30px; }
-  .index { padding: 18px; }
+  .index {
+    padding: 18px;
+    padding-top: max(18px, env(safe-area-inset-top));
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
   .index-count { font-size: 84px; }
   .index-list { column-count: 1; }
   .ix-name { font-size: 21px; }
@@ -1050,6 +1054,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 .threshold {
   position: fixed; inset: 0; height: var(--app-h); z-index: 240;
   display: flex; flex-direction: column; justify-content: center;
+  overflow-y: auto; overscroll-behavior: contain;
   gap: 14px;
   padding: max(28px, env(safe-area-inset-top)) clamp(24px, 7vw, 108px) max(28px, env(safe-area-inset-bottom));
   background: var(--field);
