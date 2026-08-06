@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf28';
-import { measure, simplify } from './route.js?v=rf28';
+import { normImport, normPlace, normRoute, normRoutes, SCHEMA_VERSION } from './schema.js?v=rf30';
+import { measure, simplify } from './route.js?v=rf30';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -374,17 +374,35 @@ export const store = {
   },
 };
 
+// ---------- the starting vocabulary ----------
+//
+// An atlas with no domains cannot file anything, so even an empty start is
+// given these. They are ordinary tags: rename them, recolour them, remove them.
+
+export function baseTags() {
+  // eight domains onto the eight stations of the wheel, one each, stated
+  // rather than derived: two domains that land on the same hue would ink the
+  // world identically and stop telling you anything
+  const at = (i, name, emoji) =>
+    newTag({ name, emoji, hue: TAG_STATIONS[i].hue, color: TAG_STATIONS[i].hex });
+  return {
+    food: at(0, 'Restaurants', '🍽️'),
+    cafe: at(1, 'Cafés', '☕'),
+    // ground that is protected, and asks something of you in return
+    reserve: at(2, 'Reserves', '🌿'),
+    nature: at(3, 'Nature', '⛰️'),
+    culture: at(4, 'Culture', '🖼️'),
+    // a hut is what turns a long day into two: a roof, a meal, a bunk high up
+    hut: at(5, 'Huts', '🛖'),
+    bar: at(6, 'Bars', '🍸'),
+    shop: at(7, 'Shops', '🧺'),
+  };
+}
+
 // ---------- demo dataset ----------
 
 export function demoData() {
-  const t = {
-    food: newTag({ name: 'Restaurants', emoji: '🍽️', color: '#D64B33' }),
-    cafe: newTag({ name: 'Cafés', emoji: '☕', color: '#8A5A3B' }),
-    bar: newTag({ name: 'Bars', emoji: '🍸', color: '#7B5AA6' }),
-    culture: newTag({ name: 'Culture', emoji: '🖼️', color: '#3E6E91' }),
-    nature: newTag({ name: 'Nature', emoji: '⛰️', color: '#2F6B5E' }),
-    shop: newTag({ name: 'Shops', emoji: '🧺', color: '#B85C79' }),
-  };
+  const t = baseTags();
   const day = 86400000;
   const ago = n => new Date(Date.now() - n * day).toISOString();
   const P = (partial, daysAgo) => newPlace({ ...partial, createdAt: ago(daysAgo), updatedAt: ago(daysAgo) });
@@ -434,5 +452,43 @@ export function demoData() {
         note: 'The negroni sbagliato was invented here. Giant glasses.' }, 45),
   ];
 
-  return { tags: Object.values(t), places };
+  places.push(
+    P({ name: 'Cabane de Moiry', lat: 46.10750, lng: 7.57470, city: 'Grimentz', country: 'Switzerland', countryCode: 'ch',
+        tags: [t.hut.id, t.nature.id], status: 'wishlist',
+        note: 'On the rock above the glacier, 2825 m. Book the half board and the dormitory; the last stretch is a ladder in places. Wardened from June.' }, 9),
+    P({ name: 'Berggasthaus Aescher', lat: 47.28360, lng: 9.41810, city: 'Appenzell', country: 'Switzerland', countryCode: 'ch',
+        tags: [t.hut.id, t.food.id], status: 'wishlist', rating: 0,
+        note: 'Built against the cliff under the Ebenalp. Walk in, do not take the cable car down at the last minute.' }, 15),
+    P({ name: 'Schweizerischer Nationalpark', lat: 46.65800, lng: 10.17500, city: 'Zernez', country: 'Switzerland', countryCode: 'ch',
+        tags: [t.reserve.id, t.nature.id], status: 'wishlist',
+        note: 'The strictest reserve in the Alps: stay on the marked paths, no fires, no dogs, nothing picked or taken. Ibex and bearded vulture. Val Trupchun in the rut, late September.' }, 12),
+    P({ name: 'Camargue', lat: 43.50000, lng: 4.45000, city: 'Arles', country: 'France', countryCode: 'fr',
+        tags: [t.reserve.id, t.nature.id], status: 'wishlist',
+        note: 'Salt, horses, flamingoes. The reserve proper is the Étang de Vaccarès; keep to the dykes and go at first light.' }, 26),
+  );
+
+  // a sample way: up to a col and back down, so the ground can be read at once
+  const path = [];
+  for (let i = 0; i <= 240; i++) {
+    const u = i / 240;
+    const ele = u < 0.52
+      ? 1690 + (2790 - 1690) * Math.pow(u / 0.52, 1.2)
+      : 2790 - (2790 - 1780) * Math.pow((u - 0.52) / 0.48, 0.95);
+    path.push({
+      lat: 46.0894 + u * 0.0380 + Math.sin(u * 19) * 0.0016,
+      lng: 7.5566 + u * 0.0455 + Math.cos(u * 14) * 0.0019,
+      ele,
+    });
+  }
+  const routes = [newRoute({
+    name: 'Col de Sorebois to the Moiry hut',
+    path,
+    city: 'Val d’Anniviers', country: 'Switzerland',
+    tags: [t.hut.id, t.nature.id],
+    status: 'wishlist',
+    createdAt: ago(9), updatedAt: ago(9),
+    note: 'The high traverse under the Dent Blanche. Snow lies on the col into July; ask the warden before you commit.',
+  })];
+
+  return { tags: Object.values(t), places, routes };
 }

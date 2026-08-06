@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf28';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf28';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf28';
-import * as mapView from './map.js?v=rf28';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf28';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf28';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf28';
-import { exifGPS } from './exif.js?v=rf28';
+import { store, newPlace, newTag, newRoute, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf30';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf30';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf30';
+import * as mapView from './map.js?v=rf30';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf30';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf30';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf30';
+import { exifGPS } from './exif.js?v=rf30';
 
 // ---------- helpers ----------
 
@@ -814,6 +814,7 @@ function seedDemo({ quiet = false } = {}) {
   demo.tags.forEach(t => store.addTag(t));
   // every seeded place carries the word sample until it is adopted or edited
   demo.places.forEach(p => store.addPlace({ ...p, sample: true }));
+  (demo.routes || []).forEach(r => store.addRoute({ ...r, sample: true }));
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
@@ -2400,6 +2401,12 @@ function init() {
       toast('a sample atlas. edit anything and it becomes yours');
     }));
     $('#thEmpty').addEventListener('click', () => done(() => {
+      // an atlas with no domains cannot file anything: the vocabulary comes
+      // even when the places do not
+      if (!store.tags.length) {
+        Object.values(baseTags()).forEach(t => store.addTag(t));
+        renderAll();
+      }
       toast('the field is yours. press the middle, or find or add below');
     }));
     $('#thHow').addEventListener('click', () => done(() => openSurface('howOverlay')));

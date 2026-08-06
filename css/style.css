@@ -337,7 +337,11 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   position: fixed; inset: 0; height: var(--app-h); z-index: 50;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0 clamp(20px, 7vw, 120px) 14vh;
-  background: linear-gradient(180deg, transparent, var(--field) 72%);
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    color-mix(in srgb, var(--field) 86%, transparent) 9%,
+    var(--field) 22%);
   animation: cmd-in 200ms var(--e-enter) both;
 }
 @keyframes cmd-in { from { opacity: 0; } }
@@ -890,7 +894,15 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   .index-count { font-size: 84px; }
   .index-list { column-count: 1; }
   .ix-name { font-size: 21px; }
-  .cmd { padding: 0 20px 12px; }
+  .cmd {
+    padding: 0 20px 12px;
+    background: linear-gradient(
+      180deg,
+      transparent 0,
+      color-mix(in srgb, var(--field) 88%, transparent) 5%,
+      var(--field) 14%);
+  }
+  .cmd-results { max-height: 46vh; }
   #paletteInput { font-size: 24px; }
   .country-cols { columns: 1; }
   .stat-band { flex-wrap: wrap; gap: 24px; }
