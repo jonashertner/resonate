@@ -1,10 +1,14 @@
-// app.js — Resonate: state, rendering, events. Pages of one atlas.
+// app.js — THE RESONANT FIELD
+// The map is the interface. Four corner marks, one command line,
+// summoned posters. One field, one ink — and one counter-ink for
+// the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_COLORS } from './store.js';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js';
-import * as mapView from './map.js';
-import { initFrame, setCoords } from './frame.js';
-import { makeShareUrl, parseShareHash, clearShareHash } from './share.js';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf1';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf1';
+import * as mapView from './map.js?v=rf1';
+import { makeShareUrl, parseShareHash, clearShareHash } from './share.js?v=rf1';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf1';
+import { exifGPS } from './exif.js?v=rf1';
 
 // ---------- helpers ----------
 
@@ -22,21 +26,15 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-// tag colors reach the DOM inside style attributes — only ever accept real colors
-function safeColor(c) {
-  return /^#[0-9a-fA-F]{3,8}$/.test(String(c ?? '')) ? c : '#5C6A77';
-}
-
-// external links may arrive via share payloads — only http(s) becomes an anchor
 function safeUrl(u) {
   try {
-    const parsed = new URL(u);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    const p = new URL(u);
+    return p.protocol === 'http:' || p.protocol === 'https:';
   } catch { return false; }
 }
 
 let toastTimer;
-function toast(msg, ms = 2600) {
+function toast(msg, ms = 2800) {
   const el = $('#toast');
   el.textContent = msg;
   el.hidden = false;
@@ -44,15 +42,13 @@ function toast(msg, ms = 2600) {
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
 
-function starsText(r) {
-  return r > 0 ? '★'.repeat(r) : '';
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch { return ''; }
 }
 
-function fmtDate(iso) {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch { return ''; }
-}
+function starsText(r) { return r > 0 ? '★'.repeat(r) : ''; }
+function fmtNo(n) { return String(n).padStart(2, '0'); }
 
 // ---------- state ----------
 
@@ -60,17 +56,16 @@ const state = {
   filters: { tags: new Set(), status: 'all' },
   sort: 'recent',
   selectedId: null,
-  readOnly: false,
-  shared: null,
+  foreign: null, // { corrId?, name, sig, place } — a place from someone else's atlas
+  visiting: null, // temp correspondent-shaped object when "just looking" at a share
+  pendingAdd: null, // {lat, lng, name?, photo?} awaiting confirm
 };
 
-function allPlaces() { return state.readOnly ? state.shared.places : store.places; }
-function allTags() { return state.readOnly ? state.shared.tags : store.tags; }
+function allPlaces() { return store.places; }
+function allTags() { return store.tags; }
 function tagById(id) { return allTags().find(t => t.id === id); }
 function placeById(id) { return allPlaces().find(p => p.id === id); }
 
-// accession numbers: chronological, stable — the order places entered the atlas
-// (id tiebreak keeps numbering deterministic when dates coincide)
 function accessionMap() {
   const sorted = [...allPlaces()].sort((a, b) =>
     (a.createdAt || '').localeCompare(b.createdAt || '') || String(a.id).localeCompare(String(b.id)));
@@ -78,8 +73,6 @@ function accessionMap() {
   sorted.forEach((p, i) => m.set(p.id, i + 1));
   return m;
 }
-
-function fmtNo(n) { return String(n).padStart(2, '0'); }
 
 function filteredPlaces() {
   let list = allPlaces().filter(p => {
@@ -93,10 +86,41 @@ function filteredPlaces() {
     case 'name': list.sort((a, b) => a.name.localeCompare(b.name)); break;
     case 'distance': list.sort((a, b) => haversineKm(center, a) - haversineKm(center, b)); break;
     case 'rating': list.sort((a, b) => (b.rating || 0) - (a.rating || 0) || a.name.localeCompare(b.name)); break;
-    // "by newest" must run in exact reverse accession order, ties included
     default: list.sort((a, b) => nos.get(b.id) - nos.get(a.id));
   }
   return list;
+}
+
+// ---------- the world: hue engine ----------
+
+const rootStyle = document.documentElement.style;
+
+function setWorld({ hue, split = 0, tint = 1 }) {
+  rootStyle.setProperty('--hue', hue);
+  rootStyle.setProperty('--split', split);
+  rootStyle.setProperty('--tint', tint);
+  document.documentElement.dataset.hueband = (hue >= 120 && hue <= 170) ? 'green' : '';
+}
+
+function clearWorld() {
+  rootStyle.removeProperty('--hue');
+  rootStyle.removeProperty('--split');
+  rootStyle.removeProperty('--tint');
+  document.documentElement.dataset.hueband = '';
+}
+
+// the world's color follows attention: selection > filter > rest
+function applyWorldState() {
+  const sel = state.selectedId && placeById(state.selectedId);
+  if (sel && sel.tags[0]) {
+    const t = tagById(sel.tags[0]);
+    if (t) return setWorld({ hue: t.hue, tint: 0.62 });
+  }
+  if (state.filters.tags.size) {
+    const first = tagById([...state.filters.tags][0]);
+    if (first) return setWorld({ hue: first.hue, tint: 1 });
+  }
+  clearWorld();
 }
 
 // ---------- theme ----------
@@ -108,106 +132,119 @@ function resolvedTheme() {
   return t === 'auto' ? (media.matches ? 'dark' : 'light') : t;
 }
 
-function applyTheme(animated = false) {
-  const mode = resolvedTheme();
-  if (animated) {
-    document.documentElement.classList.add('theming');
-    setTimeout(() => document.documentElement.classList.remove('theming'), 340);
-  }
-  document.documentElement.dataset.theme = mode;
-  mapView.setBasemap(mode);
+function applyTheme() {
+  document.documentElement.dataset.theme = resolvedTheme();
+  mapView.setBasemap(resolvedTheme());
+}
+
+function setTheme(mode) {
+  store.settings.theme = mode;
+  store.saveSettings();
+  applyTheme();
 }
 
 media.addEventListener('change', () => { if (store.settings.theme === 'auto') applyTheme(); });
 
-// ---------- rendering ----------
+// ---------- surfaces ----------
+
+const surfaces = [];
+const surfaceEl = id => $(`#${id}`);
+
+function openSurface(id, onShow) {
+  if ((id === 'indexOverlay' && topSurface() === 'plate') ||
+      (id === 'plate' && topSurface() === 'indexOverlay')) popSurface();
+  if (surfaces.includes(id)) return;
+  surfaces.push(id);
+  const el = surfaceEl(id);
+  el.hidden = false;
+  el.classList.add('opening');
+  setTimeout(() => el.classList.remove('opening'), 700);
+  onShow?.();
+}
+
+function popSurface() {
+  const id = surfaces.pop();
+  if (!id) return false;
+  surfaceEl(id).hidden = true;
+  if (id === 'plate') { state.selectedId = null; state.foreign = null; syncMarkers(); applyWorldState(); }
+  if (id === 'paletteOverlay') palette.remoteAbort?.abort();
+  return true;
+}
+
+function closeSurface(id) {
+  const i = surfaces.indexOf(id);
+  if (i === -1) return;
+  surfaces.splice(i, 1);
+  surfaceEl(id).hidden = true;
+  if (id === 'plate') { state.selectedId = null; state.foreign = null; syncMarkers(); applyWorldState(); }
+}
+
+function topSurface() { return surfaces[surfaces.length - 1]; }
+
+// ---------- rendering: count, index ----------
 
 function renderCount() {
   const n = allPlaces().length;
-  $('#placeCount').textContent = n ? `${n} ${n === 1 ? 'entry' : 'entries'}` : 'unwritten';
+  $('#placeCount').textContent = n || '';
+  $('#ixN').textContent = n;
 }
 
 function renderChips() {
   const wrap = $('#filterChips');
-  const tags = allTags();
-  if (!tags.length) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = tags.map(t => {
+  wrap.innerHTML = allTags().map(t => {
     const n = allPlaces().reduce((k, p) => k + (p.tags.includes(t.id) ? 1 : 0), 0);
     const on = state.filters.tags.has(t.id);
-    return `<button class="ix-filter ${on ? 'active' : ''}" data-tag="${esc(t.id)}" style="--tag-color:${safeColor(t.color)}">
-      ${esc(t.name)}<sup>${n}</sup>
-    </button>`;
+    return `<button data-tag="${esc(t.id)}" aria-pressed="${on}">${esc(t.name)}<sup>${n}</sup></button>`;
   }).join('');
-  $$('[data-tag]', wrap).forEach(chip => chip.addEventListener('click', () => {
-    const id = chip.dataset.tag;
+  $$('[data-tag]', wrap).forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.tag;
     state.filters.tags.has(id) ? state.filters.tags.delete(id) : state.filters.tags.add(id);
-    renderChips(); renderList(); syncMarkers();
+    renderChips(); renderList(); syncMarkers(); applyWorldState();
   }));
-}
-
-function emptyStateHTML() {
-  if (allPlaces().length === 0) {
-    return `<div class="frontis">
-      <svg class="empty-rings" viewBox="0 0 24 24"><use href="#i-rings"/></svg>
-      <span class="frontis-brand">Resonate</span>
-      <h3>A Personal Atlas</h3>
-      <hr>
-      <p>Being a record of the places that have resonated — and of those still projected.</p>
-      <button class="act-link" id="emptyAdd">Begin the atlas →</button>
-      <button class="alt-link" id="emptyDemo">or open a specimen atlas</button>
-    </div>`;
-  }
-  return `<div class="frontis">
-    <svg class="empty-rings" viewBox="0 0 24 24" style="width:40px;height:40px;color:var(--ink-3)"><use href="#i-rings"/></svg>
-    <h3>Nothing charted here.</h3>
-    <hr>
-    <p>No entries match the present arrangement.</p>
-    <button class="act-link quiet" id="emptyClear">Clear the filters</button>
-  </div>`;
 }
 
 function renderList() {
   const wrap = $('#listView');
   const places = filteredPlaces();
   if (!places.length) {
-    wrap.innerHTML = emptyStateHTML();
-    $('#emptyAdd')?.addEventListener('click', openPalette);
-    $('#emptyDemo')?.addEventListener('click', seedDemo);
+    wrap.innerHTML = allPlaces().length === 0
+      ? `<div class="ix-empty">Every place that ever <b>resonated</b> — held in one field.
+          <p>Press <b>/</b> and name a place. Drop a photo on the field. Or open a
+          <button class="word-btn" id="emptyDemo" style="font-size:inherit;letter-spacing:0;text-transform:none">specimen atlas</button>.</p>
+        </div>`
+      : `<div class="ix-empty">Nothing answers this arrangement.
+          <p><button class="word-btn quiet" id="emptyClear">clear the filters</button></p>
+        </div>`;
+    $('#emptyDemo')?.addEventListener('click', () => { seedDemo(); });
     $('#emptyClear')?.addEventListener('click', clearFilters);
     return;
   }
   const nos = accessionMap();
   const center = mapView.getCenter();
-  const booting = document.body.classList.contains('boot');
   wrap.innerHTML = places.map((p, i) => {
     const tag = tagById(p.tags[0]);
-    const locale = [p.city, p.country].filter(Boolean).join(' · ') || p.address || fmtDMS(p.lat, p.lng);
-    const datum = p.rating > 0
-      ? `<span class="ix-datum">${starsText(p.rating)}</span>`
-      : `<span class="ix-datum plain">${fmtDistance(haversineKm(center, p))}</span>`;
-    const marks = [];
-    marks.push(p.status === 'visited' ? '<i class="st-been">▲</i>' : '<i class="st-wish">△</i>');
-    if (tag) marks.push(`<i class="ix-tag" style="color:${safeColor(tag.color)}">${esc(tag.name)}</i>`);
-    if (p.note) marks.push('<i>✎</i>');
-    if (p.photos?.length) marks.push(`<i>${p.photos.length} ph.</i>`);
-    return `<button class="ix-entry ${p.status === 'wishlist' ? 'wish' : ''} ${p.id === state.selectedId ? 'selected' : ''}"
-      data-id="${esc(p.id)}" role="listitem" ${booting ? `style="--bi:${Math.min(i, 8)}"` : ''}>
-      <span class="ix-no">${fmtNo(nos.get(p.id))}</span>
-      <span class="ix-body">
-        <span class="ix-l1">
-          <span class="ix-name">${esc(p.name)}</span>
-          <span class="ix-leader"></span>
-          ${datum}
-        </span>
-        <span class="ix-l2">
-          <span class="ix-locale">${esc(locale)}</span>
-          <span class="ix-marks">${marks.join(' ')}</span>
-        </span>
+    const locale = [p.city, p.country].filter(Boolean).join(' · ');
+    const datum = p.rating > 0 ? starsText(p.rating) : fmtDistance(haversineKm(center, p));
+    const prov = p.provenance ? `<span class="prov">after <b>${esc(p.provenance.name)}</b></span>` : '';
+    return `<button class="ix ${p.status === 'wishlist' ? 'wish' : ''} ${p.id === state.selectedId ? 'selected' : ''}"
+      data-id="${esc(p.id)}" role="listitem" style="--i:${i}">
+      <span class="ix-l1">
+        <span class="ix-no">${fmtNo(nos.get(p.id))}</span>
+        <span class="ix-name">${esc(p.name)}</span>
+        <span class="ix-datum">${datum}</span>
+      </span>
+      <span class="ix-meta">
+        ${locale ? `<span>${esc(locale)}</span>` : ''}
+        ${tag ? `<span>${esc(tag.name)}</span>` : ''}
+        ${p.status === 'wishlist' ? '<span>want to go</span>' : ''}
+        ${prov}
       </span>
     </button>`;
   }).join('');
-  $$('.ix-entry', wrap).forEach(card =>
-    card.addEventListener('click', () => selectPlace(card.dataset.id, { fly: true })));
+  $$('.ix', wrap).forEach(b => b.addEventListener('click', () => {
+    closeSurface('indexOverlay');
+    selectPlace(b.dataset.id, { fly: true });
+  }));
 }
 
 function syncMarkers() {
@@ -221,128 +258,115 @@ function renderAll() {
   syncMarkers();
 }
 
-// ---------- selection & the plate page ----------
+function openIndex() {
+  renderList();
+  openSurface('indexOverlay');
+}
+
+function clearFilters() {
+  state.filters.tags.clear();
+  state.filters.status = 'all';
+  $$('#statusSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.status === 'all')));
+  renderChips(); renderList(); syncMarkers(); applyWorldState();
+}
+
+// ---------- selection & the plate ----------
 
 function selectPlace(id, { fly = false, edit = false } = {}) {
   const prev = state.selectedId;
   state.selectedId = id;
+  state.foreign = null;
   const place = placeById(id);
   if (!place) return;
   if (prev && placeById(prev)) mapView.refreshMarkerIcon(placeById(prev), tagById, false);
   mapView.refreshMarkerIcon(place, tagById, true);
+  applyWorldState();
+  mapView.ripple(place.lat, place.lng);
   if (fly) mapView.flyToPlace(place);
-  renderDetail(place, { edit });
-  $('#listView').hidden = true;
-  $('#detailView').hidden = false;
-  $$('.ix-entry').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
-  if (window.innerWidth <= 760) setSheetTall(true);
+  renderPlate(place, { edit });
+  openSurface('plate');
 }
 
-function closeDetail() {
-  const prev = state.selectedId;
-  state.selectedId = null;
-  if (prev && placeById(prev)) mapView.refreshMarkerIcon(placeById(prev), tagById, false);
-  $('#detailView').hidden = true;
-  $('#listView').hidden = false;
-  renderList();
-  // returning to the index re-frames the whole survey
-  const places = filteredPlaces();
-  if (places.length) mapView.fitAll(places);
-  if (window.innerWidth <= 760) setSheetTall(false);
-}
-
-function setSheetTall(tall) {
-  $('#rail').classList.toggle('tall', tall);
-  document.body.classList.toggle('sheet-tall', tall);
-}
-
-function renderDetail(place, { edit = false } = {}) {
-  const wrap = $('#detailView');
-  const ro = state.readOnly;
-  const no = accessionMap().get(place.id) || 0;
-
-  const tagWords = allTags().map(t => {
-    const on = place.tags.includes(t.id);
-    return `<button class="ix-filter ${on ? 'active' : ''}" data-dtag="${esc(t.id)}" style="--tag-color:${safeColor(t.color)}" ${ro ? 'disabled' : ''}>
-      ${esc(t.name)}
-    </button>`;
-  }).join('');
-
+function renderPlate(place, { edit = false, foreign = null } = {}) {
+  const wrap = $('#plate');
+  const ro = !!foreign;
+  const no = ro ? null : accessionMap().get(place.id);
+  const tagWords = allTags().map(t => `
+    <button data-dtag="${esc(t.id)}" aria-pressed="${place.tags.includes(t.id)}" ${ro ? 'disabled' : ''}>${esc(t.name)}</button>`).join('');
   const stars = [1, 2, 3, 4, 5].map(i =>
-    `<button data-star="${i}" class="${place.rating >= i ? 'on' : ''}" ${ro ? 'disabled' : ''}
-      aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('');
-
-  const photos = (place.photos || []).map((src, i) =>
-    `<figure class="fig">
-      <img src="${esc(src)}" alt="Figure ${i + 1} for ${esc(place.name)}">
-      <figcaption>Fig. ${i + 1}</figcaption>
-      ${ro ? '' : `<button class="ph-x" data-phx="${i}" aria-label="Remove photo"><svg><use href="#i-x"/></svg></button>`}
-    </figure>`).join('');
+    `<button data-star="${i}" class="${place.rating >= i ? 'on' : ''}" ${ro ? 'disabled' : ''} aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('');
+  const photos = (place.photos || []).map((src, i) => `
+    <figure class="fig"><img src="${esc(src)}" alt="">
+      ${ro ? '' : `<button class="ph-x" data-phx="${i}">remove</button>`}</figure>`).join('');
+  const canDictate = !ro && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
   wrap.innerHTML = `
-    <div class="plate-top">
-      <button class="act-link quiet" id="dBack">← Index</button>
-    </div>
     <div class="plate-eyebrow">
-      <span class="plate-no">Plate Nº ${fmtNo(no)}</span>
-      <button class="plate-coords mono" id="dCoords" title="Copy coordinates">${fmtDMS(place.lat, place.lng)}</button>
+      <span>${ro ? `from ${esc(foreign.name)}’s atlas` : `№ ${fmtNo(no)}`}</span>
+      <button id="pCoords" title="Copy coordinates">${fmtDMS(place.lat, place.lng)}</button>
+      <button id="pClose">close</button>
     </div>
-    <hr class="plate-rule">
-    <h1 class="detail-name" id="dName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false"'}>${esc(place.name)}</h1>
-    <div class="detail-address">${esc([place.address,
-      place.address?.toLowerCase().includes((place.city || '~').toLowerCase()) ? '' : place.city,
-      place.country].filter(Boolean).join(' · '))}</div>
+    <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false"'}>${esc(place.name)}</h1>
+    <div class="plate-sub">${esc([place.address, place.city, place.country].filter(Boolean).slice(0, 2).join(' · '))}</div>
+    ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b> · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
 
-    <div class="status-line" id="dStatus">
-      <button class="opt ${place.status === 'visited' ? 'active' : ''}" data-st="visited" ${ro ? 'disabled' : ''}>Been</button>
-      <button class="opt ${place.status === 'wishlist' ? 'active' : ''}" data-st="wishlist" ${ro ? 'disabled' : ''}>Want to go</button>
-      <span class="stars-input" id="dStars">${stars}</span>
-    </div>
-
-    <div class="plate-section">
-      <div class="rulehead"><span class="sc-head">Tags</span></div>
-      <div class="tag-words" id="dTags">${tagWords}
-        ${ro ? '' : `<button class="ix-filter" id="dNewTag">＋ new</button>`}
+    ${ro ? `
+      ${place.rating ? `<div class="stars-line">${starsText(place.rating).split('').map(() => '<button class="on" disabled>★</button>').join('')}</div>` : ''}
+      ${place.note ? `<div class="plate-sec"><div class="plate-sec-head"><span>their note</span></div><p class="note-input" style="border-left-color:var(--counter)">${esc(place.note)}</p></div>` : ''}
+      <div class="plate-acts">
+        <button class="word-btn" id="pAdopt">adopt — after ${esc(foreign.name)}</button>
+        <button class="word-btn quiet" id="pDirections">directions ↗</button>
+      </div>`
+    : `
+      <div class="plate-words" id="pStatus">
+        <button data-st="visited" aria-pressed="${place.status === 'visited'}">been</button>
+        <button data-st="wishlist" aria-pressed="${place.status === 'wishlist'}">want to go</button>
       </div>
-    </div>
+      <div class="stars-line" id="pStars">${stars}</div>
 
-    <div class="plate-section">
-      <div class="rulehead"><span class="sc-head">Notes</span></div>
-      <textarea class="note-input" id="dNote" placeholder="What makes this place worth remembering…" ${ro ? 'readonly' : ''}>${esc(place.note)}</textarea>
-    </div>
-
-    <div class="plate-section">
-      <div class="rulehead"><span class="sc-head">Figures</span></div>
-      <div class="photo-grid" id="dPhotos">
-        ${photos}
-        ${ro ? '' : `<button class="photo-add" id="dAddPhoto" aria-label="Add photo"><svg><use href="#i-camera"/></svg></button>`}
+      <div class="plate-sec">
+        <div class="plate-sec-head"><span>tags</span></div>
+        <div class="plate-words" id="pTags">${tagWords}<button id="pNewTag">＋ new</button></div>
       </div>
-    </div>
 
-    <div class="plate-section">
-      <div class="rulehead"><span class="sc-head">Link</span></div>
-      <input class="text-input" id="dUrl" type="url" placeholder="https://…" value="${esc(place.url)}" ${ro ? 'readonly' : ''}>
-    </div>
+      <div class="plate-sec">
+        <div class="plate-sec-head"><span>notes</span>${canDictate ? '<button class="dictate" id="pDictate">◉ dictate</button>' : ''}</div>
+        <textarea class="note-input" id="pNote" placeholder="What makes it worth remembering…">${esc(place.note)}</textarea>
+      </div>
 
-    <div class="act-row">
-      <button class="act-link" id="dDirections">Directions ↗</button>
-      ${safeUrl(place.url) ? `<a class="act-link" id="dWebsite" href="${esc(place.url)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
-      ${ro ? '' : `<button class="act-link danger" id="dDelete">Remove</button>`}
-    </div>
+      <div class="plate-sec">
+        <div class="plate-sec-head"><span>figures</span></div>
+        <div class="photo-grid" id="pPhotos">${photos}
+          <button class="photo-add" id="pAddPhoto">＋ photo</button>
+        </div>
+      </div>
 
-    <div class="colophon-line">Added ${fmtDate(place.createdAt)} · Nº ${fmtNo(no)}</div>`;
+      <div class="plate-sec">
+        <div class="plate-sec-head"><span>link</span></div>
+        <input class="text-input" id="pUrl" type="url" placeholder="https://…" value="${esc(place.url)}">
+      </div>
 
-  // wiring
-  $('#dBack').addEventListener('click', closeDetail);
-  $('#dCoords').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(`${place.lat}, ${place.lng}`); toast('Coordinates copied'); }
-    catch { toast('Could not copy'); }
+      <div class="plate-acts">
+        <button class="word-btn" id="pDirections">directions ↗</button>
+        ${safeUrl(place.url) ? `<a class="word-btn" href="${esc(place.url)}" target="_blank" rel="noopener">website ↗</a>` : ''}
+        <button class="word-btn quiet" id="pDelete">remove</button>
+      </div>
+      <div class="plate-foot">entered ${fmtDate(place.createdAt)}</div>`}
+  `;
+
+  $('#pClose').addEventListener('click', () => closeSurface('plate'));
+  $('#pCoords').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(`${place.lat}, ${place.lng}`); toast('coordinates copied'); }
+    catch { toast('could not copy'); }
   });
-  $('#dDirections').addEventListener('click', () => {
+  $('#pDirections')?.addEventListener('click', () => {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`, '_blank', 'noopener');
   });
 
-  if (ro) return;
+  if (ro) {
+    $('#pAdopt').addEventListener('click', () => adoptPlace(place, foreign));
+    return;
+  }
 
   const save = (patch) => {
     store.updatePlace(place.id, patch);
@@ -351,7 +375,7 @@ function renderDetail(place, { edit = false } = {}) {
     renderCount(); renderChips();
   };
 
-  const nameEl = $('#dName');
+  const nameEl = $('#pName');
   nameEl.addEventListener('blur', () => {
     const v = nameEl.textContent.trim();
     if (v && v !== place.name) save({ name: v });
@@ -359,55 +383,59 @@ function renderDetail(place, { edit = false } = {}) {
   });
   nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } });
 
-  $('#dStatus').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-st]');
-    if (!btn) return;
-    save({ status: btn.dataset.st });
-    renderDetail(place); renderList(); syncMarkers();
+  $('#pStatus').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-st]');
+    if (!b) return;
+    save({ status: b.dataset.st });
+    renderPlate(place); renderList(); syncMarkers();
   });
 
-  $('#dStars').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-star]');
-    if (!btn) return;
-    const v = parseInt(btn.dataset.star, 10);
+  $('#pStars').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-star]');
+    if (!b) return;
+    const v = parseInt(b.dataset.star, 10);
     save({ rating: place.rating === v ? 0 : v });
-    renderDetail(place); renderList();
+    renderPlate(place); renderList();
   });
 
-  $('#dTags').addEventListener('click', (e) => {
+  $('#pTags').addEventListener('click', (e) => {
     const chip = e.target.closest('[data-dtag]');
     if (chip) {
       const id = chip.dataset.dtag;
       const tags = place.tags.includes(id) ? place.tags.filter(t => t !== id) : [...place.tags, id];
       save({ tags });
-      renderDetail(place); renderList(); syncMarkers();
+      applyWorldState();
+      renderPlate(place); renderList(); syncMarkers();
       return;
     }
-    if (e.target.closest('#dNewTag')) {
-      const row = $('#dTags');
+    if (e.target.closest('#pNewTag')) {
       const input = document.createElement('input');
       input.className = 'text-input';
       input.style.maxWidth = '140px';
-      input.placeholder = 'Tag name ↵';
-      row.replaceChild(input, $('#dNewTag'));
+      input.placeholder = 'tag name ↵';
+      e.target.replaceWith(input);
       input.focus();
       const done = () => {
         const name = input.value.trim();
         if (name) {
-          const tag = store.addTag(newTag({ name, emoji: '📍', color: TAG_COLORS[store.tags.length % TAG_COLORS.length] }));
+          const station = TAG_STATIONS[store.tags.length % TAG_STATIONS.length];
+          const tag = store.addTag(newTag({ name, hue: station.hue, color: station.hex }));
           save({ tags: [...place.tags, tag.id] });
+          applyWorldState();
         }
-        renderDetail(place); renderChips(); renderList(); syncMarkers();
+        renderPlate(place); renderChips(); renderList(); syncMarkers();
       };
-      input.addEventListener('keydown', (e2) => { if (e2.key === 'Enter') done(); if (e2.key === 'Escape') renderDetail(place); });
+      input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') done(); if (ev.key === 'Escape') renderPlate(place); });
       input.addEventListener('blur', done);
     }
   });
 
-  $('#dNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
-  $('#dUrl').addEventListener('change', (e) => { save({ url: e.target.value.trim() }); renderDetail(place); });
+  $('#pNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
+  $('#pUrl').addEventListener('change', (e) => { save({ url: e.target.value.trim() }); renderPlate(place); });
 
-  $('#dAddPhoto')?.addEventListener('click', () => {
+  $('#pDictate')?.addEventListener('click', () => dictateInto($('#pNote'), $('#pDictate'), (text) => save({ note: text })));
+
+  $('#pAddPhoto').addEventListener('click', () => {
     const file = $('#photoFile');
     file.onchange = async () => {
       const f = file.files?.[0];
@@ -416,30 +444,27 @@ function renderDetail(place, { edit = false } = {}) {
       try {
         const dataUri = await compressImage(f);
         const photos = [...(place.photos || []), dataUri];
-        store.updatePlace(place.id, { photos });
-        place.photos = photos;
-        if (!store.savePlaces()) toast('Storage is full — photo not saved');
-        renderDetail(place); renderList();
-      } catch { toast('Could not read that image'); }
+        save({ photos });
+        if (!store.savePlaces()) toast('storage is full — photo not kept');
+        renderPlate(place); renderList();
+      } catch { toast('could not read that image'); }
     };
     file.click();
   });
 
-  $$('#dPhotos .ph-x').forEach(btn => btn.addEventListener('click', (e) => {
+  $$('#pPhotos .ph-x').forEach(btn => btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const i = parseInt(btn.dataset.phx, 10);
-    const photos = place.photos.filter((_, k) => k !== i);
-    save({ photos });
-    renderDetail(place); renderList();
+    save({ photos: place.photos.filter((_, k) => k !== i) });
+    renderPlate(place); renderList();
   }));
 
-  $('#dDelete').addEventListener('click', () => {
+  $('#pDelete').addEventListener('click', () => {
     if (!confirm(`Remove “${place.name}” from your atlas?`)) return;
     store.removePlace(place.id);
-    state.selectedId = null;
-    closeDetail();
+    closeSurface('plate');
     renderAll();
-    toast('Entry removed');
+    toast('removed');
   });
 
   if (edit) {
@@ -452,7 +477,37 @@ function renderDetail(place, { edit = false } = {}) {
   }
 }
 
-// ---------- image compression ----------
+// ---------- dictation ----------
+
+let recog = null;
+function dictateInto(textarea, btn, onFinal) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return toast('dictation is not available in this browser');
+  if (recog) { recog.stop(); return; }
+  recog = new SR();
+  recog.lang = navigator.language || 'en-US';
+  recog.interimResults = true;
+  recog.continuous = true;
+  const base = textarea.value ? textarea.value.replace(/\s*$/, '') + ' ' : '';
+  btn.classList.add('listening');
+  btn.textContent = '◉ listening…';
+  recog.onresult = (e) => {
+    let text = '';
+    for (const res of e.results) text += res[0].transcript;
+    textarea.value = base + text.trim();
+  };
+  const stop = () => {
+    btn.classList.remove('listening');
+    btn.textContent = '◉ dictate';
+    recog = null;
+    onFinal(textarea.value);
+  };
+  recog.onend = stop;
+  recog.onerror = () => { stop(); toast('dictation stopped'); };
+  recog.start();
+}
+
+// ---------- image handling ----------
 
 function compressImage(file, maxDim = 1280, quality = 0.78) {
   return new Promise((resolve, reject) => {
@@ -472,6 +527,30 @@ function compressImage(file, maxDim = 1280, quality = 0.78) {
   });
 }
 
+// a photo that knows where it was taken becomes a place
+async function addFromPhoto(file) {
+  toast('reading the photo…');
+  const fix = await exifGPS(file);
+  if (!fix) {
+    toast('no location in this photo — add the place first, then attach it');
+    return;
+  }
+  let dataUri = null;
+  try { dataUri = await compressImage(file); } catch { /* keep the fix anyway */ }
+  const draft = { name: 'From a photograph', lat: fix.lat, lng: fix.lng, address: '', city: '', country: '', countryCode: '' };
+  try {
+    const r = await reverseGeo(fix.lat, fix.lng);
+    if (r) Object.assign(draft, { name: r.name || draft.name, address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
+  } catch { /* offline is fine */ }
+  const place = store.addPlace(newPlace({ ...draft, status: 'visited', photos: dataUri ? [dataUri] : [] }));
+  if (!store.savePlaces()) toast('storage is full — photo not kept');
+  store.settings.seeded = true;
+  store.saveSettings();
+  renderAll();
+  selectPlace(place.id, { fly: true, edit: true });
+  toast('the photograph found its place');
+}
+
 // ---------- adding places ----------
 
 function addPlaceFromResult(r) {
@@ -483,26 +562,40 @@ function addPlaceFromResult(r) {
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
-  selectPlace(place.id, { fly: true, edit: false });
-  setTimeout(() => mapView.stampFix(place.lat, place.lng), 700);
-  toast('Entered into the atlas');
+  selectPlace(place.id, { fly: true });
   return place;
 }
 
-async function addPlaceAt(lat, lng) {
-  const draft = { name: 'Dropped pin', lat, lng, address: '', city: '', country: '', countryCode: '' };
+async function proposeAdd(lat, lng) {
+  const el = $('#addConfirm');
+  state.pendingAdd = { lat, lng, name: 'this point' };
+  $('#addConfirmName').textContent = '…';
+  $('#addConfirmCoords').textContent = fmtDMS(lat, lng);
+  el.hidden = false;
   try {
     const r = await reverseGeo(lat, lng);
-    if (r) Object.assign(draft, {
-      name: r.name || 'Dropped pin', address: r.address || r.sub || '',
-      city: r.city, country: r.country, countryCode: r.countryCode,
-    });
-  } catch { /* offline is fine — keep the pin */ }
-  const place = store.addPlace(newPlace({ ...draft, status: 'wishlist' }));
+    if (r && state.pendingAdd && state.pendingAdd.lat === lat) {
+      state.pendingAdd.name = r.name || 'this point';
+      Object.assign(state.pendingAdd, { address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
+      $('#addConfirmName').textContent = state.pendingAdd.name;
+    }
+  } catch { $('#addConfirmName').textContent = 'this point'; }
+}
+
+function commitAdd() {
+  const p = state.pendingAdd;
+  if (!p) return;
+  state.pendingAdd = null;
+  $('#addConfirm').hidden = true;
+  const place = store.addPlace(newPlace({
+    name: p.name === 'this point' ? 'Unnamed fix' : p.name,
+    lat: p.lat, lng: p.lng,
+    address: p.address || '', city: p.city || '', country: p.country || '', countryCode: p.countryCode || '',
+    status: 'wishlist',
+  }));
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
-  mapView.stampFix(lat, lng);
   selectPlace(place.id, { fly: false, edit: true });
 }
 
@@ -513,135 +606,205 @@ function seedDemo() {
   store.settings.seeded = true;
   store.saveSettings();
   renderAll();
+  closeSurface('indexOverlay');
   mapView.fitAll(store.places);
-  toast('Specimen atlas loaded — make it yours');
+  toast('a specimen atlas — make it yours');
 }
 
-function clearFilters() {
-  state.filters.tags.clear();
-  state.filters.status = 'all';
-  $$('#statusSeg button').forEach(b => b.classList.toggle('active', b.dataset.status === 'all'));
-  renderChips(); renderList(); syncMarkers();
+// ---------- correspondents ----------
+
+function corrShaped(c) { return { tags: c.tags, places: c.places }; }
+function myAtlas() { return { tags: store.tags, places: store.places }; }
+
+function pushCorrespondentsToMap() {
+  mapView.setCorrespondents(store.correspondents);
 }
 
-// ---------- gazetteer (command palette) ----------
-
-const palette = {
-  overlay: null, input: null, results: null,
-  hl: 0, rows: [], remoteAbort: null,
-};
-
-function openPalette() {
-  palette.overlay.hidden = false;
-  palette.input.value = '';
-  palette.input.focus();
-  renderPaletteResults('');
+function adoptPlace(place, foreign) {
+  const adopted = store.addPlace(newPlace({
+    ...place,
+    id: undefined,
+    photos: [],
+    provenance: { name: foreign.name, sig: foreign.sig, adoptedAt: new Date().toISOString() },
+  }));
+  renderAll();
+  closeSurface('plate');
+  selectPlace(adopted.id, { fly: false });
+  toast(`yours now — after ${foreign.name}`);
 }
 
-function closePalette() {
-  palette.overlay.hidden = true;
-  palette.remoteAbort?.abort();
+function openForeignPlate(corrId, placeId) {
+  const c = store.correspondents.find(x => x.id === corrId);
+  const p = c?.places.find(x => x.id === placeId);
+  if (!c || !p) return;
+  state.foreign = { corrId, name: c.name, sig: mapView.sigAngle(c.id), place: p };
+  setWorld({ hue: c.hue, tint: 0.62 });
+  renderPlate(p, { foreign: state.foreign });
+  openSurface('plate');
 }
 
-function localMatches(q) {
-  if (!q) return allPlaces().slice(0, 6);
-  const needle = q.toLowerCase();
-  return allPlaces().filter(p =>
-    p.name.toLowerCase().includes(needle) ||
-    p.city?.toLowerCase().includes(needle) ||
-    p.country?.toLowerCase().includes(needle) ||
-    p.note?.toLowerCase().includes(needle) ||
-    p.tags.some(id => tagById(id)?.name.toLowerCase().includes(needle))
-  ).slice(0, 6);
-}
-
-function paletteRowHTML(item, i) {
-  if (item.kind === 'local') {
-    const p = item.place;
-    const side = p.rating > 0 ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : 'been');
-    return `<button class="palette-row ${i === palette.hl ? 'hl' : ''}" data-i="${i}">
-      <span class="row-main">
-        <span class="row-name">${esc(p.name)}</span>
-        <span class="row-sub">${esc([p.city, p.country].filter(Boolean).join(' · ') || p.address)}</span>
-      </span>
-      <span class="row-side">${side}</span>
-    </button>`;
+function renderVoices() {
+  const body = $('#corrBody');
+  if (!store.correspondents.length) {
+    body.innerHTML = `<div class="corr-empty">
+      <p class="ce-law">Resonance is exchanged, not followed.</p>
+      <p class="ce-how">Hand your atlas to one person whose taste you trust. When theirs comes back,
+      open the link — the field will tell you what you have in common.</p>
+      <div class="word-row">
+        <button class="word-btn" id="ceShare">copy my atlas link</button>
+        <button class="word-btn quiet" id="ceImport">open one sent to me</button>
+      </div>
+    </div>`;
+    $('#ceShare').addEventListener('click', shareMap);
+    $('#ceImport').addEventListener('click', () => {
+      const url = prompt('Paste the link you were sent:');
+      if (url && url.includes('#m=')) location.href = url.slice(url.indexOf('#m='));
+      if (url && url.includes('#m=')) location.reload();
+    });
+    return;
   }
-  const r = item.result;
-  return `<button class="palette-row ${i === palette.hl ? 'hl' : ''}" data-i="${i}">
-    <span class="row-main">
-      <span class="row-name">${esc(r.name)}</span>
-      <span class="row-sub">${esc(r.sub)}</span>
-    </span>
-    <span class="row-side add-badge">+ enter</span>
-  </button>`;
+  body.innerHTML = store.correspondents.map(c => {
+    const r = resonance(myAtlas(), corrShaped(c));
+    const v = verdict(r);
+    const ev = evidenceLines(r, c.name);
+    const sig = mapView.sigAngle(c.id);
+    return `<div class="corr-row" data-cid="${esc(c.id)}">
+      <div class="corr-row-head">
+        <svg class="corr-glyph" width="34" height="34" viewBox="0 0 30 30" style="--sig:${sig}deg">
+          <circle class="corr-arcs" cx="15" cy="15" r="9" pathLength="360"/>
+          <circle class="corr-pole" cx="15" cy="15" r="1.8"/>
+        </svg>
+        <h3 class="corr-name" contenteditable="plaintext-only" spellcheck="false">${esc(c.name)}</h3>
+      </div>
+      <div class="corr-meta">since ${fmtDate(c.addedAt)} · ${c.places.length} marks · ${v.word}</div>
+      <div class="corr-ev">${ev.map(l => `<div>${l}</div>`).join('')}</div>
+      <div class="corr-ctl">
+        <div class="hue-stations" role="radiogroup" aria-label="Their color">
+          ${TAG_STATIONS.map(s => `<button data-hue="${s.hue}" aria-pressed="${c.hue === s.hue}">${s.name}</button>`).join('')}
+        </div>
+        <button class="word-btn quiet" data-vis>${c.visible === false ? 'muted' : 'audible'}</button>
+        <button class="word-btn quiet" data-part>part ways</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  $$('.corr-row', body).forEach(row => {
+    const id = row.dataset.cid;
+    const c = store.correspondents.find(x => x.id === id);
+    row.querySelector('.corr-name').addEventListener('blur', (e) => {
+      const v = e.target.textContent.trim();
+      if (v) { store.updateCorrespondent(id, { name: v }); renderAll(); }
+    });
+    row.querySelector('[data-vis]').addEventListener('click', (e) => {
+      store.updateCorrespondent(id, { visible: c.visible === false });
+      pushCorrespondentsToMap();
+      renderVoices();
+    });
+    row.querySelector('[data-part]').addEventListener('click', () => {
+      if (!confirm(`Part ways with ${c.name}? Their marks leave your field. Places you adopted stay yours — and still say “after ${c.name}”.`)) return;
+      store.removeCorrespondent(id);
+      pushCorrespondentsToMap();
+      renderVoices();
+      toast(`parted ways with ${c.name}`);
+    });
+    row.querySelectorAll('[data-hue]').forEach(b => b.addEventListener('click', () => {
+      store.updateCorrespondent(id, { hue: parseInt(b.dataset.hue, 10) });
+      renderVoices();
+      setWorld({ hue: parseInt(b.dataset.hue, 10), tint: 0.62 });
+      setTimeout(clearWorld, 1600);
+    }));
+  });
 }
 
-function paintPalette(sections) {
-  palette.rows = [];
-  let html = '';
-  for (const s of sections) {
-    if (!s.items.length) continue;
-    html += `<div class="palette-section"><div class="rulehead"><span class="sc-head">${s.title}</span></div></div>`;
-    for (const item of s.items) {
-      html += paletteRowHTML(item, palette.rows.length);
-      palette.rows.push(item);
-    }
+// ---------- the resonance report ----------
+
+function openReport(payload) {
+  const theirs = {
+    tags: (payload.tags || []).map(t => newTag(t)),
+    places: (payload.places || [])
+      .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+      .map(p => newPlace({ ...p, photos: [] })),
+  };
+  const name = String(payload.author || '').trim() || 'an unsigned atlas';
+  const r = resonance(myAtlas(), theirs);
+  const v = verdict(r);
+  const ev = evidenceLines(r, name);
+  const picks = r.picks.slice(0, 7);
+  const sig = mapView.sigAngle(name);
+
+  setWorld({ hue: 278, tint: 0.55 });
+
+  const el = $('#reportOverlay');
+  el.innerHTML = `
+    <div class="rp-eyebrow">an atlas offered to yours</div>
+    <h1 class="rp-name">${esc(name)}</h1>
+    <p class="rp-verdict">${v.word}<span class="rp-sub">${v.sub}</span></p>
+    <ul class="rp-evidence mono">${ev.map(l => `<li>${l}</li>`).join('')}</ul>
+    ${picks.length ? `<div class="rp-case">
+      <div class="sec-head">the case for you</div>
+      ${picks.map((pk, i) => `
+        <div class="rp-pick" data-i="${i}">
+          <span class="no">${fmtNo(i + 1)}</span>
+          <span class="nm">${esc(pk.place.name)}</span>
+          <span class="why">${pk.expands ? 'new ground' : esc((pk.domainLabels[0] || '').toLowerCase())}${pk.place.rating ? ' · ' + starsText(pk.place.rating) : ''}</span>
+          <button class="adopt" data-adopt="${i}">adopt</button>
+        </div>`).join('')}
+    </div>` : ''}
+    <div class="rp-foot">
+      <button class="word-btn" id="rpKeep">keep ${esc(name)} as a correspondent</button>
+      <button class="word-btn quiet" id="rpLook">just look around</button>
+      <button class="word-btn quiet" id="rpLeave">open my atlas</button>
+    </div>`;
+  el.hidden = false;
+  requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
+
+  const foreignRef = { name, sig };
+  $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
+    const pk = picks[parseInt(b.dataset.adopt, 10)];
+    if (!pk) return;
+    adoptPlace(pk.place, foreignRef);
+    b.replaceWith(Object.assign(document.createElement('span'), { className: 'why', textContent: 'yours' }));
+  }));
+  $('#rpKeep').addEventListener('click', () => {
+    const finalName = prompt('Keep this atlas under which name?', name === 'an unsigned atlas' ? '' : name);
+    if (finalName === null) return;
+    store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
+    pushCorrespondentsToMap();
+    clearShareHash();
+    el.hidden = true;
+    clearWorld();
+    renderAll();
+    toast(`${finalName || name} is now a correspondent — their marks are on your field`);
+  });
+  $('#rpLook').addEventListener('click', () => {
+    state.visiting = { id: 'visit-' + Date.now(), name, hue: 278, visible: true, tags: theirs.tags, places: theirs.places };
+    mapView.setCorrespondents([...store.correspondents, state.visiting]);
+    el.hidden = true;
+    mapView.fitAll(theirs.places);
+    toast('visiting — your atlas is untouched · esc to leave');
+  });
+  $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+}
+
+// ---------- share ----------
+
+async function shareMap() {
+  let author = store.settings.authorName;
+  if (!author) {
+    author = prompt('Sign your atlas as…', '') || '';
+    store.settings.authorName = author;
+    store.saveSettings();
   }
-  if (!html) {
-    const q = palette.input.value.trim();
-    html = `<div class="palette-hint">${q ? 'Consulting the gazetteer…' : 'Search your places — or anywhere on Earth.'}</div>`;
-  }
-  palette.results.innerHTML = html;
-  $$('.palette-row', palette.results).forEach(row =>
-    row.addEventListener('click', () => activatePaletteRow(parseInt(row.dataset.i, 10))));
-}
-
-function activatePaletteRow(i) {
-  const item = palette.rows[i];
-  if (!item) return;
-  closePalette();
-  if (item.kind === 'local') selectPlace(item.place.id, { fly: true });
-  else if (!state.readOnly) addPlaceFromResult(item.result);
-}
-
-const remoteSearch = debounce(async (q) => {
-  if (!q || q.length < 2 || state.readOnly) return;
-  palette.remoteAbort?.abort();
-  palette.remoteAbort = new AbortController();
+  const url = makeShareUrl(allTags(), allPlaces(), author);
   try {
-    const results = await searchGeo(q, { signal: palette.remoteAbort.signal });
-    if (palette.input.value.trim() !== q) return;
-    const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
-    const localKeys = new Set(locals.map(l => `${l.place.lat.toFixed(4)},${l.place.lng.toFixed(4)}`));
-    const remote = results
-      .filter(r => !localKeys.has(`${r.lat.toFixed(4)},${r.lng.toFixed(4)}`))
-      .map(r => ({ kind: 'remote', result: r }));
-    palette.hl = 0;
-    if (!locals.length && !remote.length) {
-      palette.rows = [];
-      palette.results.innerHTML = `<div class="palette-hint">Nothing found for “${esc(q)}” — try the place’s full name.</div>`;
-      return;
-    }
-    paintPalette([
-      { title: 'In your atlas', items: locals },
-      { title: 'The gazetteer', items: remote },
-    ]);
-  } catch (e) {
-    if (e.name !== 'AbortError') console.warn('search failed', e);
+    await navigator.clipboard.writeText(url);
+    toast('link copied — your whole atlas travels in it');
+  } catch {
+    prompt('Copy this link:', url);
   }
-}, 420);
-
-function renderPaletteResults(q) {
-  const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
-  palette.hl = 0;
-  paintPalette([
-    { title: q ? 'In your atlas' : 'Recently entered', items: locals },
-  ]);
-  remoteSearch(q);
 }
 
-// ---------- the census (stats) ----------
+// ---------- posters: census & kept ----------
 
 function renderStats() {
   const body = $('#statsBody');
@@ -655,154 +818,136 @@ function renderStats() {
     if (p.city) cities.add(p.city);
   });
   if (!places.length) {
-    body.innerHTML = `<p class="stat-opening">Nothing charted yet. The sheet is all margins — <em>go fill it in.</em></p>`;
+    body.innerHTML = `<p class="stat-opening">Nothing counted yet — <em>the field is waiting.</em></p>`;
     return;
   }
   const tagRows = allTags()
     .map(t => ({ t, n: places.reduce((k, p) => k + (p.tags.includes(t.id) ? 1 : 0), 0) }))
-    .filter(r => r.n > 0)
-    .sort((a, b) => b.n - a.n);
+    .filter(r => r.n > 0).sort((a, b) => b.n - a.n);
   const countryList = [...countries.entries()].sort((a, b) => b[1] - a[1]);
 
   body.innerHTML = `
-    <p class="stat-opening">${places.length} place${places.length === 1 ? '' : 's'} across
-      ${countries.size} countr${countries.size === 1 ? 'y' : 'ies'} —
+    <p class="stat-opening">${places.length} places across ${countries.size} countr${countries.size === 1 ? 'y' : 'ies'} —
       ${visited.length} been, <em>${wish.length} still to go.</em></p>
     <div class="stat-band">
-      <div class="stat-cell"><div class="stat-num">${places.length}</div><div class="stat-lbl">Places</div></div>
-      <div class="stat-cell"><div class="stat-num">${countries.size}</div><div class="stat-lbl">Countries</div></div>
-      <div class="stat-cell"><div class="stat-num">${cities.size}</div><div class="stat-lbl">Cities</div></div>
+      <div class="stat-cell"><div class="stat-num">${places.length}</div><div class="stat-lbl">places</div></div>
+      <div class="stat-cell"><div class="stat-num">${countries.size}</div><div class="stat-lbl">countries</div></div>
+      <div class="stat-cell"><div class="stat-num">${cities.size}</div><div class="stat-lbl">cities</div></div>
     </div>
-    ${tagRows.length ? `<div class="census-section">
-      <div class="rulehead"><span class="sc-head">By tag</span></div>
-      ${tagRows.map(({ t, n }) => `
-        <div class="tally" style="--tag-color:${safeColor(t.color)}">
-          <span class="tick"></span>
-          <span class="name">${esc(t.name)}</span>
-          <span class="lead"></span>
-          <span class="n">${n}</span>
-        </div>`).join('')}
-    </div>` : ''}
-    ${countryList.length ? `<div class="census-section">
-      <div class="rulehead"><span class="sc-head">Countries</span></div>
-      <div class="country-cols">${countryList.map(([c, n]) => `
-        <div class="tally">
-          <span class="name">${esc(c)}</span>
-          <span class="lead"></span>
-          <span class="n">${n}</span>
-        </div>`).join('')}
-      </div>
-    </div>` : ''}`;
+    ${tagRows.length ? `<div class="sec-head">by tag</div>
+      ${tagRows.map(({ t, n }) => `<div class="tally"><span class="name">${esc(t.name)}</span><span class="n">${n}</span></div>`).join('')}` : ''}
+    ${countryList.length ? `<div class="sec-head">countries</div>
+      <div class="country-cols">${countryList.map(([c, n]) => `<div class="tally"><span class="name">${esc(c)}</span><span class="n">${n}</span></div>`).join('')}</div>` : ''}`;
 }
-
-// ---------- the colophon (settings) ----------
 
 function renderSettings() {
   const body = $('#settingsBody');
   const theme = store.settings.theme;
   body.innerHTML = `
-    <div class="set-section">
-      <div class="rulehead"><span class="sc-head">Appearance</span></div>
+    <div class="set-sec">
+      <div class="sec-head">appearance</div>
       <div class="set-row">
-        <div><div class="set-row-label">Theme</div><div class="set-row-sub">The chart is inked to match.</div></div>
-        <div class="theme-opts" id="themeSeg">
-          ${['auto', 'light', 'dark'].map(m =>
-            `<button data-mode="${m}" class="ix-filter ${theme === m ? 'active' : ''}">${m}</button>`).join('')}
+        <div><div class="set-row-label">Theme</div><div class="set-row-sub">The field is inked to match.</div></div>
+        <div class="word-row" id="themeSeg">
+          ${['auto', 'light', 'dark'].map(m => `<button class="word-btn ${theme === m ? '' : 'quiet'}" data-mode="${m}">${m}</button>`).join('')}
         </div>
       </div>
+      <div class="set-row">
+        <div><div class="set-row-label">Signature</div><div class="set-row-sub">Your atlas signs its share links with this name.</div></div>
+        <input class="text-input" id="authorName" style="max-width:220px" placeholder="unsigned" value="${esc(store.settings.authorName)}">
+      </div>
     </div>
 
-    <div class="set-section">
-      <div class="rulehead"><span class="sc-head">Tags</span></div>
-      <div class="tagman" id="tagman">
+    <div class="set-sec">
+      <div class="sec-head">tags</div>
+      <div class="tag-rows">
         ${store.tags.map(t => `
-          <div class="tagman-row" data-tid="${esc(t.id)}">
-            <span class="tag-ring" style="--tag-color:${safeColor(t.color)}"></span>
-            <span class="tm-name">${esc(t.name)}</span>
-            <span class="tm-lead"></span>
-            <span class="tm-count">${store.tagCount(t.id)}</span>
-            <button class="icon-btn" data-edit aria-label="Edit tag"><svg><use href="#i-pencil"/></svg></button>
-            <button class="icon-btn" data-del aria-label="Delete tag"><svg><use href="#i-trash"/></svg></button>
+          <div class="tally" data-tid="${esc(t.id)}">
+            <span class="name">${esc(t.name)}</span>
+            <button class="word-btn quiet" data-rename>rename</button>
+            <button class="word-btn quiet" data-del>remove</button>
+            <span class="n">${store.tagCount(t.id)}</span>
           </div>`).join('')}
       </div>
-      <div class="tagman-add">
-        <input class="text-input" id="tagEmoji" maxlength="4" placeholder="◌" style="text-align:center" aria-label="Tag emoji">
-        <input class="text-input" id="tagName" placeholder="New tag name" aria-label="Tag name">
-        <button class="act-link" id="tagAdd">Add</button>
-      </div>
-      <div class="color-dots" id="tagColors">
-        ${TAG_COLORS.map((c, i) => `<button class="color-dot ${i === 0 ? 'on' : ''}" data-color="${c}" style="background:${c}" aria-label="Tag colour ${c}"></button>`).join('')}
-      </div>
-    </div>
-
-    <div class="set-section">
-      <div class="rulehead"><span class="sc-head">Your data</span></div>
-      <div class="set-actions">
-        <button class="act-link quiet" id="expJson">Export JSON</button>
-        <button class="act-link quiet" id="expGeo">Export GeoJSON</button>
-        <button class="act-link quiet" id="impJson">Import</button>
-      </div>
-      <div class="set-row" style="margin-top:6px">
-        <div class="set-row-sub">Everything lives in this browser. Export before switching devices — or send yourself the share link.</div>
+      <div class="tag-add">
+        <input class="text-input" id="tagName" style="max-width:220px" placeholder="new tag name">
+        <div class="hue-stations" id="tagHues">
+          ${TAG_STATIONS.map((s, i) => `<button data-hue="${s.hue}" data-hex="${s.hex}" aria-pressed="${i === 4}">${s.name}</button>`).join('')}
+        </div>
+        <button class="word-btn" id="tagAdd">add</button>
       </div>
     </div>
 
-    <div class="set-section">
-      <div class="rulehead"><span class="sc-head">Danger</span></div>
-      <div class="set-actions">
-        <button class="act-link danger" id="clearAll">Erase this atlas</button>
+    <div class="set-sec">
+      <div class="sec-head">voices</div>
+      <div class="set-row">
+        <div class="set-row-sub">${store.correspondents.length
+          ? `${store.correspondents.length} correspondent${store.correspondents.length > 1 ? 's' : ''} on your field.`
+          : 'No correspondents yet — resonance is exchanged, not followed.'}</div>
+        <button class="word-btn" id="openVoices">open the correspondence</button>
       </div>
+    </div>
+
+    <div class="set-sec">
+      <div class="sec-head">your data</div>
+      <div class="word-row">
+        <button class="word-btn quiet" id="expJson">export json</button>
+        <button class="word-btn quiet" id="expGeo">export geojson</button>
+        <button class="word-btn quiet" id="impJson">import</button>
+        <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
+      </div>
+      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. Export before switching devices — or send yourself the share link.</div>
     </div>`;
 
   $('#themeSeg').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-mode]');
-    if (!btn) return;
-    store.settings.theme = btn.dataset.mode;
-    store.saveSettings();
-    applyTheme(true);
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    setTheme(b.dataset.mode);
     renderSettings();
   });
-
-  let pickedColor = TAG_COLORS[0];
-  $('#tagColors').addEventListener('click', (e) => {
-    const dot = e.target.closest('[data-color]');
-    if (!dot) return;
-    pickedColor = dot.dataset.color;
-    $$('#tagColors .color-dot').forEach(d => d.classList.toggle('on', d === dot));
+  $('#authorName').addEventListener('change', (e) => {
+    store.settings.authorName = e.target.value.trim();
+    store.saveSettings();
   });
 
+  let picked = TAG_STATIONS[4];
+  $('#tagHues').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hue]');
+    if (!b) return;
+    picked = { hue: parseInt(b.dataset.hue, 10), hex: b.dataset.hex };
+    $$('#tagHues button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    setWorld({ hue: picked.hue, tint: 0.8 });
+    setTimeout(() => { applyWorldState(); }, 1400);
+  });
   $('#tagAdd').addEventListener('click', () => {
     const name = $('#tagName').value.trim();
-    if (!name) { $('#tagName').focus(); return; }
-    const emoji = $('#tagEmoji').value.trim() || '📍';
-    store.addTag(newTag({ name, emoji, color: pickedColor }));
+    if (!name) return $('#tagName').focus();
+    store.addTag(newTag({ name, hue: picked.hue, color: picked.hex }));
     renderSettings(); renderChips();
-    toast(`Tag “${name}” added`);
+    toast(`tag “${name}” added`);
   });
   $('#tagName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#tagAdd').click(); });
 
-  $('#tagman').addEventListener('click', (e) => {
-    const row = e.target.closest('.tagman-row');
+  $('.tag-rows', body).addEventListener('click', (e) => {
+    const row = e.target.closest('[data-tid]');
     if (!row) return;
     const id = row.dataset.tid;
     const tag = store.tagById(id);
     if (e.target.closest('[data-del]')) {
       const n = store.tagCount(id);
-      if (!confirm(`Delete tag “${tag.name}”${n ? ` and remove it from ${n} place${n === 1 ? '' : 's'}` : ''}?`)) return;
+      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}?`)) return;
       store.removeTag(id);
       renderSettings(); renderAll();
-      return;
     }
-    if (e.target.closest('[data-edit]')) {
+    if (e.target.closest('[data-rename]')) {
       const name = prompt('Tag name', tag.name);
       if (name === null) return;
-      const emoji = prompt('Emoji', tag.emoji);
-      if (emoji === null) return;
-      store.updateTag(id, { name: name.trim() || tag.name, emoji: emoji.trim() || tag.emoji });
+      store.updateTag(id, { name: name.trim() || tag.name });
       renderSettings(); renderAll();
     }
   });
 
+  $('#openVoices').addEventListener('click', () => { closeSurface('settingsOverlay'); openSurface('corrOverlay', renderVoices); });
   $('#expJson').addEventListener('click', () => download('resonate-atlas.json', store.exportJSON(), 'application/json'));
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
   $('#impJson').addEventListener('click', () => {
@@ -818,24 +963,35 @@ function renderSettings() {
           const added = store.merge(data);
           renderSettings(); renderAll();
           if (store.places.length) mapView.fitAll(store.places);
-          toast(added ? `${added} place${added === 1 ? '' : 's'} imported` : 'Nothing new to import');
-        } catch { toast('That file isn’t a Resonate export'); }
+          toast(added ? `${added} place${added === 1 ? '' : 's'} imported` : 'nothing new to import');
+        } catch { toast('that file isn’t a resonate export'); }
       };
       reader.readAsText(f);
     };
     file.click();
   });
-
-  $('#clearAll').addEventListener('click', () => {
-    if (!confirm('Erase every place and tag in this atlas? Export first if you want a backup.')) return;
+  $('#eraseAll').addEventListener('click', () => {
+    if (!confirm('Erase every place and tag in this atlas? Export first if you want a keepsake.')) return;
     if (!confirm('This cannot be undone. Really erase everything?')) return;
     store.clearAll();
     state.selectedId = null;
-    closeOverlay($('#settingsOverlay'));
-    closeDetail();
+    closeSurface('settingsOverlay');
     renderAll();
-    toast('Atlas erased');
+    toast('the field is blank again');
   });
+}
+
+function renderKeys() {
+  const rows = [
+    ['/', 'command line'], ['⌘K', 'command line'], ['i', 'the index'],
+    ['j · k', 'next · previous place'], ['esc', 'close one surface'],
+    ['+ · −', 'zoom'], ['0', 'frame everything'], ['t', 'day / night'],
+    ['g', 'find me'], ['s', 'share this atlas'], ['1–9', 'toggle tag worlds'],
+    ['right-click', 'propose a place'], ['drop a photo', 'file it by its own fix'],
+  ];
+  $('#keysBody').innerHTML = `<div class="keys-grid">
+    ${rows.map(([k, d]) => `<div class="key-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
+  </div>`;
 }
 
 function download(filename, text, type) {
@@ -847,52 +1003,164 @@ function download(filename, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-// ---------- overlays ----------
+// ---------- the command line ----------
 
-function openOverlay(el) { el.hidden = false; }
-function closeOverlay(el) { el.hidden = true; }
+const palette = { input: null, results: null, hl: 0, rows: [], remoteAbort: null };
 
-function wireOverlay(el) {
-  el.addEventListener('click', (e) => {
-    if (e.target === el || e.target.closest('[data-close]')) closeOverlay(el);
-  });
+const VERBS = {
+  share: { run: shareMap, hint: 'hand your atlas to someone' },
+  census: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
+  stats: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
+  kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'settings & data' },
+  settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'settings & data' },
+  voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'your correspondents' },
+  keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
+  frame: { run: () => mapView.fitAll(filteredPlaces()), hint: 'fit everything in view' },
+  locate: { run: () => mapView.locate(null, () => toast('location unavailable')), hint: 'find me' },
+  dark: { run: () => setTheme('dark'), hint: 'night field' },
+  light: { run: () => setTheme('light'), hint: 'day field' },
+  photo: { run: () => $('#shootFile').click(), hint: 'a photo becomes a place' },
+  export: { run: () => download('resonate-atlas.json', store.exportJSON(), 'application/json'), hint: 'your data, yours' },
+  import: { run: () => { openSurface('settingsOverlay', renderSettings); $('#impJson').click(); }, hint: 'bring an atlas in' },
+  been: { run: () => setStatusFilter('visited'), hint: 'only places you’ve been' },
+  want: { run: () => setStatusFilter('wishlist'), hint: 'only places still to go' },
+  all: { run: () => setStatusFilter('all'), hint: 'everything' },
+  specimen: { run: seedDemo, hint: 'a demo atlas to play with' },
+};
+
+function setStatusFilter(status) {
+  state.filters.status = status;
+  $$('#statusSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+  renderList(); syncMarkers();
 }
 
-// ---------- share / read-only ----------
+function route(q) {
+  if (q[0] === '>') return { kind: 'verb', rest: q.slice(1).trim().toLowerCase() };
+  if (q[0] === '#') return { kind: 'tag', rest: q.slice(1).trim().toLowerCase() };
+  if (q[0] === '@') return { kind: 'voice', rest: q.slice(1).trim().toLowerCase() };
+  const m = q.match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/);
+  if (m) return { kind: 'coords', lat: +m[1], lng: +m[2] };
+  return { kind: 'search', rest: q };
+}
 
-async function shareMap() {
-  const url = makeShareUrl(allTags(), allPlaces());
-  try {
-    await navigator.clipboard.writeText(url);
-    toast('Link copied — your whole atlas travels in it');
-  } catch {
-    prompt('Copy this link:', url);
+function openPalette() {
+  openSurface('paletteOverlay');
+  palette.input.value = '';
+  palette.input.focus();
+  renderPaletteResults('');
+}
+function togglePalette() {
+  if (topSurface() === 'paletteOverlay') popSurface();
+  else openPalette();
+}
+
+function localMatches(q) {
+  if (!q) return allPlaces().slice(0, 6);
+  const needle = q.toLowerCase();
+  return allPlaces().filter(p =>
+    p.name.toLowerCase().includes(needle) ||
+    p.city?.toLowerCase().includes(needle) ||
+    p.country?.toLowerCase().includes(needle) ||
+    p.note?.toLowerCase().includes(needle)
+  ).slice(0, 6);
+}
+
+function rowHTML(item, i) {
+  const hl = i === palette.hl ? ' hl' : '';
+  if (item.kind === 'local') {
+    const p = item.place;
+    const side = p.rating > 0 ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : 'been');
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(p.name)}</span><span class="row-sub">${esc([p.city, p.country].filter(Boolean).join(' · ') || side)}</span></button>`;
   }
+  if (item.kind === 'remote') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.r.name)}</span><span class="row-sub">${esc(item.r.sub)} · ↵ add</span></button>`;
+  }
+  if (item.kind === 'verb') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">&gt; ${item.verb}</span><span class="row-sub">${esc(item.hint)}</span></button>`;
+  }
+  if (item.kind === 'tag') {
+    const on = state.filters.tags.has(item.tag.id);
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name"># ${esc(item.tag.name)}</span><span class="row-sub">${item.n} places · ${on ? 'filtered — ↵ clears' : '↵ inks the world'}</span></button>`;
+  }
+  if (item.kind === 'voice') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">@ ${esc(item.c.name)}</span><span class="row-sub">${item.c.places.length} marks · ${item.c.visible === false ? 'muted' : 'audible'}</span></button>`;
+  }
+  if (item.kind === 'coords') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</span><span class="row-sub">↵ propose a place here</span></button>`;
+  }
+  return '';
 }
 
-function enterReadOnly(payload) {
-  state.readOnly = true;
-  state.shared = {
-    // share payloads are untrusted input — normalize the fields that reach markup
-    tags: (payload.tags || []).map(t => newTag({ ...t, color: safeColor(t.color) })),
-    places: (payload.places || [])
-      .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
-      .map(p => newPlace({ ...p, photos: [] })),
-  };
-  $('#shareBanner').hidden = false;
-  $('#fabAdd').style.display = 'none';
-  $('#btnShare').style.display = 'none';
-  $('#btnSettings').style.display = 'none';
-  $('#btnSaveCopy').addEventListener('click', () => {
-    const added = store.merge({ tags: state.shared.tags, places: state.shared.places });
-    clearShareHash();
-    toast(added ? `Saved — ${added} place${added === 1 ? '' : 's'} added to your atlas` : 'Already in your atlas');
-    setTimeout(() => location.reload(), 900);
-  });
-  $('#btnExitShared').addEventListener('click', () => {
-    clearShareHash();
-    location.reload();
-  });
+function paint(items, hint) {
+  palette.rows = items;
+  palette.hl = 0;
+  palette.results.innerHTML =
+    (hint ? `<div class="cmd-hint">${hint}</div>` : '') +
+    items.map((it, i) => rowHTML(it, i)).join('');
+  $$('.cmd-row', palette.results).forEach(r =>
+    r.addEventListener('click', () => activateRow(parseInt(r.dataset.i, 10))));
+}
+
+function activateRow(i) {
+  const item = palette.rows[i];
+  if (!item) return;
+  if (item.kind === 'local') { popSurface(); selectPlace(item.place.id, { fly: true }); return; }
+  if (item.kind === 'remote') { popSurface(); addPlaceFromResult(item.r); return; }
+  if (item.kind === 'verb') { popSurface(); item.run(); return; }
+  if (item.kind === 'coords') { popSurface(); proposeAdd(item.lat, item.lng); return; }
+  if (item.kind === 'tag') {
+    const id = item.tag.id;
+    state.filters.tags.has(id) ? state.filters.tags.delete(id) : state.filters.tags.add(id);
+    renderChips(); renderList(); syncMarkers(); applyWorldState();
+    renderPaletteResults(palette.input.value.trim());
+    return;
+  }
+  if (item.kind === 'voice') { popSurface(); openSurface('corrOverlay', renderVoices); return; }
+}
+
+const remoteSearch = debounce(async (q) => {
+  if (!q || q.length < 2) return;
+  palette.remoteAbort?.abort();
+  palette.remoteAbort = new AbortController();
+  try {
+    const results = await searchGeo(q, { signal: palette.remoteAbort.signal });
+    if (palette.input.value.trim() !== q) return;
+    const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
+    const keys = new Set(locals.map(l => `${l.place.lat.toFixed(4)},${l.place.lng.toFixed(4)}`));
+    const remote = results
+      .filter(r => !keys.has(`${r.lat.toFixed(4)},${r.lng.toFixed(4)}`))
+      .map(r => ({ kind: 'remote', r }));
+    // column-reverse: first row sits nearest the input
+    paint([...locals, ...remote], (!locals.length && !remote.length) ? `nothing answers “${esc(q)}”` : '');
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('search failed', e);
+  }
+}, 420);
+
+function renderPaletteResults(q) {
+  const r = route(q);
+  if (r.kind === 'verb') {
+    const items = Object.entries(VERBS)
+      .filter(([v]) => v.startsWith(r.rest))
+      .map(([verb, def]) => ({ kind: 'verb', verb, run: def.run, hint: def.hint }));
+    return paint(items, items.length ? '' : 'no such verb');
+  }
+  if (r.kind === 'tag') {
+    const items = allTags()
+      .filter(t => t.name.toLowerCase().includes(r.rest))
+      .map(t => ({ kind: 'tag', tag: t, n: allPlaces().filter(p => p.tags.includes(t.id)).length }));
+    return paint(items, items.length ? '' : 'no such tag');
+  }
+  if (r.kind === 'voice') {
+    const items = store.correspondents
+      .filter(c => c.name.toLowerCase().includes(r.rest))
+      .map(c => ({ kind: 'voice', c }));
+    return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no correspondents yet — >share to begin the exchange');
+  }
+  if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
+  const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
+  paint(locals, r.rest ? '' : 'name a place — or  #tag   >verb   @voice');
+  remoteSearch(r.rest);
 }
 
 // ---------- init ----------
@@ -900,98 +1168,112 @@ function enterReadOnly(payload) {
 function init() {
   store.load();
 
-  const payload = parseShareHash();
-  if (payload) enterReadOnly(payload);
-
-  const leafletMap = mapView.initMap({
+  mapView.initMap({
     onMarkerClick: (id) => selectPlace(id, { fly: false }),
-    onAddHere: state.readOnly ? null : (lat, lng) => addPlaceAt(lat, lng),
-    onPointerMove: (lat, lng) => setCoords(lat, lng, true),
+    onCorrClick: (corrId, placeId) => openForeignPlate(corrId, placeId),
+    onLongPress: (lat, lng) => proposeAdd(lat, lng),
+    onPointerMove: (lat, lng) => { $('#coordsReadout').textContent = fmtDMS(lat, lng); },
     onViewChange: debounce((view) => {
-      if (state.readOnly) return;
       store.settings.lastView = view;
       store.saveSettings();
-      if (state.sort === 'distance') renderList();
-    }, 400),
+      const c = mapView.getCenter();
+      $('#coordsReadout').textContent = fmtDMS(c.lat, c.lng);
+      if (state.sort === 'distance' && !$('#indexOverlay').hidden) renderList();
+    }, 300),
   });
   applyTheme();
-  initFrame(leafletMap);
+  pushCorrespondentsToMap();
 
   const places = allPlaces();
-  if (state.readOnly && places.length) mapView.fitAll(places);
-  else if (store.settings.lastView) mapView.setView(store.settings.lastView);
+  if (store.settings.lastView) mapView.setView(store.settings.lastView);
   else if (places.length) mapView.fitAll(places);
 
-  const c = mapView.getCenter();
-  setCoords(c.lat, c.lng);
+  const c0 = mapView.getCenter();
+  $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
+  setTimeout(() => document.body.classList.remove('boot'), 700);
 
-  // end of the drafting sequence
-  setTimeout(() => document.body.classList.remove('boot'), 980);
+  // shared atlas → the resonance report
+  const payload = parseShareHash();
+  if (payload) openReport(payload);
 
-  // gazetteer
-  palette.overlay = $('#paletteOverlay');
+  // corner marks
+  $('#fmIndex').addEventListener('click', () => {
+    $('#indexOverlay').hidden ? openIndex() : closeSurface('indexOverlay');
+  });
+  $('#fmCommand').addEventListener('click', togglePalette);
+
+  // command line
   palette.input = $('#paletteInput');
   palette.results = $('#paletteResults');
-  $('#btnSearch').addEventListener('click', openPalette);
-  $('#fabAdd').addEventListener('click', openPalette);
-  palette.overlay.addEventListener('click', (e) => { if (e.target === palette.overlay) closePalette(); });
+  $('#paletteOverlay').addEventListener('click', (e) => { if (e.target === $('#paletteOverlay')) popSurface(); });
   palette.input.addEventListener('input', () => renderPaletteResults(palette.input.value.trim()));
   palette.input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      // results are column-reversed: down moves visually down = earlier index
+      const dir = e.key === 'ArrowUp' ? 1 : -1;
       palette.hl = Math.max(0, Math.min(palette.rows.length - 1, palette.hl + dir));
-      $$('.palette-row', palette.results).forEach((r, i) => r.classList.toggle('hl', i === palette.hl));
-      $$('.palette-row', palette.results)[palette.hl]?.scrollIntoView({ block: 'nearest' });
+      $$('.cmd-row', palette.results).forEach((r, i) => r.classList.toggle('hl', i === palette.hl));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      activatePaletteRow(palette.hl);
-    } else if (e.key === 'Escape') {
-      closePalette();
+      activateRow(palette.hl);
     }
   });
 
-  // instruments
-  $('#btnZoomIn').addEventListener('click', mapView.zoomIn);
-  $('#btnZoomOut').addEventListener('click', mapView.zoomOut);
-  $('#btnFitAll').addEventListener('click', () => {
-    const places2 = filteredPlaces();
-    places2.length ? mapView.fitAll(places2) : toast('Nothing to frame yet');
-  });
-  $('#btnLocate').addEventListener('click', () => {
-    mapView.locate(null, () => toast('Location unavailable'));
-  });
-  $('#btnTheme').addEventListener('click', () => {
-    store.settings.theme = resolvedTheme() === 'dark' ? 'light' : 'dark';
-    store.saveSettings();
-    applyTheme(true);
-  });
-  $('#btnShare').addEventListener('click', shareMap);
-  $('#btnStats').addEventListener('click', () => { renderStats(); openOverlay($('#statsOverlay')); });
-  $('#btnSettings').addEventListener('click', () => { renderSettings(); openOverlay($('#settingsOverlay')); });
-  wireOverlay($('#statsOverlay'));
-  wireOverlay($('#settingsOverlay'));
-
-  // status + arrangement
+  // index controls
   $('#statusSeg').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-status]');
-    if (!btn) return;
-    state.filters.status = btn.dataset.status;
-    $$('#statusSeg button').forEach(b => b.classList.toggle('active', b === btn));
-    renderList(); syncMarkers();
+    const b = e.target.closest('[data-status]');
+    if (!b) return;
+    setStatusFilter(b.dataset.status);
   });
-  const arrangedNames = { recent: 'By newest', name: 'A – Z', distance: 'By nearest', rating: 'Top rated' };
-  $('#sortSelect').addEventListener('change', (e) => {
-    state.sort = e.target.value;
-    $('#arrangedLabel').textContent = `${arrangedNames[state.sort]} ▾`;
+  $('#sortLine').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sort]');
+    if (!b) return;
+    state.sort = b.dataset.sort;
+    $$('#sortLine button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     renderList();
   });
 
-  // mobile sheet
-  $('#railHandle').addEventListener('click', () => {
-    setSheetTall(!$('#rail').classList.contains('tall'));
+  // posters close
+  $$('.poster [data-close]').forEach(b => b.addEventListener('click', () => {
+    const poster = b.closest('.poster');
+    closeSurface(poster.id);
+  }));
+
+  // add-confirm
+  $('#addConfirm').addEventListener('click', commitAdd);
+
+  // photo capture + drop
+  $('#shootFile').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) addFromPhoto(f);
+  });
+  let dragDepth = 0;
+  window.addEventListener('dragover', (e) => { e.preventDefault(); });
+  window.addEventListener('dragenter', (e) => { e.preventDefault(); if (++dragDepth === 1) document.body.classList.add('dropping'); });
+  window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dropping'); } });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove('dropping');
+    const f = [...(e.dataTransfer?.files || [])].find(x => x.type.startsWith('image/'));
+    if (f) addFromPhoto(f);
+  });
+
+  // mobile: swipe up from the bottom edge = index
+  let edgeY = 0;
+  addEventListener('touchstart', (e) => {
+    const y = e.touches[0].clientY;
+    edgeY = (innerHeight - y < 34 && innerHeight - y > 6) ? y : 0;
+  }, { passive: true });
+  addEventListener('touchmove', (e) => {
+    if (edgeY && edgeY - e.touches[0].clientY > 56) { openIndex(); edgeY = 0; }
+  }, { passive: true });
+  visualViewport?.addEventListener('resize', () => {
+    $('#paletteOverlay').style.paddingBottom = `${Math.max(0, innerHeight - visualViewport.height) + 20}px`;
   });
 
   window.addEventListener('resize', debounce(() => mapView.invalidate(), 150));
@@ -1000,26 +1282,40 @@ function init() {
   document.addEventListener('keydown', (e) => {
     const inField = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) ||
       document.activeElement?.isContentEditable;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      palette.overlay.hidden ? openPalette() : closePalette();
-      return;
-    }
-    if (e.key === '/' && !inField && palette.overlay.hidden) {
-      e.preventDefault();
-      openPalette();
-      return;
-    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); togglePalette(); return; }
     if (e.key === 'Escape') {
-      mapView.closeAddPopup();
-      if (!palette.overlay.hidden) return closePalette();
-      if (!$('#statsOverlay').hidden) return closeOverlay($('#statsOverlay'));
-      if (!$('#settingsOverlay').hidden) return closeOverlay($('#settingsOverlay'));
-      if (!$('#detailView').hidden) return closeDetail();
+      if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
+      if (state.visiting) { clearShareHash(); location.reload(); return; }
+      if (!$('#reportOverlay').hidden) { $('#reportOverlay').hidden = true; clearWorld(); clearShareHash(); return; }
+      if (popSurface()) return;
+    }
+    if (inField) return;
+    if (e.key === '/') { e.preventDefault(); togglePalette(); return; }
+    const acc = [...accessionMap().entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+    const step = (d) => {
+      if (!acc.length) return;
+      const i = acc.indexOf(state.selectedId);
+      const id = acc[(i + d + acc.length) % acc.length] ?? acc[0];
+      selectPlace(id, { fly: true });
+    };
+    const keys = {
+      i: () => $('#indexOverlay').hidden ? openIndex() : closeSurface('indexOverlay'),
+      j: () => step(1), k: () => step(-1),
+      '+': mapView.zoomIn, '=': mapView.zoomIn, '-': mapView.zoomOut,
+      0: () => mapView.fitAll(filteredPlaces()),
+      t: () => setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark'),
+      g: VERBS.locate.run, s: shareMap,
+      '?': () => openSurface('keysOverlay', renderKeys),
+    };
+    if (keys[e.key]) { e.preventDefault(); keys[e.key](); return; }
+    if (/^[1-9]$/.test(e.key)) {
+      const t = allTags()[+e.key - 1];
+      if (!t) return;
+      state.filters.tags.has(t.id) ? state.filters.tags.delete(t.id) : state.filters.tags.add(t.id);
+      renderChips(); renderList(); syncMarkers(); applyWorldState();
     }
   });
 
-  // pwa
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }

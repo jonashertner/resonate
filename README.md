@@ -1,14 +1,21 @@
 # Resonate — a personal atlas
 
-Save the places that resonate with you. A local-first, single-page web app in the spirit of
-Mapstr — but faster to capture, more powerful to organize, and designed as **a living chart
-sheet**: the whole viewport is one printed survey document. A neat-line frame with a live
-graticule (degree ticks that glide as you pan), a basemap duotone-inked into the app's own
-paper and ink, survey-benchmark ring markers with typeset serif labels, an index page with
-dotted leaders instead of cards, and plate-style detail pages numbered like an atlas.
+**The Resonant Field.** The map is the entire interface: four typographic corner marks,
+one command line, and summoned typographic posters — no panels, no buttons, no boxes.
+The whole viewport lives in exactly two colors at any moment, derived from three custom
+properties: filter by a tag and the entire world — tiles included — re-inks itself in that
+tag's hue. Places are breathing resonance marks; selecting one sends a single ripple across
+the field. Type: Bricolage Grotesque (variable) + Fragment Mono.
 
-**No account. No cloud. No build step.** Your atlas lives in your browser; export it or share
-it as a link whenever you like.
+**And a quiet trust network.** Resonance is exchanged, not followed: hand someone your atlas
+as a link; when theirs comes back, the app reads it like a discerning friend — common ground
+(places you both hold and both love), domain fluency, and the divergence that expands you —
+and renders a verdict word, never a score. Keep them as a *correspondent*: their places live
+on your field as open aperture marks in the counter-ink, adoptable with permanent provenance
+("after Anna"). Photos that carry a GPS fix become places by themselves (shoot or drop one on
+the field); notes can be dictated.
+
+**No account. No cloud. No build step.** Everything lives in your browser.
 
 ## Run it
 

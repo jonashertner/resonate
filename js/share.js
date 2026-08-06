@@ -2,9 +2,10 @@
 
 /* global LZString */
 
-export function makeShareUrl(tags, places) {
+export function makeShareUrl(tags, places, author = '') {
   const payload = {
     v: 1,
+    author: String(author || '').slice(0, 60),
     tags: tags.map(t => ({ id: t.id, name: t.name, emoji: t.emoji, color: t.color })),
     // photos stay private on the device — they never travel in the link
     places: places.map(p => ({

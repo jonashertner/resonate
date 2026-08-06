@@ -1,6 +1,6 @@
 // sw.js — offline app shell for Resonate
 
-const CACHE = 'resonate-shell-v3';
+const CACHE = 'resonate-shell-v4';
 const SHELL = [
   '.',
   'index.html',
@@ -8,7 +8,8 @@ const SHELL = [
   'js/app.js',
   'js/store.js',
   'js/map.js',
-  'js/frame.js',
+  'js/kinship.js',
+  'js/exif.js',
   'js/geocode.js',
   'js/share.js',
   'vendor/leaflet/leaflet.js',
@@ -39,11 +40,11 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-cache' }).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
         return res;
-      }).catch(() => caches.match(e.request))
+      }).catch(() => caches.match(e.request, { ignoreSearch: true }))
     );
   } else {
     e.respondWith(

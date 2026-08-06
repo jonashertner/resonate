@@ -3,19 +3,38 @@
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
 const K_SETTINGS = 'resonate.settings.v1';
+const K_CORR = 'resonate.correspondents.v1';
 
-export const TAG_COLORS = [
-  '#D64B33', // route coral
-  '#2F6B5E', // survey teal
-  '#B98A2E', // ochre
-  '#3E6E91', // slate blue
-  '#7B5AA6', // plum
-  '#B85C79', // rose
-  '#6B8F3C', // moss
-  '#8A5A3B', // sepia
-  '#4A8A8F', // lagoon
-  '#5C6A77', // graphite
+// the tag wheel: eight hue stations that survive full-viewport takeover.
+// hue is the stored truth; hex is kept only for interop with old exports/links.
+export const TAG_STATIONS = [
+  { hue: 12, name: 'rosewood', hex: '#8A3B47' },
+  { hue: 42, name: 'ember', hex: '#8A5226' },
+  { hue: 95, name: 'moss', hex: '#6E6320' },
+  { hue: 155, name: 'spruce', hex: '#2F6B4F' },
+  { hue: 205, name: 'petrol', hex: '#2A6578' },
+  { hue: 242, name: 'cobalt', hex: '#3D5A9E' },
+  { hue: 278, name: 'iris', hex: '#5F4DA8' },
+  { hue: 318, name: 'orchid', hex: '#8A3F86' },
 ];
+export const TAG_COLORS = TAG_STATIONS.map(s => s.hex);
+
+export function hexToHue(hex) {
+  const m = /^#([0-9a-fA-F]{6})/.exec(String(hex || ''));
+  if (!m) return 205;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const M = Math.max(r, g, b), mn = Math.min(r, g, b), d = M - mn;
+  if (!d) return 205;
+  let h = M === r ? ((g - b) / d) % 6 : M === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return ((h * 60) + 360) % 360;
+}
+
+export function nearestStation(hue) {
+  return TAG_STATIONS.reduce((best, s) => {
+    const dist = Math.min(Math.abs(s.hue - hue), 360 - Math.abs(s.hue - hue));
+    return dist < best.dist ? { dist, s } : best;
+  }, { dist: 361, s: TAG_STATIONS[4] }).s;
+}
 
 export function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9));
@@ -64,29 +83,72 @@ export function newPlace(partial = {}) {
 }
 
 export function newTag(partial = {}) {
-  return {
+  const t = {
     id: uid(),
     name: 'Tag',
-    emoji: '📍',
-    color: TAG_COLORS[0],
+    emoji: '',
+    color: TAG_STATIONS[4].hex,
     ...partial,
   };
+  if (!Number.isFinite(t.hue)) t.hue = nearestStation(hexToHue(t.color)).hue;
+  return t;
 }
 
 export const store = {
   places: [],
   tags: [],
-  settings: { theme: 'auto', lastView: null, seeded: false },
+  correspondents: [],
+  settings: { theme: 'auto', lastView: null, seeded: false, authorName: '' },
 
   load() {
     this.places = read(K_PLACES, []);
     this.tags = read(K_TAGS, []);
-    this.settings = { theme: 'auto', lastView: null, seeded: false, ...read(K_SETTINGS, {}) };
+    this.correspondents = read(K_CORR, []);
+    this.settings = { theme: 'auto', lastView: null, seeded: false, authorName: '', ...read(K_SETTINGS, {}) };
+    // migrate hex-era tags onto the hue wheel
+    let migrated = false;
+    this.tags.forEach(t => {
+      if (!Number.isFinite(t.hue)) { t.hue = nearestStation(hexToHue(t.color)).hue; migrated = true; }
+    });
+    if (migrated) this.saveTags();
   },
 
   savePlaces() { return write(K_PLACES, this.places); },
   saveTags() { return write(K_TAGS, this.tags); },
   saveSettings() { return write(K_SETTINGS, this.settings); },
+  saveCorrespondents() { return write(K_CORR, this.correspondents); },
+
+  // ---------- correspondents: kept atlases from people whose taste you've measured ----------
+
+  addCorrespondent({ name, tags, places, hue }) {
+    const c = {
+      id: uid(),
+      name: name || 'Unnamed correspondent',
+      hue: Number.isFinite(hue) ? hue : TAG_STATIONS[(this.correspondents.length + 2) % TAG_STATIONS.length].hue,
+      visible: true,
+      addedAt: new Date().toISOString(),
+      tags: (tags || []).map(t => newTag(t)),
+      places: (places || [])
+        .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+        .map(p => newPlace({ ...p, photos: [] })),
+    };
+    this.correspondents.push(c);
+    this.saveCorrespondents();
+    return c;
+  },
+
+  updateCorrespondent(id, patch) {
+    const c = this.correspondents.find(x => x.id === id);
+    if (!c) return null;
+    Object.assign(c, patch);
+    this.saveCorrespondents();
+    return c;
+  },
+
+  removeCorrespondent(id) {
+    this.correspondents = this.correspondents.filter(c => c.id !== id);
+    this.saveCorrespondents();
+  },
 
   tagById(id) { return this.tags.find(t => t.id === id); },
   placeById(id) { return this.places.find(p => p.id === id); },
