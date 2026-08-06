@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf11">
+<link rel="stylesheet" href="css/style.css?v=rf12">
 </head>
 <body class="boot">
 
@@ -134,7 +134,7 @@
     <p>Anyone may publish a folio to the commons. Your device fetches the list and ranks it against your own atlas. The ranking happens on your device. The newsstand never learns what you like, what you read, or who you are.</p>
 
     <div class="sec-head">yours</div>
-    <p>Export everything as a file, whenever. Erase everything, whenever. Trust is a person, not a platform.</p>
+    <p>Export everything as a file, whenever. Print a folio, or the whole atlas, as a typeset page or a pdf. Erase everything, whenever. Trust is a person, not a platform.</p>
   </div>
 </section>
 
@@ -173,6 +173,9 @@
 
 <div class="toast mono" id="toast" hidden></div>
 
+<!-- the sheet: print-only, typeset on demand -->
+<section id="sheet" aria-hidden="true"></section>
+
 <input type="file" id="importFile" accept="application/json,.json" hidden>
 <input type="file" id="photoFile" accept="image/*" hidden>
 <input type="file" id="shootFile" accept="image/*" capture="environment" hidden>
@@ -180,6 +183,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf11"></script>
+<script type="module" src="js/app.js?v=rf12"></script>
 </body>
 </html>

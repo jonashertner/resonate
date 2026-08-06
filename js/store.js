@@ -288,7 +288,7 @@ export function demoData() {
         note: 'Drop in here, float past the Münster, out at Dreirosen. The whole city swims home in summer.' }, 9),
     P({ name: 'Markthalle Basel', lat: 47.54790, lng: 7.58750, city: 'Basel', country: 'Switzerland', countryCode: 'ch',
         address: 'Steinentorberg 20, 4051 Basel', tags: [t.food.id], status: 'visited', rating: 4,
-        note: 'Lunch under the dome — the momo stand first, always.' }, 60),
+        note: 'Lunch under the dome. The momo stand first, always.' }, 60),
     P({ name: 'Shakespeare and Company', lat: 48.85258, lng: 2.34710, city: 'Paris', country: 'France', countryCode: 'fr',
         address: '37 Rue de la Bûcherie, 75005 Paris', tags: [t.shop.id, t.culture.id], status: 'visited', rating: 5,
         note: 'Upstairs, the reading nook facing Notre-Dame. They stamp the books at the till.' }, 130),

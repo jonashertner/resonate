@@ -923,3 +923,52 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 
 .mark.proposed { opacity: 0.85; }
 .mark.proposed .mk-ring { animation: breathe 2600ms ease-in-out infinite; }
+
+/* ---------- the sheet: the atlas typeset for paper, or pdf ---------- */
+#sheet { display: none; }
+
+@media print {
+  body > *:not(#sheet) { display: none !important; }
+  html, body { background: #fff !important; }
+  @page { margin: 16mm 18mm 20mm; }
+
+  #sheet {
+    display: block;
+    color: #000;
+    background: #fff;
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  }
+  #sheet .mono { font-family: 'Fragment Mono', ui-monospace, monospace; }
+
+  .sh-head { padding-bottom: 5mm; border-bottom: 0.6pt solid #000; margin-bottom: 6mm; }
+  .sh-mast { font-size: 8.5pt; letter-spacing: 0.34em; text-transform: uppercase; }
+  .sh-title {
+    margin: 4mm 0 0;
+    font-size: 30pt; line-height: 1.04;
+    font-variation-settings: 'opsz' 96, 'wdth' 84, 'wght' 640;
+    letter-spacing: -0.015em;
+  }
+  .sh-ded { margin: 2.5mm 0 0; font-style: italic; font-size: 11.5pt; }
+  .sh-signed { margin: 3mm 0 0; font-size: 8pt; letter-spacing: 0.06em; }
+
+  .sh-city {
+    margin: 8mm 0 3mm; padding-top: 2.5mm;
+    font-size: 8.5pt; letter-spacing: 0.22em; text-transform: uppercase;
+    border-top: 0.6pt solid #000;
+    break-after: avoid;
+  }
+  .sh-head + .sh-city { border-top: 0; padding-top: 0; margin-top: 0; }
+  .sh-entry { break-inside: avoid; margin: 0 0 5mm; }
+  .sh-line { display: flex; align-items: baseline; gap: 3mm; }
+  .sh-no { font-size: 7.5pt; }
+  .sh-name { margin: 0; font-size: 13pt; font-variation-settings: 'opsz' 40, 'wght' 560; }
+  .sh-meta { margin-top: 0.8mm; font-size: 9.5pt; font-style: italic; }
+  .sh-note { margin: 1.2mm 0 0; font-size: 10pt; line-height: 1.45; max-width: 150mm; }
+  .sh-coords { margin-top: 1mm; font-size: 7.5pt; }
+
+  .sh-colophon {
+    margin-top: 10mm; padding-top: 2.5mm;
+    border-top: 0.6pt solid #000;
+    font-size: 7.5pt; letter-spacing: 0.12em;
+  }
+}

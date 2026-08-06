@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf11';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf11';
-import * as mapView from './map.js?v=rf11';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf11';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf11';
-import { exifGPS } from './exif.js?v=rf11';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf12';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf12';
+import * as mapView from './map.js?v=rf12';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf12';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf12';
+import { exifGPS } from './exif.js?v=rf12';
 
 // ---------- helpers ----------
 
@@ -803,6 +803,7 @@ function openFolioReport(payload) {
     </div>
     <div class="rp-foot">
       ${fresh.length ? `<button class="word-btn" id="rpTakeAll">take all ${fresh.length}</button>` : ''}
+      <button class="word-btn quiet" id="rpPrint">print, or save as pdf</button>
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
   el.hidden = false;
@@ -828,6 +829,16 @@ function openFolioReport(payload) {
     toast(`${fresh.length} places taken, after ${author}`);
   });
   $('#rpLeave').addEventListener('click', () => { clearShareHash(); location.reload(); });
+  $('#rpPrint').addEventListener('click', () => {
+    const theirTags = new Map((payload.tags || []).map(t => [t.id, t.name]));
+    printSheet({
+      title: payload.title || 'untitled',
+      dedication: payload.dedication || '',
+      author,
+      places,
+      tagName: (id) => theirTags.get(id),
+    });
+  });
 }
 
 // an ask arrives: your atlas has already drafted the reply
@@ -978,6 +989,7 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
       <div class="fol-acts">
         <button class="word-btn" id="folCopy">copy the folio link</button>
         <button class="word-btn quiet" id="folPublish">publish to the newsstand</button>
+        <button class="word-btn quiet" id="folPrint">print, or save as pdf</button>
         <button class="word-btn quiet" id="folAll">everything in</button>
       </div>`;
 
@@ -1011,6 +1023,16 @@ function openFolioComposer({ title = '', dedication = '', places = null } = {}) 
       try { await navigator.clipboard.writeText(url); toast('folio copied. hand it to one person'); }
       catch { prompt('Copy this folio:', url); }
     });
+    $('#folPrint').addEventListener('click', () => {
+      const t = $('#folTitle').value.trim();
+      if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
+      if (!chosen.size) return toast('nothing enclosed yet');
+      printSheet({
+        title: t,
+        dedication: $('#folDed').value.trim(),
+        places: pool.filter(p => chosen.has(p.id)),
+      });
+    });
     $('#folPublish').addEventListener('click', async () => {
       const t = $('#folTitle').value.trim();
       if (!t) { $('#folTitle').focus(); return toast('a folio needs a title'); }
@@ -1038,6 +1060,73 @@ async function composeAsk() {
   try { await navigator.clipboard.writeText(url); toast('ask copied. send it to someone whose taste you trust'); }
   catch { prompt('Copy this ask:', url); }
 }
+
+// ---------- the sheet: the atlas typeset for paper, or pdf ----------
+
+const DOC_TITLE = document.title;
+
+function buildSheet({ title, dedication = '', author = store.settings.authorName, places, tagName = null }) {
+  const nameOf = tagName || ((id) => tagById(id)?.name);
+  const groups = new Map();
+  places.forEach(p => {
+    const key = [p.city, p.country].filter(Boolean).join(', ') || 'off the map';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  });
+  const signed = [
+    author ? `kept by ${author}` : '',
+    fmtDate(new Date().toISOString()).toLowerCase(),
+    `${places.length} place${places.length === 1 ? '' : 's'}`,
+  ].filter(Boolean).join(' · ');
+
+  let no = 0;
+  const entry = (p) => {
+    no += 1;
+    const meta = [
+      p.tags.map(nameOf).filter(Boolean).join(', ').toLowerCase(),
+      p.rating ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : ''),
+    ].filter(Boolean).join(' · ');
+    return `<article class="sh-entry">
+      <div class="sh-line"><span class="sh-no mono">${fmtNo(no)}</span><h3 class="sh-name">${esc(p.name)}</h3></div>
+      ${meta ? `<div class="sh-meta">${esc(meta)}</div>` : ''}
+      ${p.note ? `<p class="sh-note">${esc(p.note).replace(/\n/g, '<br>')}</p>` : ''}
+      <div class="sh-coords mono">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
+    </article>`;
+  };
+
+  $('#sheet').innerHTML = `
+    <header class="sh-head">
+      <div class="sh-mast mono">resonate</div>
+      <h1 class="sh-title">${esc(title)}</h1>
+      ${dedication ? `<p class="sh-ded">${esc(dedication)}</p>` : ''}
+      <div class="sh-signed mono">${esc(signed)}</div>
+    </header>
+    ${[...groups.entries()].map(([city, list]) =>
+      `${groups.size > 1 || city !== 'off the map' ? `<h2 class="sh-city mono">${esc(city.toLowerCase())}</h2>` : ''}
+       ${list.map(entry).join('')}`).join('')}
+    <footer class="sh-colophon mono">resonate · jonashertner.github.io/resonate</footer>`;
+}
+
+function atlasSheetOpts() {
+  const author = store.settings.authorName;
+  return { title: author ? `the atlas of ${author}` : 'an atlas', places: filteredPlaces() };
+}
+
+function printSheet(opts) {
+  if (!opts.places.length) return toast('nothing to print yet');
+  buildSheet(opts);
+  document.title = `resonate — ${opts.title}`;
+  window.print();
+}
+
+// the system print command should never catch the raw map: typeset first
+window.addEventListener('beforeprint', () => {
+  if (!$('#sheet').innerHTML) buildSheet(atlasSheetOpts());
+});
+window.addEventListener('afterprint', () => {
+  $('#sheet').innerHTML = '';
+  document.title = DOC_TITLE;
+});
 
 // ---------- the newsstand: the commons, ranked by your own resonance ----------
 
@@ -1212,6 +1301,7 @@ function renderSettings() {
       <div class="word-row">
         <button class="word-btn quiet" id="expJson">export json</button>
         <button class="word-btn quiet" id="expGeo">export geojson</button>
+        <button class="word-btn quiet" id="expPdf">print, or save as pdf</button>
         <button class="word-btn quiet" id="impJson">import</button>
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
@@ -1224,6 +1314,7 @@ function renderSettings() {
   });
   $('#expJson').addEventListener('click', () => download('resonate-atlas.json', store.exportJSON(), 'application/json'));
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
+  $('#expPdf').addEventListener('click', () => printSheet(atlasSheetOpts()));
   $('#impJson').addEventListener('click', () => {
     const file = $('#importFile');
     file.onchange = () => {
@@ -1356,6 +1447,8 @@ const VERBS = {
   light: { run: () => setTheme('light'), hint: 'day field' },
   photo: { run: () => $('#shootFile').click(), hint: 'a photo becomes a place' },
   export: { run: () => download('resonate-atlas.json', store.exportJSON(), 'application/json'), hint: 'your data, yours' },
+  print: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
+  pdf: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   import: { run: () => { openSurface('settingsOverlay', renderSettings); $('#impJson').click(); }, hint: 'bring an atlas in' },
   been: { run: () => setStatusFilter('visited'), hint: 'only places you’ve been' },
   want: { run: () => setStatusFilter('wishlist'), hint: 'only places still to go' },
