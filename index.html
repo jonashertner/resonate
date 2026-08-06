@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf2">
+<link rel="stylesheet" href="css/style.css?v=rf3">
 </head>
 <body class="boot">
 
@@ -41,8 +41,17 @@
 
 <!-- the index: a summoned poster -->
 <section class="index" id="indexOverlay" hidden aria-label="Index of places">
+  <button class="index-x" id="indexClose">close</button>
   <header class="index-head">
     <h1 class="index-count"><span id="ixN">0</span><small>places</small></h1>
+    <nav class="index-go" id="indexGo" aria-label="Go to">
+      <button data-go="folio">folio</button>
+      <button data-go="newsstand">newsstand</button>
+      <button data-go="voices">voices</button>
+      <button data-go="census">census</button>
+      <button data-go="kept">kept</button>
+      <button data-go="keys">keys</button>
+    </nav>
     <div class="index-line" id="statusSeg" role="tablist" aria-label="Status">
       <button data-status="all" aria-pressed="true">all</button>
       <button data-status="visited" aria-pressed="false">been</button>
@@ -111,6 +120,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf2"></script>
+<script type="module" src="js/app.js?v=rf3"></script>
 </body>
 </html>

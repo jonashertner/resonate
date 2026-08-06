@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf2';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf2';
-import * as mapView from './map.js?v=rf2';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf2';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf2';
-import { exifGPS } from './exif.js?v=rf2';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf3';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf3';
+import * as mapView from './map.js?v=rf3';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf3';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf3';
+import { exifGPS } from './exif.js?v=rf3';
 
 // ---------- helpers ----------
 
@@ -1531,6 +1531,21 @@ function init() {
     $('#indexOverlay').hidden ? openIndex() : closeSurface('indexOverlay');
   });
   $('#fmCommand').addEventListener('click', togglePalette);
+  $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
+
+  // the index is the hub: every surface reachable as a word
+  $('#indexGo').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-go]');
+    if (!b) return;
+    closeSurface('indexOverlay');
+    VERBS[b.dataset.go]?.run();
+  });
+
+  // tapping the open field puts the plate away
+  mapView.getMap().on('click', () => {
+    if (!$('#plate').hidden) closeSurface('plate');
+    if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; }
+  });
 
   // command line
   palette.input = $('#paletteInput');

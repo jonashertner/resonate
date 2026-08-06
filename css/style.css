@@ -13,16 +13,17 @@
 @property --tint { syntax: '<number>'; inherits: true; initial-value: 0.4; }
 
 :root {
-  /* role constants — light: pale field, deep ink. WCAG holds for every hue. */
-  --L-f: 0.955; --C-f: 0.012;
-  --L-i: 0.34; --C-i: 0.072;
+  /* role constants — sunlight-proof: deep ink on a bright field, every hue.
+     light pairs land ≥ 12:1; ink-2 ≥ 7:1 even at caption sizes. */
+  --L-f: 0.965; --C-f: 0.01;
+  --L-i: 0.27; --C-i: 0.075;
 
   --field-hue: calc(var(--hue) + var(--split));
   --field: oklch(var(--L-f) var(--C-f) var(--field-hue));
   --ink: oklch(var(--L-i) var(--C-i) var(--hue));
-  --ink-2: color-mix(in oklch, var(--ink) 76%, var(--field));
-  --ink-3: color-mix(in oklch, var(--ink) 40%, var(--field));
-  --ink-4: color-mix(in oklch, var(--ink) 22%, var(--field));
+  --ink-2: color-mix(in oklch, var(--ink) 84%, var(--field));
+  --ink-3: color-mix(in oklch, var(--ink) 52%, var(--field));
+  --ink-4: color-mix(in oklch, var(--ink) 24%, var(--field));
   --counter: oklch(var(--L-i) max(var(--C-i), 0.09) calc(var(--hue) + 150));
   --scrim: color-mix(in srgb, var(--field) 75%, transparent);
 
@@ -45,8 +46,8 @@
 :root { --hue: 300; --split: -180; --tint: 0.4; }
 :root[data-theme="dark"] {
   --hue: 120; --split: 180;
-  --L-f: 0.205; --C-f: 0.03;
-  --L-i: 0.915; --C-i: 0.045;
+  --L-f: 0.17; --C-f: 0.026;
+  --L-i: 0.93; --C-i: 0.042;
 }
 
 @supports not (color: oklch(0% 0 0)) {
@@ -300,8 +301,9 @@ body.dropping::after {
 .index {
   position: fixed; inset: 0; z-index: 40;
   overflow-y: auto; overscroll-behavior: contain;
-  background: color-mix(in oklab, var(--field) 93%, transparent);
+  background: color-mix(in oklab, var(--field) 96%, transparent);
   padding: clamp(20px, 5vw, 72px);
+  padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
   scrollbar-width: thin;
 }
 .index-head {
@@ -326,11 +328,33 @@ body.dropping::after {
   font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
 }
 .index-line button {
-  padding: 4px 0;
-  color: var(--ink-3);
+  padding: 9px 0;
+  color: var(--ink-2);
   letter-spacing: inherit; text-transform: inherit;
   transition: color var(--mo-reflex) var(--e-reflex);
 }
+.index-x {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top)); right: 22px;
+  z-index: 3;
+  font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--ink-2);
+  padding: 10px 0 10px 14px;
+}
+.index-x:hover { color: var(--ink); }
+.index-go {
+  display: flex; flex-wrap: wrap; gap: 2px 26px;
+  margin-top: 14px;
+  font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+}
+.index-go button {
+  padding: 9px 0;
+  color: var(--ink);
+  letter-spacing: inherit; text-transform: inherit;
+  border-bottom: 1.5px solid var(--ink-4);
+  transition: border-color var(--mo-reflex) var(--e-reflex);
+}
+.index-go button:hover { border-color: var(--ink); }
 .index-line button:hover { color: var(--ink-2); }
 .index-line button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
 .index-line button sup { font-family: var(--mono); font-size: 8px; letter-spacing: 0; margin-left: 3px; vertical-align: 0.5em; }
@@ -515,10 +539,12 @@ body.dropping::after {
 .poster {
   position: fixed; inset: 0; z-index: 45;
   overflow-y: auto; overscroll-behavior: contain;
-  background: color-mix(in oklab, var(--field) 94%, transparent);
+  background: color-mix(in oklab, var(--field) 97%, transparent);
   padding: clamp(20px, 5vw, 72px);
+  padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
   scrollbar-width: thin;
 }
+.poster-x { padding: 12px 0 12px 16px; }
 .poster-head { display: flex; align-items: baseline; justify-content: space-between; }
 .poster-word {
   font-size: clamp(64px, 12vh, 150px);
@@ -716,9 +742,17 @@ body.dropping::after {
 /* ---------- mobile ---------- */
 
 @media (max-width: 760px) {
-  .fm-nw { left: 16px; }
+  .fm-nw { left: 16px; font-size: 13px; }
+  .fm-s { font-size: 16px; }
   .fm-se { display: none; }
   .fm-sw { left: 16px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .word-btn { font-size: 13px; padding: 10px 0 4px; }
+  .index-line { font-size: 13px; }
+  .index-go { font-size: 13px; gap: 2px 22px; }
+  .ix-meta { font-size: 11px; }
+  .cmd-row .row-sub { font-size: 11px; }
+  .plate-eyebrow { font-size: 11px; }
+  .stars-line button { font-size: 20px; padding: 6px 4px; }
 
   .plate {
     top: auto; left: 0; right: 0; width: 100%;
