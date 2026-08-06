@@ -871,3 +871,55 @@ body.dropping::after {
 body.greet .fm-word { animation: word-pulse 1.8s ease-in-out 3; }
 @keyframes word-pulse { 50% { opacity: 0.4; } }
 @media (prefers-reduced-motion: reduce) { body.greet .fm-word { animation: none; } }
+
+/* ---------- the first evening ---------- */
+#intro {
+  position: fixed; inset: 0; z-index: 2000;
+  background: #17100d;
+  cursor: pointer;
+}
+#intro video, #intro canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+#intro video { display: none; filter: saturate(0.92) contrast(1.05) brightness(0.94); }
+#intro.has-video video { display: block; }
+#intro.has-video canvas { display: none; }
+.intro-grain {
+  position: absolute; inset: 0;
+  background: var(--grain, none);
+  background-size: 128px;
+  opacity: 0.07;
+  pointer-events: none;
+}
+.intro-word {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(15px, 2vw, 22px);
+  letter-spacing: 0.55em; text-indent: 0.55em; text-transform: uppercase;
+  font-variation-settings: 'wght' 560;
+  color: rgba(244, 238, 226, 0.92);
+  opacity: 0;
+  animation: intro-word-in 2.2s ease 1.4s forwards;
+}
+.intro-enter {
+  position: absolute; left: 50%; bottom: max(26px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: rgba(244, 238, 226, 0.55);
+  opacity: 0;
+  animation: intro-word-in 1.6s ease 2.6s forwards;
+}
+@keyframes intro-word-in { to { opacity: 1; } }
+#intro.dissolve { animation: intro-out 1.9s ease forwards; pointer-events: none; }
+@keyframes intro-out { to { opacity: 0; } }
+body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
+@keyframes field-enter { from { transform: scale(1.045); opacity: 0.6; } }
+
+/* two-intent teaching lines in the command line */
+.cmd-teach { padding: 8px 0; font-size: 13.5px; color: var(--ink-2); }
+.cmd-teach b { color: var(--ink); font-variation-settings: 'wght' 650; }
+
+.mark.proposed { opacity: 0.85; }
+.mark.proposed .mk-ring { animation: breathe 2600ms ease-in-out infinite; }

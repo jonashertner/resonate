@@ -303,6 +303,25 @@ export function locate(onDone, onError) {
   map.locate({ setView: true, maxZoom: 14, enableHighAccuracy: false });
 }
 
+let previewMarker = null;
+export function previewPin(lat, lng) {
+  clearPreview();
+  previewMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: 'mark-icon',
+      html: `<div class="mark wish proposed"><svg width="30" height="30" viewBox="0 0 30 30">
+        <circle cx="15" cy="15" r="8" class="mk-ring"/>
+        <circle cx="15" cy="15" r="2.4" class="mk-dot"/>
+      </svg></div>`,
+      iconSize: [30, 30], iconAnchor: [15, 15],
+    }),
+    interactive: false,
+  }).addTo(map);
+}
+export function clearPreview() {
+  if (previewMarker) { map.removeLayer(previewMarker); previewMarker = null; }
+}
+
 export function invalidate() { map.invalidateSize(); }
 export function getMap() { return map; }
 export function closeAddPopup() { /* superseded by the add-confirm line; kept for callers */ }

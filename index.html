@@ -14,9 +14,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf9">
+<link rel="stylesheet" href="css/style.css?v=rf10">
 </head>
 <body class="boot">
+
+<!-- first visit: an evening at a long table, dissolving into the map -->
+<div id="intro" hidden>
+  <video id="introVideo" muted playsinline preload="auto" src="assets/intro.mp4"></video>
+  <canvas id="introCanvas"></canvas>
+  <div class="intro-grain"></div>
+  <span class="intro-word">resonate</span>
+  <span class="intro-enter mono" id="introEnter">enter</span>
+</div>
 
 <div id="app" class="app">
   <div id="map" aria-label="The field, a map of your saved places"></div>
@@ -27,7 +36,7 @@
     <span class="fm-hint" id="fmHint" hidden>press here. the index holds everything.</span>
   </button>
   <button class="fm fm-s" id="fmCommand" aria-label="Search, add, or command">
-    anywhere<kbd class="mono">/</kbd>
+    find or add, anywhere<kbd class="mono">/</kbd>
   </button>
   <output class="fm fm-se mono" id="coordsReadout" aria-live="off"></output>
   <div class="fm fm-sw mono">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OSM</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></div>
@@ -171,6 +180,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf9"></script>
+<script type="module" src="js/app.js?v=rf10"></script>
 </body>
 </html>

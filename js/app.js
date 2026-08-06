@@ -3,12 +3,12 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf9';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf9';
-import * as mapView from './map.js?v=rf9';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf9';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf9';
-import { exifGPS } from './exif.js?v=rf9';
+import { store, newPlace, newTag, demoData, TAG_STATIONS } from './store.js?v=rf10';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf10';
+import * as mapView from './map.js?v=rf10';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf10';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf10';
+import { exifGPS } from './exif.js?v=rf10';
 
 // ---------- helpers ----------
 
@@ -168,7 +168,7 @@ function popSurface() {
   const id = surfaces.pop();
   if (!id) return false;
   surfaceEl(id).hidden = true;
-  if (id === 'plate') { state.selectedId = null; state.foreign = null; syncMarkers(); applyWorldState(); }
+  if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
   if (id === 'paletteOverlay') palette.remoteAbort?.abort();
   return true;
 }
@@ -178,7 +178,7 @@ function closeSurface(id) {
   if (i === -1) return;
   surfaces.splice(i, 1);
   surfaceEl(id).hidden = true;
-  if (id === 'plate') { state.selectedId = null; state.foreign = null; syncMarkers(); applyWorldState(); }
+  if (id === 'plate') { state.selectedId = null; state.foreign = null; state.proposal = null; mapView.clearPreview(); syncMarkers(); applyWorldState(); }
 }
 
 function topSurface() { return surfaces[surfaces.length - 1]; }
@@ -566,6 +566,37 @@ async function addFromPhoto(file) {
 }
 
 // ---------- adding places ----------
+
+// a found place is opened, not taken: you decide on the plate
+function proposePlace(r) {
+  state.proposal = r;
+  mapView.previewPin(r.lat, r.lng);
+  mapView.flyToPlace(r);
+  const wrap = $('#plate');
+  wrap.innerHTML = `
+    <div class="plate-eyebrow">
+      <span>found. not yet yours</span>
+      <span>${fmtDMS(r.lat, r.lng)}</span>
+      <button id="ppClose">close</button>
+    </div>
+    <h1 class="plate-name">${esc(r.name)}</h1>
+    <div class="plate-sub">${esc(r.sub || r.address || '')}</div>
+    <div class="plate-acts">
+      <button class="word-btn" id="ppKeep">keep in your atlas</button>
+      <button class="word-btn quiet" id="ppDirections">directions ↗</button>
+    </div>`;
+  openSurface('plate');
+  const settle = () => { mapView.clearPreview(); state.proposal = null; };
+  $('#ppClose').addEventListener('click', () => { settle(); closeSurface('plate'); });
+  $('#ppKeep').addEventListener('click', () => {
+    settle();
+    addPlaceFromResult(r);
+    toast('kept. make it true');
+  });
+  $('#ppDirections').addEventListener('click', () => {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`, '_blank', 'noopener');
+  });
+}
 
 function addPlaceFromResult(r) {
   const place = store.addPlace(newPlace({
@@ -1415,6 +1446,9 @@ function rowHTML(item, i) {
   if (item.kind === 'coords') {
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</span><span class="row-sub">↵ propose a place here</span></button>`;
   }
+  if (item.kind === 'stand') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">the newsstand answers</span><span class="row-sub">${item.n} folio${item.n > 1 ? 's' : ''} · ↵ open</span></button>`;
+  }
   return '';
 }
 
@@ -1433,7 +1467,7 @@ function activateRow(i) {
   if (!item) return;
   if (item.kind === 'local') { popSurface(); selectPlace(item.place.id, { fly: true }); return; }
   if (item.kind === 'corrplace') { popSurface(); openForeignPlate(item.c.id, item.p.id); return; }
-  if (item.kind === 'remote') { popSurface(); addPlaceFromResult(item.r); return; }
+  if (item.kind === 'remote') { popSurface(); proposePlace(item.r); return; }
   if (item.kind === 'verb') { popSurface(); item.run(); return; }
   if (item.kind === 'coords') { popSurface(); proposeAdd(item.lat, item.lng); return; }
   if (item.kind === 'tag') {
@@ -1444,6 +1478,7 @@ function activateRow(i) {
     return;
   }
   if (item.kind === 'voice') { popSurface(); openSurface('corrOverlay', renderVoices); return; }
+  if (item.kind === 'stand') { popSurface(); openNewsstand(item.q); return; }
 }
 
 const remoteSearch = debounce(async (q) => {
@@ -1459,8 +1494,13 @@ const remoteSearch = debounce(async (q) => {
     const remote = results
       .filter(r => !keys.has(`${r.lat.toFixed(4)},${r.lng.toFixed(4)}`))
       .map(r => ({ kind: 'remote', r }));
+    let stand = [];
+    if (newsIndex) {
+      const nOnStand = rankFolios(newsIndex, q).length;
+      if (nOnStand) stand = [{ kind: 'stand', q, n: nOnStand }];
+    }
     // column-reverse: first row sits nearest the input
-    paint([...locals, ...voices, ...remote],
+    paint([...locals, ...voices, ...stand, ...remote],
       (!locals.length && !voices.length && !remote.length) ? `nothing answers “${esc(q)}”` : '');
   } catch (e) {
     if (e.name !== 'AbortError') console.warn('search failed', e);
@@ -1490,8 +1530,110 @@ function renderPaletteResults(q) {
   if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
   const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
   const voices = corrMatches(r.rest);
-  paint([...locals, ...voices], r.rest ? '' : 'name a place, or  #tag   >verb   @voice');
+  if (!r.rest) {
+    paint([...locals, ...voices], '');
+    palette.results.insertAdjacentHTML('afterbegin',
+      `<div class="cmd-teach"><b>find.</b> type a city or a craving. yours, your voices, and the newsstand answer.</div>
+       <div class="cmd-teach"><b>keep.</b> type a place to add it. or drop a photo, or press long on the map.</div>`);
+    return;
+  }
+  paint([...locals, ...voices], '');
   remoteSearch(r.rest);
+}
+
+
+// ---------- the first evening ----------
+
+function runIntro(onDone) {
+  const el = $('#intro');
+  const video = $('#introVideo');
+  const canvas = $('#introCanvas');
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (store.settings.introSeen || RM) { onDone(); return; }
+  el.hidden = false;
+  let raf = 0;
+  let finished = false;
+
+  // the generated scene: a long table at dusk, spoken in bokeh
+  function startScene() {
+    const ctx = canvas.getContext('2d');
+    const fit = () => { canvas.width = innerWidth; canvas.height = innerHeight; };
+    fit();
+    const R = (a, b) => a + Math.random() * (b - a);
+    const lights = Array.from({ length: 22 }, (_, i) => ({
+      x: Math.random(), y: 0.35 + Math.random() * 0.5,
+      r: R(0.02, 0.11), hue: R(22, 44), sat: R(60, 90), lum: R(48, 64),
+      drift: R(-0.006, 0.006), flick: R(2, 6), phase: R(0, 6.28), deep: i % 3 === 0,
+    }));
+    const t0 = performance.now();
+    const draw = (now) => {
+      const t = (now - t0) / 1000;
+      const w = canvas.width, h = canvas.height;
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#171019');
+      sky.addColorStop(0.55, '#2b1a1a');
+      sky.addColorStop(0.8, '#4a2c17');
+      sky.addColorStop(1, '#241309');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'lighter';
+      for (const L of lights) {
+        const fl = 0.55 + 0.45 * Math.sin(t * L.flick + L.phase) * Math.sin(t * 0.7 + L.phase);
+        const x = ((L.x + t * L.drift) % 1 + 1) % 1 * w;
+        const y = L.y * h + Math.sin(t * 0.4 + L.phase) * 6;
+        const r = L.r * Math.min(w, h) * (L.deep ? 1.9 : 1);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        const alpha = (L.deep ? 0.10 : 0.22) * fl;
+        g.addColorStop(0, `hsla(${L.hue}, ${L.sat}%, ${L.lum}%, ${alpha})`);
+        g.addColorStop(1, 'hsla(30, 60%, 30%, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 6.29);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      const vg = ctx.createRadialGradient(w / 2, h * 0.62, Math.min(w, h) * 0.28, w / 2, h * 0.62, Math.max(w, h) * 0.75);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(8,4,4,0.7)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, w, h);
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    addEventListener('resize', fit, { once: true });
+  }
+
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    store.settings.introSeen = true;
+    store.saveSettings();
+    document.body.classList.add('entering');
+    el.classList.add('dissolve');
+    setTimeout(() => {
+      cancelAnimationFrame(raf);
+      try { video.pause(); } catch { /* fine */ }
+      el.hidden = true;
+      document.body.classList.remove('entering');
+      onDone();
+    }, 1900);
+  };
+
+  // real footage takes over when assets/intro.mp4 exists
+  video.addEventListener('canplay', () => {
+    el.classList.add('has-video');
+    cancelAnimationFrame(raf);
+    video.play().catch(() => {});
+  }, { once: true });
+  video.addEventListener('error', () => {}, { once: true });
+  video.addEventListener('ended', () => finish(), { once: true });
+  startScene();
+
+  el.addEventListener('click', finish);
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') { finish(); document.removeEventListener('keydown', esc); }
+  });
+  setTimeout(finish, 6200);
 }
 
 // ---------- init ----------
@@ -1533,6 +1675,7 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
+  runIntro(() => { $('#nameAskInput') && maybeAskName(); });
   if (!store.settings.indexSeen && !store.settings.hintShown) {
     $('#fmHint').hidden = false;
     store.settings.hintShown = true;
@@ -1540,9 +1683,10 @@ function init() {
     setTimeout(() => { $('#fmHint').hidden = true; }, 12000);
   }
 
-  if (!store.settings.authorName && !store.settings.namedAsked) {
+  function maybeAskName() {
+    if (store.settings.authorName || store.settings.namedAsked) return;
     const ask = $('#nameAsk');
-    setTimeout(() => { ask.hidden = false; $('#nameAskInput').focus(); }, 1600);
+    setTimeout(() => { ask.hidden = false; $('#nameAskInput').focus(); }, 900);
     const done = (name) => {
       store.settings.namedAsked = true;
       if (name) { store.settings.authorName = name; renderCount(); }
@@ -1704,6 +1848,9 @@ function init() {
       renderChips(); renderList(); syncMarkers(); applyWorldState();
     }
   });
+
+  fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })
+    .then(r => r.json()).then(ix => { newsIndex = ix; }).catch(() => {});
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
