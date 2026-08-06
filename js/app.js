@@ -3,13 +3,13 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf25';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf25';
-import * as mapView from './map.js?v=rf25';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf25';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf25';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf25';
-import { exifGPS } from './exif.js?v=rf25';
+import { store, newPlace, newTag, demoData, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf26';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf26';
+import * as mapView from './map.js?v=rf26';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf26';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf26';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf26';
+import { exifGPS } from './exif.js?v=rf26';
 
 // ---------- helpers ----------
 
@@ -188,8 +188,8 @@ function raiseDialog(el, label) {
   if (label) el.setAttribute('aria-label', label);
   el.hidden = false;
   setBackgroundInert(true);
-  const first = el.querySelector(FOCUSABLE);
-  (first || el).focus?.();
+  el.setAttribute('tabindex', '-1');
+  el.focus?.();
 }
 
 function dropDialog(el) {
@@ -249,8 +249,8 @@ function openSurface(id, onShow) {
   setTimeout(() => el.classList.remove('opening'), 700);
   onShow?.();
   if (modal && id !== 'paletteOverlay') {
-    const items = focusables(el);
-    (items[0] || el).focus?.();
+    el.setAttribute('tabindex', '-1');
+    el.focus?.();
   }
 }
 
@@ -2016,8 +2016,12 @@ function runIntro(onDone) {
   el.addEventListener('click', finish);
   $('#introSkip')?.addEventListener('click', (e) => { e.stopPropagation(); finish(); });
   document.addEventListener('keydown', function esc(e) {
-    if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') { finish(); document.removeEventListener('keydown', esc); }
-  });
+    if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    document.removeEventListener('keydown', esc, true);
+    finish();
+  }, true);
 }
 
 // ---------- init ----------
@@ -2050,10 +2054,16 @@ function init() {
   $('#coordsReadout').textContent = fmtDMS(c0.lat, c0.lng);
 
   renderAll();
-  // an atlas that already exists has answered this question; and someone
-  // arriving on a link is answering a person, not starting an atlas
+
+  // read the link first: a visitor who was handed something is answering a
+  // person, not starting an atlas, and must never be offered a first-run
+  // choice over the top of it. an atlas that already exists has answered
+  // that question too.
+  const payload = parseShareHash();
+  if (payload) openReport(payload);
+
   runIntro(() => {
-    if (store.settings.chosen || store.places.length || !$('#reportOverlay').hidden) return;
+    if (store.settings.chosen || store.places.length || payload) return;
     openThreshold();
   });
   if (!store.settings.indexSeen && !store.settings.hintShown) {
@@ -2102,10 +2112,6 @@ function init() {
   setTimeout(() => document.body.classList.remove('boot'), 700);
   document.body.classList.add('greet');
   setTimeout(() => document.body.classList.remove('greet'), 5600);
-
-  // shared atlas → the resonance report
-  const payload = parseShareHash();
-  if (payload) openReport(payload);
 
   // corner marks
   $('#fmIndex').addEventListener('click', () => {
