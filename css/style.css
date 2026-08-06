@@ -568,6 +568,8 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   animation: plate-in 300ms var(--e-enter) both;
 }
 @keyframes plate-in { from { opacity: 0; transform: translateX(24px); } }
+/* on a phone the plate is a bottom sheet: it rises, it does not sidle */
+@keyframes plate-up { from { opacity: 0; transform: translateY(28px); } }
 .plate-eyebrow {
   display: flex; justify-content: space-between; gap: 10px;
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
@@ -892,6 +894,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   .plate {
     top: auto; bottom: 0; left: 0; right: 0; width: 100%;
     height: min(66vh, calc(var(--app-h) - 96px));
+    animation-name: plate-up;
     padding: 84px 20px 40px;
     background: linear-gradient(0deg, var(--field) calc(100% - 90px), transparent);
   }

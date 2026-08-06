@@ -58,7 +58,9 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
   map.addLayer(clusterGroup);
 
   clusterGroup.on('clusterclick', (e) => {
-    map.flyToBounds(e.layer.getBounds(), { ...overlayPadding(), maxZoom: 16, duration: 0.5 });
+    const b = e.layer.getBounds();
+    if (RM.matches) map.fitBounds(b, { ...overlayPadding(), maxZoom: 16, animate: false });
+    else map.flyToBounds(b, { ...overlayPadding(), maxZoom: 16, duration: 0.5 });
   });
 
   // ways go under the marks: a line is ground, a mark is a decision
@@ -170,7 +172,8 @@ export function setRouteCursor(lat, lng) {
 export function frameRoute(route) {
   if (!map || !Array.isArray(route?.path) || route.path.length < 2) return;
   const b = L.latLngBounds(route.path.map(p => [p.lat, p.lng]));
-  map.flyToBounds(b, { ...overlayPadding(), maxZoom: 16, duration: 0.7 });
+  if (RM.matches) map.fitBounds(b, { ...overlayPadding(), maxZoom: 16, animate: false });
+  else map.flyToBounds(b, { ...overlayPadding(), maxZoom: 16, duration: 0.7 });
 }
 
 // the first time a hand touches the field, whoever is waiting is told
@@ -264,6 +267,21 @@ export function refreshMarkerIcon(place, _tagById, selected) {
 }
 
 // ---------- the ripple: the field acknowledges a fix ----------
+
+// the acknowledgement lands once the flight is over, so it spreads from the
+// place itself rather than from where the place used to be on screen
+export function rippleWhenSettled(lat, lng) {
+  if (RM.matches) return;
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    map.off('moveend', go);
+    ripple(lat, lng);
+  };
+  map.once('moveend', go);
+  setTimeout(go, 750);
+}
 
 export function ripple(lat, lng) {
   if (RM.matches) return;

@@ -3,14 +3,14 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf36';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf36';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf36';
-import * as mapView from './map.js?v=rf36';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf36';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf36';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf36';
-import { exifGPS } from './exif.js?v=rf36';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf37';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf37';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf37';
+import * as mapView from './map.js?v=rf37';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf37';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf37';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf37';
+import { exifGPS } from './exif.js?v=rf37';
 
 // ---------- helpers ----------
 
@@ -36,7 +36,9 @@ function safeUrl(u) {
 }
 
 let toastTimer;
+let lastToastAt = 0;
 function toast(msg, ms = 2800) {
+  lastToastAt = Date.now();
   const el = $('#toast');
   el.textContent = msg;
   el.hidden = false;
@@ -340,14 +342,15 @@ function renderChips() {
 function renderList() {
   const wrap = $('#listView');
   const places = filteredPlaces();
-  if (!places.length) {
+  // an arrangement answered only by ways is not nothing
+  if (!places.length && !filteredRoutes().length) {
     wrap.innerHTML = allPlaces().length === 0
       ? `<div class="ix-empty">Every place that ever <b>resonated</b>, held in one field.
           <p>Press <b>/</b> and name a place. Drop a photo, or a <b>gpx</b> from any
           walking app, on the field. Or open a
-          <button class="word-btn" id="emptyDemo" style="font-size:inherit;letter-spacing:0;text-transform:none">specimen atlas</button>.</p>
+          <button class="word-btn" id="emptyDemo" style="font-size:inherit;letter-spacing:0;text-transform:none">sample atlas</button>.</p>
         </div>`
-      : `<div class="ix-empty">Nothing answers this arrangement.
+      : `<div class="ix-empty">nothing answers this arrangement.
           <p><button class="word-btn quiet" id="emptyClear">clear the filters</button></p>
         </div>`;
     $('#emptyDemo')?.addEventListener('click', () => { seedDemo(); });
@@ -463,7 +466,7 @@ function selectPlace(id, { fly = false, edit = false, quiet = false } = {}) {
   // quiet: mark it on the field, but raise no plate behind whatever stands in front
   if (quiet) return;
   applyWorldState();
-  mapView.ripple(place.lat, place.lng);
+  mapView.rippleWhenSettled(place.lat, place.lng);
   if (fly) mapView.flyToPlace(place);
   renderPlate(place, { edit });
   openSurface('plate');
@@ -471,6 +474,9 @@ function selectPlace(id, { fly = false, edit = false, quiet = false } = {}) {
 
 function renderPlate(place, { edit = false, foreign = null } = {}) {
   const wrap = $('#plate');
+  // re-rendering the same card must not throw the reader back to the top
+  const keepScroll = wrap.dataset.pid === place.id ? wrap.scrollTop : 0;
+  wrap.dataset.pid = place.id;
   const ro = !!foreign;
   const no = ro ? null : accessionMap().get(place.id);
   const tagWords = allTags().map(t => `
@@ -565,6 +571,8 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     renderCount(); renderChips();
     return true;
   };
+
+  if (keepScroll) wrap.scrollTop = keepScroll;
 
   const nameEl = $('#pName');
   nameEl.addEventListener('blur', () => {
@@ -884,6 +892,8 @@ function profileSVG(pf) {
 
 function renderRoutePlate(route) {
   const wrap = $('#plate');
+  const keepScroll = wrap.dataset.pid === route.id ? wrap.scrollTop : 0;
+  wrap.dataset.pid = route.id;
   const m = {
     km: route.km, ascent: route.ascent, descent: route.descent,
     high: route.high, low: route.low, hours: route.hours,
@@ -945,6 +955,8 @@ function renderRoutePlate(route) {
       <button class="word-btn quiet" id="pRouteGpx">export gpx</button>
       <button class="word-btn quiet" id="pRouteRemove">remove</button>
     </div>`;
+
+  if (keepScroll) wrap.scrollTop = keepScroll;
 
   const save = (patch) => {
     const saved = store.updateRoute(route.id, { ...patch, sample: false });
@@ -1392,7 +1404,7 @@ function openAtlasReport(payload) {
     </div>` : ''}
     <div class="rp-foot">
       ${store.places.length < 3 ? `<button class="word-btn" id="rpBegin">begin with a copy of this atlas</button>` : ''}
-      <button class="word-btn ${store.places.length < 3 ? 'quiet' : ''}" id="rpKeep">keep ${esc(name)} as a correspondent</button>
+      <button class="word-btn ${store.places.length < 3 ? 'quiet' : ''}" id="rpKeep">keep ${esc(name)} as a voice</button>
       <button class="word-btn quiet" id="rpLook">just look around</button>
       <button class="word-btn quiet" id="rpLeave">open my atlas</button>
     </div>`;
@@ -1514,9 +1526,10 @@ function openFolioShelf() {
         ${names ? `<span class="fs-names">${esc(names)}${r.places.length > 3 ? ' …' : ''}</span>` : ''}
         ${f.dedication ? `<span class="fs-ded">${esc(f.dedication)}</span>` : ''}
       </button>`;
-    }).join('') : `<div class="news-note">A folio is a titled set of places, kept here for yourself.
-      Hand it to one person as a link, publish it, or print it, whenever you choose.
-      Nothing is shared by keeping it.</div>`}
+    }).join('') : `<div class="ix-empty">A folio is a titled set of places, kept here <b>for yourself</b>.
+      <p>Hand it to one person as a link, publish it, or print it, whenever you
+      choose. Nothing is shared by keeping it.</p>
+    </div>`}
     <div class="fol-acts">
       <button class="word-btn" id="folNew">compose a new folio</button>
     </div>`;
@@ -1630,8 +1643,10 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         places: sel,
         routes: wraySelection(),
       });
-      try { await navigator.clipboard.writeText(url); toast('folio copied. hand it to one person'); }
-      catch { prompt('Copy this folio:', url); }
+      handOver(url, 'the folio', {
+        title: t,
+        text: `${t}${author ? `, a folio from ${author}` : ', a folio'}`,
+      });
     });
     $('#folPrint').addEventListener('click', () => {
       const t = needsTitle();
@@ -1680,7 +1695,7 @@ function fileIntoFolio(placeId) {
   }).join('');
   body.innerHTML = `
     <div class="fol-count">file “${esc(placeById(placeId)?.name || '')}” into</div>
-    ${rows || '<div class="news-note">No folios on the shelf yet.</div>'}
+    ${rows || '<div class="news-note">no folios on the shelf yet.</div>'}
     <div class="fol-acts">
       <button class="word-btn quiet" id="folNewWith">a new folio, starting with it</button>
     </div>`;
@@ -1705,8 +1720,7 @@ async function composeAsk() {
   if (!q || !q.trim()) return;
   const from = await ensureAuthor();
   const url = makeAskUrl({ from, q: q.trim() });
-  try { await navigator.clipboard.writeText(url); toast('ask copied. send it to someone whose taste you trust'); }
-  catch { prompt('Copy this ask:', url); }
+  handOver(url, 'the ask', { title: `an ask from ${from}`, text: `${from} asks: ${q.trim()}` });
 }
 
 // ---------- the sheet: the atlas typeset for paper, or pdf ----------
@@ -1786,7 +1800,7 @@ function atlasSheetOpts() {
 function printSheet(opts) {
   if (!opts.places.length && !(opts.routes || []).length) return toast('nothing to print yet');
   buildSheet(opts);
-  document.title = `resonate — ${opts.title}`;
+  document.title = `resonate · ${opts.title}`;
   window.print();
 }
 
@@ -1840,7 +1854,7 @@ async function openNewsstand(initialQ = '') {
     try {
       newsIndex = normIndex(await (await fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })).json());
     } catch {
-      body.innerHTML = `<div class="news-note">The newsstand is unreachable right now. Try again with a connection.</div>`;
+      body.innerHTML = `<div class="news-note">the newsstand is unreachable right now. try again with a connection.</div>`;
       return;
     }
   }
@@ -1864,6 +1878,9 @@ async function openNewsstand(initialQ = '') {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
     $$('.news-row', body).forEach(row => row.addEventListener('click', async () => {
+      if (row.classList.contains('busy')) return;
+      row.classList.add('busy');
+      row.setAttribute('aria-busy', 'true');
       try {
         const rec = await (await fetch(`${COMMONS}/folios/${row.dataset.file}`, { cache: 'no-cache' })).json();
         // the commons keeps domains by name; give them ids so an adopted
@@ -1888,6 +1905,7 @@ async function openNewsstand(initialQ = '') {
         closeSurface('newsOverlay');
         openFolioReport(payload);
       } catch { toast('could not open that folio'); }
+      finally { row.classList.remove('busy'); row.removeAttribute('aria-busy'); }
     }));
   };
   paint(initialQ);
@@ -1922,13 +1940,15 @@ function queryMyAtlas(q) {
 const LINK_SOFT_LIMIT = 8000;
 const LINK_HARD_LIMIT = 16000;
 
-function handOver(url, what) {
+function handOver(url, what, { title = '', text = '' } = {}) {
   const send = async () => {
     if (navigator.share) {
-      try { await navigator.share({ text: url }); return; }
-      catch (e) { if (e && e.name === 'AbortError') return; }
+      try {
+        await navigator.share(title || text ? { title, text, url } : { url });
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') return; }
     }
-    try { await navigator.clipboard.writeText(url); toast(`${what} copied`); }
+    try { await navigator.clipboard.writeText(url); toast(`${what} copied. hand it to one person`); }
     catch { window.prompt('Copy this:', url); }
   };
   send();
@@ -1974,7 +1994,13 @@ async function shareMap() {
     </div>
     ${tooLong ? '<p class="sh-warn">This atlas is too long to travel as a link. Hand over a folio, or send the file.</p>' : ''}`;
 
-  $('#shGo')?.addEventListener('click', () => { closeSurface('shareOverlay'); handOver(url, 'your atlas'); });
+  $('#shGo')?.addEventListener('click', () => {
+    closeSurface('shareOverlay');
+    handOver(url, 'your atlas', {
+      title: author ? `the atlas of ${author}` : 'an atlas',
+      text: author ? `${author} hands you their atlas` : 'an atlas, handed to you',
+    });
+  });
   $('#shFolio').addEventListener('click', () => { closeSurface('shareOverlay'); openFolioComposer(); });
   $('#shFile').addEventListener('click', () => {
     closeSurface('shareOverlay');
@@ -1999,7 +2025,7 @@ function renderStats() {
     if (p.city) cities.add(p.city);
   });
   if (!places.length) {
-    body.innerHTML = `<p class="stat-opening">Nothing counted yet. <em>The field is waiting.</em></p>`;
+    body.innerHTML = `<p class="stat-opening">nothing counted yet. <em>the field is waiting.</em></p>`;
     return;
   }
   const tagRows = allTags()
@@ -2183,7 +2209,7 @@ const VERBS = {
   kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
   settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
   tags: { run: () => openSurface('tagsOverlay', renderTags), hint: 'the domains of your taste' },
-  voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'your correspondents' },
+  voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'the atlases you keep' },
   keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
   frame: { run: () => mapView.fitAll(filteredPlaces()), hint: 'fit everything in view' },
   locate: { run: () => mapView.locate(null, () => toast('location unavailable')), hint: 'find me' },
@@ -2200,7 +2226,8 @@ const VERBS = {
   been: { run: () => setStatusFilter('visited'), hint: 'only places you’ve been' },
   want: { run: () => setStatusFilter('wishlist'), hint: 'only places still to go' },
   all: { run: () => setStatusFilter('all'), hint: 'everything' },
-  specimen: { run: seedDemo, hint: 'a demo atlas to play with' },
+  specimen: { run: seedDemo, hint: 'a sample atlas, yours to edit' },
+  sample: { run: seedDemo, hint: 'a sample atlas, yours to edit' },
   folio: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
   folios: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
   ask: { run: composeAsk, hint: 'request someone’s taste' },
@@ -2332,7 +2359,17 @@ async function runWorldSearch(q) {
   if (!q || q.length < 2) return;
   palette.remoteAbort?.abort();
   palette.remoteAbort = new AbortController();
-  paint([], 'asking the world…');
+  // your own matches stay on screen while the world is asked
+  {
+    const locals = localMatches(q).map(p => ({ kind: 'local', place: p }));
+    const voices = corrMatches(q);
+    let stand = [];
+    if (newsIndex) {
+      const nOnStand = rankFolios(newsIndex, q).length;
+      if (nOnStand) stand = [{ kind: 'stand', q, n: nOnStand }];
+    }
+    paint([...locals, ...voices, ...stand], 'asking the world…');
+  }
   try {
     const results = await searchGeo(q, { signal: palette.remoteAbort.signal });
     if (palette.input.value.trim() !== q) return;
@@ -2379,7 +2416,7 @@ function renderPaletteResults(q) {
     const items = store.correspondents
       .filter(c => c.name.toLowerCase().includes(r.rest))
       .map(c => ({ kind: 'voice', c }));
-    return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no correspondents yet. >share to begin the exchange');
+    return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no voices yet. >share to begin the exchange');
   }
   if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
   const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
@@ -2569,7 +2606,14 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
 // ---------- init ----------
 
 function init() {
-  setWriteFailedHandler(() => toast('this browser refused to save. export your atlas before you lose it', 6000));
+  setWriteFailedHandler(() => {
+    // callers give their own, more specific sentence; this net catches the rest
+    setTimeout(() => {
+      if (Date.now() - lastToastAt > 450) {
+        toast('this browser refused to save. export your atlas before you lose it', 6000);
+      }
+    }, 80);
+  });
   store.load();
 
   mapView.setRouteClickHandler((id) => selectRoute(id, { fly: false }));
