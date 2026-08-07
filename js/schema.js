@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf58';
+import { decodePath } from './route.js?v=rf59';
 
 export const SCHEMA_VERSION = 4;
 
@@ -365,6 +365,12 @@ export function normFolioCard(raw) {
     countries: strList(f.countries, 120, 8),
     tags: strList(f.tags, 60, 12),
     publishedAt: str(f.publishedAt, 40),
+    // what a public folio must declare about itself, so a reader can weigh it
+    pov: str(f.pov, 200),
+    scope: str(f.scope, 80),
+    reviewedAt: str(f.reviewedAt, 40),
+    visitedAll: f.visitedAll === true,
+    language: str(f.language, 8),
   };
 }
 

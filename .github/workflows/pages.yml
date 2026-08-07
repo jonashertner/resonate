@@ -34,7 +34,7 @@ jobs:
         run: cd vendor/argon2 && shasum -a 256 -c SHA256SUMS
       - name: no em-dash reaches a reader
         run: |
-          if grep -rn '—' index.html SECURITY.md README.md THREATS.md METHOD.md club/SPEC.md; then
+          if grep -rn '—' index.html SECURITY.md README.md THREATS.md METHOD.md COMMONS.md club/SPEC.md; then
             echo "an em-dash is in the page copy"
             exit 1
           fi
@@ -91,7 +91,7 @@ jobs:
         run: |
           for p in css/style.css js/app.js js/club.js js/schema.js sw.js assets/intro.mp4 manifest.webmanifest \
                    vendor/argon2/argon2.umd.min.js fonts/bricolage-latin.woff2 \
-                   SPEC.md THREATS.md METHOD.md SECURITY.md .well-known/security.txt; do
+                   SPEC.md THREATS.md METHOD.md COMMONS.md SECURITY.md .well-known/security.txt; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 200 ] || exit 1

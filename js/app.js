@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf58';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf58';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf58';
-import * as mapView from './map.js?v=rf58';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf58';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf58';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf58';
-import { exifGPS } from './exif.js?v=rf58';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf58';
-import * as photoStore from './photos.js?v=rf58';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf58';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf59';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf59';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf59';
+import * as mapView from './map.js?v=rf59';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf59';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf59';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf59';
+import { exifGPS } from './exif.js?v=rf59';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf59';
+import * as photoStore from './photos.js?v=rf59';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf59';
 
 // ---------- helpers ----------
 
@@ -2066,7 +2066,12 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       const t = needsTitle();
       if (!t) return;
       const author = await ensureAuthor();
-      const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, selection()) + '\n```';
+      const pov = await askText('Where do you stand? One line, so a reader knows whose eyes these are.',
+        { yes: 'that is it', no: 'never mind', placeholder: 'a decade of sunday mornings in basel' });
+      if (pov === null) return;
+      const visitedAll = await ask('Have you stood in every place enclosed?',
+        { yes: 'every one', no: 'not all of them' });
+      const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, selection(), { pov, visitedAll }) + '\n```';
       try { await navigator.clipboard.writeText(block); }
       catch { return askText('Copy this, then paste it into the issue.', { value: block, yes: 'done', no: 'close' }); }
       const issueUrl = 'https://github.com/jonashertner/resonate-commons/issues/new'
@@ -2260,6 +2265,36 @@ function rankFolios(index, q) {
     .sort((a, b) => b.score - a.score);
 }
 
+// The stand is a shelf, and a shelf has sections. These are computed here,
+// from the same signals the ranking uses, so a reader can find the folio that
+// is unlike them as easily as the one that is not.
+function shelve(ranked) {
+  const domains = myDomainNames();
+  const cities = myCityNames();
+  const now = Date.now();
+  const fresh = f => f.reviewedAt && (now - Date.parse(f.reviewedAt)) < 90 * 864e5;
+  const voices = new Set(store.correspondents.map(c => c.name.toLowerCase()));
+
+  const shelves = [
+    { head: 'likely to resonate', pick: ({ score }) => score > 0.8 },
+    { head: 'from voices you keep', pick: ({ f }) => voices.has((f.author || '').toLowerCase()) },
+    { head: 'near you', pick: ({ f }) => (f.cities || []).some(c => cities.has(c.toLowerCase())) },
+    { head: 'small and specific', pick: ({ f }) => f.n > 0 && f.n <= 7 && (f.cities || []).length <= 1 },
+    { head: 'recently reviewed', pick: ({ f }) => fresh(f) },
+    { head: 'deliberately unlike your atlas', pick: ({ f }) => !(f.tags || []).some(t => domains.has(t.toLowerCase())) },
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const sh of shelves) {
+    const rows = ranked.filter(r => !seen.has(r.f.file) && sh.pick(r)).slice(0, 4);
+    rows.forEach(r => seen.add(r.f.file));
+    if (rows.length) out.push({ head: sh.head, rows });
+  }
+  const rest = ranked.filter(r => !seen.has(r.f.file));
+  if (rest.length) out.push({ head: 'the rest of the stand', rows: rest });
+  return out;
+}
+
 async function openNewsstand(initialQ = '') {
   openSurface('newsOverlay');
   const body = $('#newsBody');
@@ -2276,16 +2311,23 @@ async function openNewsstand(initialQ = '') {
     const ranked = rankFolios(newsIndex, q);
     body.innerHTML = `
       <input class="news-search" id="newsQ" placeholder="a city, a taste, a name…" value="${esc(q)}">
-      ${ranked.length ? ranked.map(({ f, why }) => `
+      ${ranked.length ? (q ? [{ head: '', rows: ranked }] : shelve(ranked)).map(sec => `
+        ${sec.head ? `<div class="sec-head">${esc(sec.head)}</div>` : ''}
+        ${sec.rows.map(({ f, why }) => `
         <button class="news-row" data-file="${esc(f.file)}">
           <span class="t1"><span class="nm">${esc(f.title)}</span><span class="by">${esc(f.author)} · ${f.n}</span></span>
           <span class="t2">
             ${(f.cities || []).slice(0, 3).map(c => `<span>${esc(c)}</span>`).join('')}
+            ${f.visitedAll ? '<span>stood in every one</span>' : ''}
+            ${f.reviewedAt ? `<span>reviewed ${esc(fmtDate(f.reviewedAt).toLowerCase())}</span>` : ''}
             <span class="why">${esc(why)}</span>
           </span>
-        </button>`).join('')
+          ${f.pov ? `<span class="t2"><span class="why">${esc(f.pov)}</span></span>` : ''}
+        </button>`).join('')}`).join('')
       : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet. offer the folio that should.</div>`}
-      <div class="news-note">Ranking happens here, against your own atlas. The newsstand never learns what you like.
+      <div class="news-note">The shelves and their order are computed here, against your own atlas, from cities you
+      both keep places in and domains you share. The newsstand never learns what you like. Every folio on it says
+      where its author stands and whether they have been to every place in it. Standards: <a href="COMMONS.md">/COMMONS.md</a>.
       Publish from any folio you compose (&gt;folio).</div>`;
     const input = $('#newsQ');
     input.addEventListener('input', debounce(() => paint(input.value), 250));
@@ -2325,10 +2367,15 @@ async function openNewsstand(initialQ = '') {
   paint(initialQ);
 }
 
-function publishBlock(title, dedication, author, sel) {
+function publishBlock(title, dedication, author, sel, decl = {}) {
   const tagName = new Map(allTags().map(t => [t.id, t.name]));
   return JSON.stringify({
     title, dedication, author,
+    // what a public folio declares about itself
+    pov: decl.pov || '', scope: decl.scope || '',
+    visitedAll: decl.visitedAll === true,
+    reviewedAt: new Date().toISOString().slice(0, 10),
+    language: (navigator.language || 'en').slice(0, 2),
     places: sel.map(p => ({
       name: p.name, lat: p.lat, lng: p.lng, address: p.address, city: p.city,
       country: p.country, tags: p.tags.map(t => tagName.get(t)).filter(Boolean),
@@ -2532,12 +2579,15 @@ function renderSettings() {
       <div class="sec-head">your data</div>
       <div class="word-row">
         <button class="word-btn quiet" id="expJson">export everything</button>
-        <button class="word-btn quiet" id="expGeo">export geojson</button>
+        <button class="word-btn quiet" id="expGeo">geojson</button>
+        <button class="word-btn quiet" id="expKml">kml</button>
+        <button class="word-btn quiet" id="expCsv">csv</button>
+        <button class="word-btn quiet" id="expMd">markdown</button>
         <button class="word-btn quiet" id="expPdf">print, or save as pdf</button>
         <button class="word-btn quiet" id="impJson">import</button>
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
-      <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. <b>Export everything</b> is your backup: it carries your photographs, your voices and your settings, so keep it to yourself. A file handed to someone else, from <b>hand over</b>, carries none of those.</div>
+      <div class="set-row-sub" style="margin-top:10px">An atlas must be able to leave for anywhere: geojson for maps, kml for google earth, csv for a spreadsheet, markdown for a person to read in fifty years. None of them carries a place you marked as never leaving. Everything lives in this browser. <b>Export everything</b> is your backup: it carries your photographs, your voices and your settings, so keep it to yourself. A file handed to someone else, from <b>hand over</b>, carries none of those.</div>
     </div>
 
     <div class="set-sec">
@@ -2580,6 +2630,9 @@ function renderSettings() {
     if (misses) toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read back and are not in this file`, 6000);
   });
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
+  $('#expKml').addEventListener('click', () => download('resonate-atlas.kml', store.exportKML(), 'application/vnd.google-earth.kml+xml'));
+  $('#expCsv').addEventListener('click', () => download('resonate-atlas.csv', store.exportCSV(), 'text/csv'));
+  $('#expMd').addEventListener('click', () => download('resonate-atlas.md', store.exportMarkdown(), 'text/markdown'));
   $('#expPdf').addEventListener('click', () => printSheet(atlasSheetOpts()));
   $('#impJson').addEventListener('click', () => {
     const file = $('#importFile');

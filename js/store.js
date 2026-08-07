@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf58';
-import { measure, simplify } from './route.js?v=rf58';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf59';
+import { measure, simplify } from './route.js?v=rf59';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -480,10 +480,90 @@ export const store = {
     }, null, 2);
   },
 
+  // An atlas must be able to leave for anywhere, in formats nobody owns.
+  // Each of these carries the places that may travel, never the private ones.
+
+  // kml, for google earth and everything that reads it
+  exportKML() {
+    const esc = t => String(t ?? '').replace(/[<>&'"]/g, c => (
+      { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+    const marks = this.places.filter(p => !p.private).map(p => `    <Placemark>
+      <name>${esc(p.name)}</name>
+      <description>${esc([p.note, [p.address, p.city, p.country].filter(Boolean).join(', ')].filter(Boolean).join('\n\n'))}</description>
+      <Point><coordinates>${p.lng},${p.lat},0</coordinates></Point>
+    </Placemark>`).join('\n');
+    const lines = this.routes.map(r => `    <Placemark>
+      <name>${esc(r.name)}</name>
+      <LineString><tessellate>1</tessellate><coordinates>${r.path.map(pt => `${pt.lng},${pt.lat},${pt.ele ?? 0}`).join(' ')}</coordinates></LineString>
+    </Placemark>`).join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Resonate</name>
+${[marks, lines].filter(Boolean).join('\n')}
+  </Document>
+</kml>`;
+  },
+
+  // csv, for a spreadsheet and for anything at all
+  exportCSV() {
+    const cell = v => {
+      const t = String(v ?? '');
+      return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const head = ['name', 'latitude', 'longitude', 'address', 'city', 'country', 'tags', 'been', 'note', 'link'];
+    const rows = this.places.filter(p => !p.private).map(p => [
+      p.name, p.lat, p.lng, p.address, p.city, p.country,
+      p.tags.map(id => this.tagById(id)?.name).filter(Boolean).join('; '),
+      p.status === 'visited' ? 'yes' : 'no',
+      p.note, p.url,
+    ].map(cell).join(','));
+    return [head.join(','), ...rows].join('\n');
+  },
+
+  // markdown, so an atlas outlives every program that can read the rest
+  exportMarkdown() {
+    const byCity = new Map();
+    this.places.filter(p => !p.private).forEach(p => {
+      const key = p.city || p.country || 'elsewhere';
+      if (!byCity.has(key)) byCity.set(key, []);
+      byCity.get(key).push(p);
+    });
+    const out = ['# An atlas', '', `${this.places.filter(p => !p.private).length} places, kept in a browser and written out on ${new Date().toISOString().slice(0, 10)}.`, ''];
+    [...byCity.keys()].sort().forEach(city => {
+      out.push(`## ${city}`, '');
+      byCity.get(city).sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+        out.push(`### ${p.name}`);
+        const facts = [
+          [p.address, p.country].filter(Boolean).join(', '),
+          p.status === 'visited' ? 'been' : 'want to go',
+          p.tags.map(id => this.tagById(id)?.name).filter(Boolean).join(', '),
+          `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`,
+        ].filter(Boolean);
+        out.push('', facts.join(' · '), '');
+        if (p.note) out.push(p.note, '');
+        if (p.url) out.push(`<${p.url}>`, '');
+        if (p.provenance) {
+          const road = [...(p.provenance.chain || []).map(h => h.name), p.provenance.name].filter(Boolean);
+          out.push(`_after ${road.reverse().join(', who had it from ')}_`, '');
+        }
+      });
+    });
+    if (this.routes.length) {
+      out.push('## Ways', '');
+      this.routes.forEach(r => {
+        out.push(`### ${r.name}`, '');
+        out.push([r.km ? `${r.km.toFixed(1)} km` : '', r.ascent ? `${r.ascent} m up` : '', r.loop ? 'a loop' : ''].filter(Boolean).join(' · '), '');
+        if (r.note) out.push(r.note, '');
+      });
+    }
+    return out.join('\n');
+  },
+
   exportGeoJSON() {
     return JSON.stringify({
       type: 'FeatureCollection',
-      features: this.places.map(p => ({
+      features: this.places.filter(p => !p.private).map(p => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         properties: {

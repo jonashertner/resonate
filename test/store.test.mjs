@@ -364,3 +364,39 @@ test('an import with the same domains under different ids keeps one of each', ()
   assert.ok(theirs.tags.includes(mine.id), 'the imported place points at the kept domain');
   assert.ok(store.tags.some(t => t.name === 'Vinyl'), 'a genuinely new domain still arrives');
 });
+
+
+// ---------- an atlas can leave for anywhere ----------
+
+test('every open format carries the places, and never a private one', () => {
+  fresh();
+  store.addTag(newTag({ name: 'Culture' }));
+  const t = store.tags[0].id;
+  store.addPlace(newPlace({ name: 'Fondation Beyeler', lat: 47.58, lng: 7.65, city: 'Riehen',
+    country: 'Switzerland', tags: [t], status: 'visited', note: 'the pond window' }));
+  const home = store.addPlace(newPlace({ name: 'My Own Door', lat: 47.55, lng: 7.59, city: 'Basel' }));
+  store.updatePlace(home.id, { private: true });
+
+  for (const [what, text] of [
+    ['geojson', store.exportGeoJSON()],
+    ['kml', store.exportKML()],
+    ['csv', store.exportCSV()],
+    ['markdown', store.exportMarkdown()],
+  ]) {
+    assert.ok(text.includes('Fondation Beyeler'), `${what} carries the place`);
+    assert.ok(!text.includes('My Own Door'), `${what} leaves the private one behind`);
+    assert.ok(!text.includes('47.55'), `${what} does not leak its coordinate either`);
+  }
+});
+
+test('the open formats survive a hostile name', () => {
+  fresh();
+  store.addPlace(newPlace({ name: 'Bar <script>alert(1)</script> & "co"', lat: 46, lng: 8, note: 'a, comma\nand a line' }));
+  const kml = store.exportKML();
+  assert.ok(!kml.includes('<script>'), 'kml escapes its markup');
+  assert.ok(kml.includes('&lt;script&gt;'));
+  const csv = store.exportCSV();
+  const lines = csv.split('\n');
+  assert.equal(lines[0].split(',')[0], 'name');
+  assert.ok(csv.includes('""co""'), 'csv doubles its quotes');
+});
