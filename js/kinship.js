@@ -4,9 +4,27 @@
 // domains, and (3) where they diverge, the divergence is interesting — a
 // correspondent strong where you are blank expands you rather than mismatching.
 
-import { haversineKm } from './geocode.js?v=rf51';
+import { haversineKm } from './geocode.js?v=rf52';
 
 const SAME_PLACE_KM = 0.15; // within ~150m = the same place
+
+// A place speaks in words now. The old number is still read, so an atlas
+// handed over by an older device still says what it meant.
+function loves(p) { return p.word === 'recommend' || (!p.word && (Number(p.rating) || 0) >= 4); }
+// a turning away is only legible in atlases from before the word: a low
+// number said it plainly. the word says nothing about dislike, on purpose.
+function turnsAway(p) {
+  if (p.word) return false;
+  const r = Number(p.rating) || 0;
+  return r > 0 && r <= 2;
+}
+// how strongly a place is offered, on the scale the blend already expects
+function convictionOf(p) {
+  if (p.word === 'recommend') return 0.9;
+  const r = Number(p.rating) || 0;
+  if (!p.word && r > 0) return r / 5;
+  return p.status === 'visited' ? 0.55 : 0.35;
+}
 
 function norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -62,10 +80,9 @@ export function resonance(mine, theirs) {
   for (const tp of theirs.places) {
     const mp = mine.places.find(p => samePlace(p, tp));
     if (!mp) continue;
-    const bothLove = (mp.rating >= 4 && tp.rating >= 4);
+    const bothLove = loves(mp) && loves(tp);
     const bothHold = true;
-    const disagree = (mp.rating >= 4 && tp.rating > 0 && tp.rating <= 2) ||
-                     (tp.rating >= 4 && mp.rating > 0 && mp.rating <= 2);
+    const disagree = (loves(mp) && turnsAway(tp)) || (loves(tp) && turnsAway(mp));
     common.push({ mine: mp, theirs: tp, bothLove, disagree, agree: bothLove && !disagree });
   }
   const loved = common.filter(c => c.bothLove).length;
@@ -100,7 +117,7 @@ export function resonance(mine, theirs) {
       const domains = tp.tags.map(t => theirTagName.get(t)).filter(Boolean);
       const affinity = Math.max(0, ...domains.map(d => myDomains.get(d) || 0));
       const expands = domains.some(d => expansion.includes(d));
-      const conviction = tp.rating > 0 ? tp.rating / 5 : (tp.status === 'visited' ? 0.55 : 0.35);
+      const conviction = convictionOf(tp);
       const note = tp.note ? 0.1 : 0;
       return {
         place: tp,

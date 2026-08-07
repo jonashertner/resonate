@@ -3,16 +3,16 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf51';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf51';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf51';
-import * as mapView from './map.js?v=rf51';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf51';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf51';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf51';
-import { exifGPS } from './exif.js?v=rf51';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf51';
-import * as photoStore from './photos.js?v=rf51';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf52';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf52';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf52';
+import * as mapView from './map.js?v=rf52';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf52';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf52';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf52';
+import { exifGPS } from './exif.js?v=rf52';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf52';
+import * as photoStore from './photos.js?v=rf52';
 
 // ---------- helpers ----------
 
@@ -61,9 +61,24 @@ function fmtDate(iso) {
   catch { return ''; }
 }
 
-function starsText(r) {
-  const n = Math.max(0, Math.min(5, Math.floor(Number(r) || 0)));
-  return n > 0 ? '★'.repeat(n) : '';
+// Whether you have been is a fact. Whether you would recommend it is the one
+// judgement the atlas asks for: a word you say, or do not. Anything more
+// belongs in the note, where a sentence says what a label cannot.
+
+// a word said long ago may no longer be true, and the place says so quietly
+const STALE_MONTHS = 18;
+function staleWord(p) {
+  if (p.word !== 'recommend' || !p.updatedAt) return '';
+  const months = (Date.now() - Date.parse(p.updatedAt)) / (30.44 * 864e5);
+  if (!(months >= STALE_MONTHS)) return '';
+  const years = Math.floor(months / 12);
+  return years >= 1 ? `${years} year${years === 1 ? '' : 's'} ago` : `${Math.floor(months)} months ago`;
+}
+
+// what a place says of itself in one line, wherever it is listed
+function datumWord(p) {
+  if (p.word === 'recommend') return 'recommend';
+  return p.status === 'wishlist' ? 'want to go' : 'been';
 }
 function fmtNo(n) { return String(n).padStart(2, '0'); }
 
@@ -74,7 +89,7 @@ const state = {
   sort: 'recent',
   selectedId: null,
   selectedRouteId: null,
-  foreign: null, // { corrId?, name, sig, place } — a place from someone else's atlas
+  foreign: null, // { corrId?, name, sig, place } a place from someone else's atlas
   visiting: null, // temp correspondent-shaped object when "just looking" at a share
   pendingAdd: null, // {lat, lng, name?, photo?} awaiting confirm
 };
@@ -103,7 +118,9 @@ function filteredPlaces() {
   switch (state.sort) {
     case 'name': list.sort((a, b) => a.name.localeCompare(b.name)); break;
     case 'distance': list.sort((a, b) => haversineKm(center, a) - haversineKm(center, b)); break;
-    case 'rating': list.sort((a, b) => (b.rating || 0) - (a.rating || 0) || a.name.localeCompare(b.name)); break;
+    case 'rating':
+      list.sort((a, b) => (b.word === 'recommend') - (a.word === 'recommend') || a.name.localeCompare(b.name));
+      break;
     default: list.sort((a, b) => nos.get(b.id) - nos.get(a.id));
   }
   return list;
@@ -480,7 +497,7 @@ function renderList() {
   wrap.innerHTML = places.map((p, i) => {
     const tag = tagById(p.tags[0]);
     const locale = [p.city, p.country].filter(Boolean).join(' · ');
-    const datum = p.rating > 0 ? starsText(p.rating) : fmtDistance(haversineKm(center, p));
+    const datum = p.word ? datumWord(p) : fmtDistance(haversineKm(center, p));
     const prov = p.provenance ? `<span class="prov">after <b>${esc(p.provenance.name)}</b></span>` : '';
     return `<button class="ix ${p.status === 'wishlist' ? 'wish' : ''} ${p.id === state.selectedId ? 'selected' : ''}"
       data-id="${esc(p.id)}" style="--i:${i}">
@@ -599,8 +616,6 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   const no = ro ? null : accessionMap().get(place.id);
   const tagWords = allTags().map(t => `
     <button data-dtag="${esc(t.id)}" aria-pressed="${place.tags.includes(t.id)}" ${ro ? 'disabled' : ''}>${esc(t.name)}</button>`).join('');
-  const stars = [1, 2, 3, 4, 5].map(i =>
-    `<button data-star="${i}" class="${place.rating >= i ? 'on' : ''}" ${ro ? 'disabled' : ''} aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('');
   const photos = (place.photos || []).map((src, i) => `
     <figure class="fig"><img ${photoStore.isId(src) ? `data-ph="${esc(src)}"` : `src="${esc(src)}"`} alt="Photograph ${i + 1} of ${esc(place.name)}">
       ${ro ? '' : `<button class="ph-x" data-phx="${i}">remove</button>`}</figure>`).join('');
@@ -617,7 +632,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b> · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
 
     ${ro ? `
-      ${place.rating ? `<div class="stars-line">${starsText(place.rating).split('').map(() => '<button class="on" disabled>★</button>').join('')}</div>` : ''}
+      <div class="plate-words"><button aria-pressed="true" disabled>${esc(datumWord(place))}</button></div>
       ${place.note ? `<div class="plate-sec"><div class="plate-sec-head"><span>their note</span></div><p class="note-input" style="border-left-color:var(--counter)">${esc(place.note)}</p></div>` : ''}
       <div class="plate-acts">
         <button class="word-btn" id="pAdopt">adopt, after ${esc(foreign.name)}</button>
@@ -627,8 +642,10 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       <div class="plate-words" id="pStatus">
         <button data-st="visited" aria-pressed="${place.status === 'visited'}">been</button>
         <button data-st="wishlist" aria-pressed="${place.status === 'wishlist'}">want to go</button>
+        <button data-word="recommend" class="reco" aria-pressed="${place.word === 'recommend'}">recommend</button>
       </div>
-      <div class="stars-line" id="pStars">${stars}</div>
+      ${staleWord(place) ? `<div class="set-row-sub" id="pStale">recommended ${esc(staleWord(place))}. still true?
+        <button class="word-btn quiet" id="pStillTrue" style="display:inline;margin-left:10px">still true</button></div>` : ''}
 
       <div class="plate-sec">
         <div class="plate-sec-head"><span>tags</span></div>
@@ -703,19 +720,23 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } });
 
   $('#pStatus').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-st]');
-    if (!b) return;
-    save({ status: b.dataset.st });
-    renderPlate(place); renderList(); syncMarkers();
+    const st = e.target.closest('[data-st]');
+    if (st) {
+      save({ status: st.dataset.st });
+      renderPlate(placeById(place.id)); renderList(); syncMarkers();
+      return;
+    }
+    const w = e.target.closest('[data-word]');
+    if (!w) return;
+    save({ word: place.word === 'recommend' ? '' : 'recommend' });
+    renderPlate(placeById(place.id)); renderList();
   });
 
-  $('#pStars').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-star]');
-    if (!b) return;
-    const v = parseInt(b.dataset.star, 10);
-    save({ rating: place.rating === v ? 0 : v });
-    renderPlate(place); renderList();
+  $('#pStillTrue')?.addEventListener('click', () => {
+    // re-affirming is a real edit: it moves the date the word was last meant
+    if (save({ word: place.word })) { renderPlate(placeById(place.id)); toast('still true'); }
   });
+
 
   $('#pTags').addEventListener('click', (e) => {
     const chip = e.target.closest('[data-dtag]');
@@ -1077,9 +1098,7 @@ function renderRoutePlate(route) {
     <div class="plate-words" id="pRouteStatus">
       <button data-rst="walked" aria-pressed="${route.status === 'walked'}">walked</button>
       <button data-rst="wishlist" aria-pressed="${route.status === 'wishlist'}">want to walk</button>
-    </div>
-    <div class="stars-line" id="pRouteStars">
-      ${[1, 2, 3, 4, 5].map(i => `<button data-rstar="${i}" class="${route.rating >= i ? 'on' : ''}" aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('')}
+      <button data-rword="recommend" class="reco" aria-pressed="${route.word === 'recommend'}">recommend</button>
     </div>
 
     <div class="plate-sec">
@@ -1117,9 +1136,8 @@ function renderRoutePlate(route) {
   $$('#pRouteStatus button').forEach(b => b.addEventListener('click', () => {
     if (save({ status: b.dataset.rst })) renderRoutePlate(routeById(route.id));
   }));
-  $$('#pRouteStars button').forEach(b => b.addEventListener('click', () => {
-    const v = parseInt(b.dataset.rstar, 10);
-    if (save({ rating: route.rating === v ? 0 : v })) renderRoutePlate(routeById(route.id));
+  $$('#pRouteStatus [data-rword]').forEach(b => b.addEventListener('click', () => {
+    if (save({ word: route.word === 'recommend' ? '' : 'recommend' })) renderRoutePlate(routeById(route.id));
   }));
   $$('#pRouteTags button').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.rtag;
@@ -1414,7 +1432,7 @@ function openFolioReport(payload) {
         <div class="rp-pick">
           <span class="no">${fmtNo(i + 1)}</span>
           <span class="nm">${esc(p.name)}</span>
-          <span class="why">${esc(p.city || '')}${p.rating ? ' · ' + starsText(p.rating) : ''}</span>
+          <span class="why">${esc(p.city || '')}${p.word ? ' · ' + esc(datumWord(p)) : ''}</span>
           ${holdAlready(p)
             ? '<span class="held">you hold this</span>'
             : `<button class="adopt" data-adopt="${i}">adopt</button>`}
@@ -1553,7 +1571,7 @@ function openAtlasReport(payload) {
         <div class="rp-pick" data-i="${i}">
           <span class="no">${fmtNo(i + 1)}</span>
           <span class="nm">${esc(pk.place.name)}</span>
-          <span class="why">${pk.expands ? 'new ground' : esc((pk.domainLabels[0] || '').toLowerCase())}${pk.place.rating ? ' · ' + starsText(pk.place.rating) : ''}</span>
+          <span class="why">${pk.expands ? 'new ground' : esc((pk.domainLabels[0] || '').toLowerCase())}${pk.place.word ? ' · ' + esc(datumWord(pk.place)) : ''}</span>
           <button class="adopt" data-adopt="${i}">adopt</button>
         </div>`).join('')}
     </div>` : ''}
@@ -1740,7 +1758,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
           <span class="in">${chosen.has(p.id) ? 'in' : 'out'}</span>
           <span class="nm">${esc(p.name)}</span>
-          <span class="sub">${esc(p.city || '')}${p.rating ? ' · ' + starsText(p.rating) : ''}</span>
+          <span class="sub">${esc(p.city || '')}${p.word ? ' · ' + esc(datumWord(p)) : ''}</span>
         </button>`).join('')}
       ${wayPool.length ? wayPool.map(r => `
         <button class="fol-row" data-wid="${esc(r.id)}" aria-pressed="${chosenWays.has(r.id)}">
@@ -1928,7 +1946,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     no += 1;
     const meta = [
       p.tags.map(nameOf).filter(Boolean).join(', ').toLowerCase(),
-      p.rating ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : ''),
+      datumWord(p),
     ].filter(Boolean).join(' · ');
     return `<article class="sh-entry">
       <div class="sh-line"><span class="sh-no mono">${fmtNo(no)}</span><h3 class="sh-name">${esc(p.name)}</h3></div>
@@ -2098,7 +2116,7 @@ function publishBlock(title, dedication, author, sel) {
     places: sel.map(p => ({
       name: p.name, lat: p.lat, lng: p.lng, address: p.address, city: p.city,
       country: p.country, tags: p.tags.map(t => tagName.get(t)).filter(Boolean),
-      status: p.status, rating: p.rating, note: p.note,
+      status: p.status, word: p.word, rating: p.rating, note: p.note,
     })),
   }, null, 1);
 }
@@ -2181,7 +2199,7 @@ async function shareMap() {
       <ul class="sh-list">
         <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
         ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: the whole line walked, and its climb</li>` : ''}
-        <li>addresses, cities, countries, tags, been or want to go, stars</li>
+        <li>addresses, cities, countries, tags, been or want to go, what you recommend</li>
         ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
         ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
         <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
@@ -2790,11 +2808,11 @@ function corrMatches(q) {
 function rowHTML(item, i) {
   const hl = i === palette.hl ? ' hl' : '';
   if (item.kind === 'corrplace') {
-    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.p.name)} <span class="after">· after ${esc(item.c.name)}</span></span><span class="row-sub">${esc([item.p.city, item.p.country].filter(Boolean).join(' · '))}${item.p.rating ? ' · ' + starsText(item.p.rating) : ''}</span></button>`;
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.p.name)} <span class="after">· after ${esc(item.c.name)}</span></span><span class="row-sub">${esc([item.p.city, item.p.country].filter(Boolean).join(' · '))}${item.p.word ? ' · ' + esc(datumWord(item.p)) : ''}</span></button>`;
   }
   if (item.kind === 'local') {
     const p = item.place;
-    const side = p.rating > 0 ? starsText(p.rating) : (p.status === 'wishlist' ? 'want to go' : 'been');
+    const side = datumWord(p);
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(p.name)}</span><span class="row-sub">${esc([p.city, p.country].filter(Boolean).join(' · ') || side)}</span></button>`;
   }
   if (item.kind === 'remote') {

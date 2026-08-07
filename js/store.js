@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf51';
-import { measure, simplify } from './route.js?v=rf51';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, wordFromRating, SCHEMA_VERSION } from './schema.js?v=rf52';
+import { measure, simplify } from './route.js?v=rf52';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -88,7 +88,8 @@ export function newPlace(partial = {}) {
     countryCode: '',
     tags: [],
     status: 'wishlist', // 'visited' | 'wishlist'
-    rating: 0,
+    word: '',           // 'recommend', or nothing said
+    rating: 0,          // read from old links, never written
     note: '',
     url: '',
     photos: [],
@@ -154,6 +155,12 @@ export function newTag(partial = {}) {
   return t;
 }
 
+// A place that has only the old number is given its word the first time it is
+// read. The number is left where it is; nothing writes it again.
+function learnWords(p) {
+  return p.word ? p : { ...p, word: wordFromRating(p.rating) };
+}
+
 const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '', clubKey: '', clubUrl: '', clubSeq: 0, clubSealedAt: '' };
 
 export const store = {
@@ -165,8 +172,8 @@ export const store = {
   settings: { ...DEFAULT_SETTINGS },
 
   load() {
-    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean);
-    this.routes = normRoutes(read(K_ROUTES, []));
+    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean).map(learnWords);
+    this.routes = normRoutes(read(K_ROUTES, [])).map(r => (r.word ? r : { ...r, word: wordFromRating(r.rating) }));
     this.folios = normFolioRefs(read(K_FOLIOS, []));
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
@@ -535,19 +542,19 @@ export function demoData() {
 
   const places = [
     P({ name: 'Fondation Beyeler', lat: 47.58487, lng: 7.65098, city: 'Riehen', country: 'Switzerland', countryCode: 'ch',
-        address: 'Baselstrasse 101, 4125 Riehen', tags: [t.culture.id], status: 'visited', rating: 5,
+        address: 'Baselstrasse 101, 4125 Riehen', tags: [t.culture.id], status: 'visited', word: 'recommend',
         note: 'Monet water lilies in front of the pond window. Go on a weekday morning and have the Rothko room to yourself.' }, 4),
     P({ name: 'Kunstmuseum Basel', lat: 47.55437, lng: 7.59417, city: 'Basel', country: 'Switzerland', countryCode: 'ch',
-        address: 'St. Alban-Graben 16, 4051 Basel', tags: [t.culture.id], status: 'visited', rating: 4,
+        address: 'St. Alban-Graben 16, 4051 Basel', tags: [t.culture.id], status: 'visited', word: 'recommend',
         note: 'The Holbein rooms. Quiet on Friday evenings.' }, 21),
     P({ name: 'Rheinbad Breite', lat: 47.55330, lng: 7.60530, city: 'Basel', country: 'Switzerland', countryCode: 'ch',
-        address: 'St. Alban-Rheinweg 195, 4052 Basel', tags: [t.nature.id], status: 'visited', rating: 5,
+        address: 'St. Alban-Rheinweg 195, 4052 Basel', tags: [t.nature.id], status: 'visited', word: 'recommend',
         note: 'Drop in here, float past the Münster, out at Dreirosen. The whole city swims home in summer.' }, 9),
     P({ name: 'Markthalle Basel', lat: 47.54790, lng: 7.58750, city: 'Basel', country: 'Switzerland', countryCode: 'ch',
-        address: 'Steinentorberg 20, 4051 Basel', tags: [t.food.id], status: 'visited', rating: 4,
+        address: 'Steinentorberg 20, 4051 Basel', tags: [t.food.id], status: 'visited', word: 'recommend',
         note: 'Lunch under the dome. The momo stand first, always.' }, 60),
     P({ name: 'Shakespeare and Company', lat: 48.85258, lng: 2.34710, city: 'Paris', country: 'France', countryCode: 'fr',
-        address: '37 Rue de la Bûcherie, 75005 Paris', tags: [t.shop.id, t.culture.id], status: 'visited', rating: 5,
+        address: '37 Rue de la Bûcherie, 75005 Paris', tags: [t.shop.id, t.culture.id], status: 'visited', word: 'recommend',
         note: 'Upstairs, the reading nook facing Notre-Dame. They stamp the books at the till.' }, 130),
     P({ name: 'Septime', lat: 48.85310, lng: 2.38390, city: 'Paris', country: 'France', countryCode: 'fr',
         address: '80 Rue de Charonne, 75011 Paris', tags: [t.food.id], status: 'wishlist',
@@ -565,13 +572,13 @@ export function demoData() {
         address: '2-14-1 Kamimeguro, Meguro City, Tokyo', tags: [t.cafe.id], status: 'wishlist',
         note: 'The little house by the tracks. Upstairs window seat.' }, 300),
     P({ name: 'Bethesda Terrace', lat: 40.77400, lng: -73.97080, city: 'New York', country: 'United States', countryCode: 'us',
-        address: 'Central Park, New York, NY', tags: [t.nature.id], status: 'visited', rating: 4,
+        address: 'Central Park, New York, NY', tags: [t.nature.id], status: 'visited', word: 'recommend',
         note: 'The tiled arcade underneath, when a cellist is playing.' }, 400),
     P({ name: 'Café Sabarsky', lat: 40.78110, lng: -73.96010, city: 'New York', country: 'United States', countryCode: 'us',
-        address: '1048 5th Ave, New York, NY', tags: [t.cafe.id], status: 'visited', rating: 4,
+        address: '1048 5th Ave, New York, NY', tags: [t.cafe.id], status: 'visited', word: 'recommend',
         note: 'Viennese breakfast before the Klimts upstairs.' }, 400),
     P({ name: 'Vernazza', lat: 44.13500, lng: 9.68400, city: 'Vernazza', country: 'Italy', countryCode: 'it',
-        address: 'Cinque Terre, Liguria', tags: [t.nature.id], status: 'visited', rating: 5,
+        address: 'Cinque Terre, Liguria', tags: [t.nature.id], status: 'visited', word: 'recommend',
         note: 'Hike in from Monterosso, swim off the harbour rocks, then anchovies and white wine.' }, 500),
     P({ name: 'Bar Basso', lat: 45.47850, lng: 9.22270, city: 'Milan', country: 'Italy', countryCode: 'it',
         address: 'Via Plinio 39, 20133 Milano', tags: [t.bar.id], status: 'wishlist',
@@ -583,7 +590,7 @@ export function demoData() {
         tags: [t.hut.id, t.nature.id], status: 'wishlist',
         note: 'On the rock above the glacier, 2825 m. Book the half board and the dormitory; the last stretch is a ladder in places. Wardened from June.' }, 9),
     P({ name: 'Berggasthaus Aescher', lat: 47.28360, lng: 9.41810, city: 'Appenzell', country: 'Switzerland', countryCode: 'ch',
-        tags: [t.hut.id, t.food.id], status: 'wishlist', rating: 0,
+        tags: [t.hut.id, t.food.id], status: 'wishlist',
         note: 'Built against the cliff under the Ebenalp. Walk in, do not take the cable car down at the last minute.' }, 15),
     P({ name: 'Schweizerischer Nationalpark', lat: 46.65800, lng: 10.17500, city: 'Zernez', country: 'Switzerland', countryCode: 'ch',
         tags: [t.reserve.id, t.nature.id], status: 'wishlist',

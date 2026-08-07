@@ -2,8 +2,8 @@
 
 /* global LZString */
 
-import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf51';
-import { encodePath, simplify } from './route.js?v=rf51';
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf52';
+import { encodePath, simplify } from './route.js?v=rf52';
 
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
@@ -22,7 +22,7 @@ export function makeFolioUrl({ title, dedication, author, tags, places, routes =
     places: places.map(p => ({
       id: p.id, name: p.name, lat: p.lat, lng: p.lng,
       address: p.address, city: p.city, country: p.country, countryCode: p.countryCode,
-      tags: p.tags, status: p.status, rating: p.rating, note: p.note, url: p.url,
+      tags: p.tags, status: p.status, word: p.word, rating: p.rating, note: p.note, url: p.url,
     })),
   });
 }
@@ -42,7 +42,7 @@ export function makeAskUrl({ from, q }) {
 function packRoutes(routes) {
   return (routes || []).map(r => ({
     id: r.id, name: r.name, city: r.city, country: r.country,
-    tags: r.tags, status: r.status, rating: r.rating, note: r.note, url: r.url,
+    tags: r.tags, status: r.status, word: r.word, rating: r.rating, note: r.note, url: r.url,
     km: r.km, ascent: r.ascent, descent: r.descent, high: r.high, low: r.low,
     hours: r.hours, loop: r.loop,
     p: encodePath(simplify(r.path, 0.03).slice(0, 900)),
@@ -60,7 +60,7 @@ export function makeShareUrl(tags, places, author = '', routes = []) {
     places: places.map(p => ({
       id: p.id, name: p.name, lat: p.lat, lng: p.lng,
       address: p.address, city: p.city, country: p.country, countryCode: p.countryCode,
-      tags: p.tags, status: p.status, rating: p.rating, note: p.note, url: p.url,
+      tags: p.tags, status: p.status, word: p.word, rating: p.rating, note: p.note, url: p.url,
     })),
   };
   const packed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));

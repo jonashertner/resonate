@@ -685,13 +685,12 @@ a.word-btn { text-decoration: none; display: inline-block; }
 .plate-words button:hover { color: var(--ink-2); }
 .plate-words button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
 
-.stars-line { display: flex; gap: 4px; margin-top: 18px; }
-.stars-line button { font-size: 17px; line-height: 1; color: var(--ink-3); padding: 3px 2px; transition: color var(--mo-reflex); }
-.stars-line button { transition: transform 150ms var(--e-reflex); }
-.stars-line button:active { transform: scale(1.22); }
-@media (prefers-reduced-motion: reduce) { .stars-line button:active { transform: none; } }
-.stars-line button.on { color: var(--ink); }
-.stars-line button:hover { color: var(--ink-2); }
+/* the line a place stands on: been, want to go, and the one judgement. the
+   word sits apart, because it is the only thing here that is an opinion. */
+.plate-words button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
+.plate-words button { transition: color var(--mo-reflex) var(--e-reflex); }
+.plate-words .reco { margin-left: auto; }
+.plate-words .reco[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
 
 .plate-sec { margin-top: 30px; }
 .plate-sec-head {
@@ -1034,7 +1033,6 @@ a.word-btn { text-decoration: none; display: inline-block; }
   .ix-meta { font-size: 11px; }
   .cmd-row .row-sub { font-size: 11px; }
   .plate-eyebrow { font-size: 11px; }
-  .stars-line button { font-size: 20px; padding: 6px 4px; }
 
   .plate {
     top: auto; bottom: 0; left: 0; right: 0; width: 100%;

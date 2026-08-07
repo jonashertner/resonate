@@ -5,9 +5,9 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf51';
+import { decodePath } from './route.js?v=rf52';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const LIMITS = {
   folios: 120,
@@ -27,6 +27,17 @@ export const LIMITS = {
   photos: 12,
   photoBytes: 3_000_000,
 };
+
+// Whether you have been is a fact. Whether you would recommend it is the
+// only judgement the atlas asks for, and it is a word you either say or do
+// not. Everything else belongs in the note. The old five-star number is still
+// read from links sealed before this, and is never written again.
+export const WORDS = ['recommend'];
+
+// a number becomes the word, once, and the same way everywhere
+export function wordFromRating(r) {
+  return (Number(r) || 0) >= 4 ? 'recommend' : '';
+}
 
 export const PHOTO_ID = /^ph_[a-z0-9]{1,40}$/;
 
@@ -81,7 +92,10 @@ export function normPlace(raw, i = 0) {
       ? p.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
       : [],
     status: p.status === 'visited' ? 'visited' : 'wishlist',
+    // the number survives only so links and files from before the words still
+    // open; nothing writes it, and no surface shows it
     rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
+    word: WORDS.includes(p.word) ? p.word : '',
     note: str(p.note, LIMITS.note),
     url: /^https?:\/\//i.test(String(p.url ?? '')) ? str(p.url, LIMITS.url) : '',
     photos,
@@ -144,6 +158,7 @@ export function normRoute(raw, i = 0, decode = null) {
       : [],
     status: r.status === 'walked' ? 'walked' : 'wishlist',
     rating: Math.max(0, Math.min(5, Math.floor(Number(r.rating) || 0))),
+    word: WORDS.includes(r.word) ? r.word : '',
     note: str(r.note, LIMITS.note),
     url: /^https?:\/\//i.test(String(r.url ?? '')) ? str(r.url, LIMITS.url) : '',
     km: nn(r.km, 100000),
