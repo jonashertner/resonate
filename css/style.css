@@ -902,6 +902,16 @@ a.word-btn { text-decoration: none; display: inline-block; }
 .rp-verdict { margin-top: 4vh; font-size: clamp(24px, 3.4vw, 40px); font-variation-settings: 'opsz' 96, 'wdth' 86, 'wght' 680; }
 .rp-verdict .rp-sub { display: block; font-size: 14px; font-variation-settings: 'wght' 380; color: var(--ink-2); margin-top: 6px; }
 .rp-evidence { list-style: none; margin-top: 3vh; max-width: 56ch; }
+.rp-grounds { margin-top: 18px; }
+.rp-grounds summary {
+  cursor: pointer; list-style: none;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 1px solid var(--edge); padding-bottom: 6px;
+}
+.rp-grounds summary::-webkit-details-marker { display: none; }
+.rp-grounds summary:hover { color: var(--ink-2); }
+.rp-grounds[open] summary { color: var(--ink-2); }
 .rp-evidence li { padding: 8px 0; border-bottom: 1px solid var(--ink-4); font-size: 15px; color: var(--ink-2); }
 .rp-evidence b { color: var(--ink); font-variation-settings: 'wght' 680; font-variant-numeric: tabular-nums; }
 .rp-evidence i { font-style: normal; color: var(--ink); font-variation-settings: 'wght' 600; }

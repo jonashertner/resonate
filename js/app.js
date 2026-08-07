@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf55';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf55';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf55';
-import * as mapView from './map.js?v=rf55';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf55';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf55';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf55';
-import { exifGPS } from './exif.js?v=rf55';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf55';
-import * as photoStore from './photos.js?v=rf55';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf55';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf56';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf56';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf56';
+import * as mapView from './map.js?v=rf56';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf56';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf56';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf56';
+import { exifGPS } from './exif.js?v=rf56';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf56';
+import * as photoStore from './photos.js?v=rf56';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf56';
 
 // ---------- helpers ----------
 
@@ -707,7 +707,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     </div>
     <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="The name of this place"'}>${esc(place.name)}</h1>${place.sample && !ro ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([place.address, place.city, place.country].filter(Boolean).slice(0, 2).join(' · '))}</div>
-    ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b> · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
+    ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b>${place.provenance.chain?.length ? `, who had it from ${place.provenance.chain.map(h => esc(h.name)).reverse().join(', who had it from ')}` : ''} · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
 
     ${ro ? `
       <div class="plate-words"><button aria-pressed="true" disabled>${esc(datumWord(place))}</button></div>
@@ -1335,13 +1335,28 @@ function graftTags(foreignTagIds, foreignTags) {
   return [...new Set(out)];
 }
 
+// A place remembers its whole road, not only its last carrier. Ana handed it
+// to Mira, who handed it to you: flattening that to "after Mira" loses the
+// person who found it. Five hops are kept, oldest first.
+function extendChain(prior, foreign) {
+  const before = prior
+    ? [...(prior.chain || []), { name: prior.name, at: prior.adoptedAt }].filter(h => h.name)
+    : [];
+  return {
+    chain: before.slice(-4),
+    name: foreign.name,
+    sig: foreign.sig,
+    adoptedAt: new Date().toISOString(),
+  };
+}
+
 function adoptPlace(place, foreign, foreignTags = null) {
   const adopted = store.addPlace(newPlace({
     ...place,
     id: undefined,
     photos: [],
     tags: graftTags(place.tags, foreignTags || foreign.tags),
-    provenance: { name: foreign.name, sig: foreign.sig, adoptedAt: new Date().toISOString() },
+    provenance: extendChain(place.provenance, foreign),
   }));
   if (!adopted) { toast('this browser refused to keep it'); return null; }
   renderAll();
@@ -1565,7 +1580,7 @@ function openFolioReport(payload) {
     const made = store.addRoute(newRoute({
       ...r, id: undefined, sample: false,
       tags: graftTags(r.tags || [], foreignTags),
-      provenance: { name: author, sig, adoptedAt: new Date().toISOString() },
+      provenance: extendChain(r.provenance, { name: author, sig }),
     }));
     if (!made) { toast('this browser refused to keep it'); return null; }
     renderAll();
@@ -1697,6 +1712,13 @@ function openAtlasReport(payload) {
     <h1 class="rp-name">${esc(name)}</h1>
     <p class="rp-verdict">${v.word}<span class="rp-sub">${v.sub}</span></p>
     <ul class="rp-evidence mono">${ev.map(l => `<li>${l}</li>`).join('')}</ul>
+    <details class="rp-grounds">
+      <summary>the grounds for that word</summary>
+      <ul class="rp-evidence mono">
+        ${grounds(r).map(g => `<li><b>${g.n}</b> ${esc(g.of)}${g.detail ? `: <i>${esc(g.detail)}</i>` : ''}</li>`).join('')}
+      </ul>
+      <p class="set-row-sub">Every one of these is counted here, on this device, from the two atlases in front of it. The method is written down at <a href="METHOD.md">/METHOD.md</a>, and nothing about it leaves.</p>
+    </details>
     ${picks.length ? `<div class="rp-case">
       <div class="sec-head">the case for you</div>
       ${picks.map((pk, i) => `
@@ -1733,7 +1755,7 @@ function openAtlasReport(payload) {
     const made = store.addRoute(newRoute({
       ...r, id: undefined, sample: false,
       tags: graftTags(r.tags || [], theirs.tags),
-      provenance: { name, sig, adoptedAt: new Date().toISOString() },
+      provenance: extendChain(r.provenance, { name, sig }),
     }));
     if (!made) return toast('this browser refused to keep it');
     renderAll();

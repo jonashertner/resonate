@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf55';
+import { decodePath } from './route.js?v=rf56';
 
 export const SCHEMA_VERSION = 4;
 
@@ -102,9 +102,27 @@ export function normPlace(raw, i = 0) {
     sample: p.sample === true,
   };
 
-  // provenance reaches an attribute in the marker: rebuilt, never carried
+  // a link carries the road as `prov`: the names it passed through, in order
+  if (!isObj(p.provenance) && Array.isArray(p.prov) && p.prov.length) {
+    const road = p.prov.filter(isObj).map(h => ({ name: str(h.name, LIMITS.author), at: str(h.at, 40) })).filter(h => h.name);
+    if (road.length) {
+      const last = road[road.length - 1];
+      out.provenance = { chain: road.slice(0, -1).slice(-4), name: last.name, sig: 0, adoptedAt: last.at };
+    }
+  }
+
+  // provenance reaches an attribute in the marker: rebuilt, never carried.
+  // the chain is who it passed through before, oldest first, five at most:
+  // Ana handed it to Mira who handed it to you, and all three are kept.
   if (isObj(p.provenance)) {
     out.provenance = {
+      chain: Array.isArray(p.provenance.chain)
+        ? p.provenance.chain
+          .filter(isObj)
+          .map(h => ({ name: str(h.name, LIMITS.author), at: str(h.at, 40) }))
+          .filter(h => h.name)
+          .slice(-5)
+        : [],
       name: str(p.provenance.name, LIMITS.author),
       sig: Number(p.provenance.sig) || 0,
       adoptedAt: str(p.provenance.adoptedAt, 40),
@@ -170,6 +188,13 @@ export function normRoute(raw, i = 0, decode = null) {
   };
   if (isObj(r.provenance)) {
     out.provenance = {
+      chain: Array.isArray(r.provenance.chain)
+        ? r.provenance.chain
+          .filter(isObj)
+          .map(h => ({ name: str(h.name, LIMITS.author), at: str(h.at, 40) }))
+          .filter(h => h.name)
+          .slice(-5)
+        : [],
       name: str(r.provenance.name, LIMITS.author),
       sig: Number(r.provenance.sig) || 0,
       adoptedAt: str(r.provenance.adoptedAt, 40),

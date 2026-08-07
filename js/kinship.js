@@ -4,7 +4,7 @@
 // domains, and (3) where they diverge, the divergence is interesting — a
 // correspondent strong where you are blank expands you rather than mismatching.
 
-import { haversineKm } from './geocode.js?v=rf55';
+import { haversineKm } from './geocode.js?v=rf56';
 
 const SAME_PLACE_KM = 0.15; // within ~150m = the same place
 
@@ -126,6 +126,10 @@ export function resonance(mine, theirs) {
     })
     .sort((a, b) => b.weight - a.weight);
 
+  // where in the world you overlap, by name, so the verdict can be checked
+  const myCities = new Set(mine.places.map(p => norm(p.city)).filter(Boolean));
+  const sharedCities = [...new Set(theirs.places.map(p => p.city).filter(c => c && myCities.has(norm(c))))].slice(0, 6);
+
   return {
     score,
     common,
@@ -134,8 +138,36 @@ export function resonance(mine, theirs) {
     alignment,
     alignedDomains: aligned,
     expansionDomains: expansion,
+    sharedCities,
+    theirSize: theirs.places.length,
     picks,
   };
+}
+
+// The grounds a verdict rests on, in plain countable claims. A word without
+// its evidence is still an opaque judgement, however honest the word.
+export function grounds(r) {
+  const g = [];
+  if (r.common.length) {
+    g.push({ n: r.common.length, of: `place${r.common.length === 1 ? '' : 's'} you both hold` });
+  }
+  if (r.loved) {
+    g.push({ n: r.loved, of: `you have both been to and kept` });
+  }
+  if (r.disagreed) {
+    g.push({ n: r.disagreed, of: 'where you do not agree' });
+  }
+  if (r.sharedCities.length) {
+    g.push({ n: r.sharedCities.length, of: `cit${r.sharedCities.length === 1 ? 'y' : 'ies'} you both keep places in`,
+      detail: r.sharedCities.join(', ') });
+  }
+  if (r.alignedDomains.length) {
+    g.push({ n: r.alignedDomains.length, of: 'domains you are both fluent in',
+      detail: r.alignedDomains.slice(0, 4).join(', ') });
+  }
+  const news = r.picks.length;
+  if (news) g.push({ n: news, of: 'they know that you do not' });
+  return g;
 }
 
 // the verdict: one word from a five-word lexicon, never a number

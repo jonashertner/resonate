@@ -277,3 +277,30 @@ test('a way in a link is bounded', () => {
   const r = schema.normRoute({ path: many });
   assert.equal(r.path.length, schema.LIMITS.routePoints);
 });
+
+
+test('a place keeps its whole road, not only its last carrier', () => {
+  // Ana found it, Mira passed it on, and it reaches a third atlas
+  const fromMira = schema.normPlace({
+    name: 'Septime', lat: 48.85, lng: 2.38,
+    prov: [{ name: 'Ana', at: '2026-01-01' }, { name: 'Mira', at: '2026-06-01' }],
+  });
+  assert.equal(fromMira.provenance.name, 'Mira', 'the last hand is the one that gave it to you');
+  assert.deepEqual(fromMira.provenance.chain.map(h => h.name), ['Ana'], 'and Ana is not forgotten');
+});
+
+test('the road is bounded, however long the journey', () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({ name: `Carrier ${i}`, at: '2026-01-01' }));
+  const p = schema.normPlace({ name: 'Much travelled', lat: 46, lng: 8, prov: many });
+  assert.ok(p.provenance.chain.length <= 4, 'four before the last, five in all');
+  assert.equal(p.provenance.name, 'Carrier 11');
+});
+
+test('a hostile road is filtered rather than trusted', () => {
+  const p = schema.normPlace({
+    name: 'Suspect', lat: 46, lng: 8,
+    prov: [{ name: '' }, 'not an object', { name: 'x'.repeat(500) }, { name: 'Real' }],
+  });
+  const names = [...p.provenance.chain.map(h => h.name), p.provenance.name];
+  assert.ok(names.every(n => n && n.length <= 60), names.join('|'));
+});

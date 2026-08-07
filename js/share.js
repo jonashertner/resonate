@@ -2,8 +2,8 @@
 
 /* global LZString */
 
-import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf55';
-import { encodePath, simplify } from './route.js?v=rf55';
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf56';
+import { encodePath, simplify } from './route.js?v=rf56';
 
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
@@ -23,6 +23,8 @@ export function makeFolioUrl({ title, dedication, author, tags, places, routes =
       id: p.id, name: p.name, lat: p.lat, lng: p.lng,
       address: p.address, city: p.city, country: p.country, countryCode: p.countryCode,
       tags: p.tags, status: p.status, rating: p.rating, note: p.note, url: p.url,
+      // where it has been: the names, oldest first, so a place keeps its road
+      prov: p.provenance ? [...(p.provenance.chain || []), { name: p.provenance.name, at: p.provenance.adoptedAt }] : undefined,
     })),
   });
 }
@@ -61,6 +63,8 @@ export function makeShareUrl(tags, places, author = '', routes = []) {
       id: p.id, name: p.name, lat: p.lat, lng: p.lng,
       address: p.address, city: p.city, country: p.country, countryCode: p.countryCode,
       tags: p.tags, status: p.status, rating: p.rating, note: p.note, url: p.url,
+      // where it has been: the names, oldest first, so a place keeps its road
+      prov: p.provenance ? [...(p.provenance.chain || []), { name: p.provenance.name, at: p.provenance.adoptedAt }] : undefined,
     })),
   };
   const packed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));

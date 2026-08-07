@@ -25,7 +25,7 @@ jobs:
         run: cd vendor/argon2 && shasum -a 256 -c SHA256SUMS
       - name: no em-dash reaches a reader
         run: |
-          if grep -rn '—' index.html SECURITY.md README.md THREATS.md club/SPEC.md; then
+          if grep -rn '—' index.html SECURITY.md README.md THREATS.md METHOD.md club/SPEC.md; then
             echo "an em-dash is in the page copy"
             exit 1
           fi
