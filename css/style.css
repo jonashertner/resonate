@@ -920,6 +920,23 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   .word-btn { font-size: 13px; padding: 10px 0 4px; }
   .index-line { font-size: 13px; }
   .index-head { position: static; background: none; } /* the list must not fight a tall sticky header */
+
+  /* the folio under a thumb: the word yields to the list. the head stays,
+     small and stuck, so close is always in reach; everything else scrolls. */
+  .poster { padding-top: 0; }
+  .poster-head {
+    position: sticky; top: 0; z-index: 3;
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: 10px;
+    background: var(--field);
+  }
+  .poster-head::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 100%;
+    height: 22px; pointer-events: none;
+    background: linear-gradient(var(--field), transparent);
+  }
+  .poster-word { font-size: clamp(40px, 8vh, 60px); }
+  .poster-body { margin-top: 3vh; }
   .index-go { grid-template-columns: 1fr 1fr; gap: 2px 18px; }
   .go-sub { font-size: 11.5px; }
   .ix-meta { font-size: 11px; }
@@ -1054,6 +1071,21 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 
 .mark.proposed { opacity: 0.85; }
 .mark.proposed .mk-ring { animation: breathe 2600ms ease-in-out infinite; }
+
+/* where scroll itself can drive the change, the word opens at full poster
+   scale and compresses over the first arm's length of scrolling. browsers
+   without scroll timelines keep the statically smaller word above. */
+@supports (animation-timeline: scroll()) {
+  @media (max-width: 760px) {
+    .poster-word {
+      font-size: clamp(64px, 12vh, 150px);
+      animation: poster-yield linear both;
+      animation-timeline: scroll(nearest);
+      animation-range: 0px 160px;
+    }
+  }
+}
+@keyframes poster-yield { to { font-size: 26px; } }
 
 /* ---------- the sheet: the atlas typeset for paper, or pdf ---------- */
 #sheet { display: none; }
