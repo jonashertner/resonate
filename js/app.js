@@ -3,15 +3,15 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf46';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf46';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf46';
-import * as mapView from './map.js?v=rf46';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf46';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf46';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf46';
-import { exifGPS } from './exif.js?v=rf46';
-import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf46';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf47';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf47';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf47';
+import * as mapView from './map.js?v=rf47';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf47';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf47';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf47';
+import { exifGPS } from './exif.js?v=rf47';
+import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf47';
 
 // ---------- helpers ----------
 
@@ -1279,6 +1279,7 @@ function openFolioReport(payload) {
 
   const el = $('#reportOverlay');
   el.innerHTML = `
+    <button class="rp-x" id="rpX">close</button>
     <div class="rp-eyebrow">a folio from ${esc(author)}</div>
     <h1 class="rp-name">${esc(payload.title || 'untitled')}</h1>
     ${payload.dedication ? `<p class="rp-ded">“${esc(payload.dedication)}”</p>` : ''}
@@ -1378,6 +1379,7 @@ function openAskReport(payload) {
 
   const el = $('#reportOverlay');
   el.innerHTML = `
+    <button class="rp-x" id="rpX">close</button>
     <div class="rp-eyebrow">an ask, from ${esc(from)}</div>
     <h1 class="rp-name">${esc(q || 'anything')}</h1>
     <ul class="rp-evidence mono">
@@ -1420,6 +1422,7 @@ function openAtlasReport(payload) {
 
   const el = $('#reportOverlay');
   el.innerHTML = `
+    <button class="rp-x" id="rpX">close</button>
     <div class="rp-eyebrow">an atlas offered to yours</div>
     <h1 class="rp-name">${esc(name)}</h1>
     <p class="rp-verdict">${v.word}<span class="rp-sub">${v.sub}</span></p>
@@ -3053,6 +3056,13 @@ function init() {
   });
   $('#fmCommand').addEventListener('click', togglePalette);
   $('#hbDone').addEventListener('click', () => { $('#handBar').hidden = true; });
+  // a report's close word, present in every letter, wired here once
+  $('#reportOverlay').addEventListener('click', (e) => {
+    if (e.target.id !== 'rpX') return;
+    dropDialog($('#reportOverlay'));
+    applyWorldState();
+    clearShareHash();
+  });
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
   $('#fieldWord').addEventListener('click', turnField);
   $('#themeWord').addEventListener('click', () => {

@@ -419,6 +419,8 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 }
 .index-tools {
   position: sticky; top: 0; z-index: 2;
+  /* the close word owns the top-right notch while both are stuck */
+  --close-notch: 110px;
   padding: 10px 0 14px;
   background: var(--field);
 }
@@ -450,11 +452,16 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   transition: color var(--mo-reflex) var(--e-reflex);
 }
 .index-x {
-  position: fixed;
-  top: max(18px, env(safe-area-inset-top)); right: 22px;
-  z-index: 3;
+  position: sticky;
+  top: max(14px, env(safe-area-inset-top));
+  display: block; margin-left: auto;
+  z-index: 4;
   font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
   color: var(--ink-2);
+  /* a word on its own patch of field: what scrolls beneath is masked, and a
+     tap here can only ever mean close */
+  background: var(--field);
+  padding: 6px 0 6px 16px;
   padding: 10px 0 10px 14px;
 }
 .index-x:hover { color: var(--ink); }
@@ -513,6 +520,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* tone and theme are one pair: they take the right-hand end of the line
    together, and when the line breaks they go over together */
 .line-end { margin-left: auto; display: flex; gap: 24px; }
+@media (min-width: 761px) { .index-tools .line-end { margin-right: var(--close-notch, 110px); } }
 .index-line button sup { font-family: var(--mono); font-size: 8px; letter-spacing: 0; margin-left: 3px; vertical-align: 0.5em; }
 .ix-sorts button[aria-pressed="true"] { box-shadow: none; font-variation-settings: 'wght' 750; }
 
@@ -930,21 +938,6 @@ a.word-btn { text-decoration: none; display: inline-block; }
   .index-tools { position: static; background: none; padding: 0; }
   .index-tools::after { content: none; }
 
-  /* the folio under a thumb: the word yields to the list. the head stays,
-     small and stuck, so close is always in reach; everything else scrolls. */
-  .poster { padding-top: 0; }
-  .poster-head {
-    position: sticky; top: 0; z-index: 3;
-    padding-top: max(20px, env(safe-area-inset-top));
-    padding-bottom: 10px;
-    background: var(--field);
-  }
-  .poster-head::after {
-    content: ""; position: absolute; left: 0; right: 0; top: 100%;
-    height: 22px; pointer-events: none;
-    background: linear-gradient(var(--field), transparent);
-  }
-  .poster-word { font-size: clamp(40px, 8vh, 60px); }
   .poster-body { margin-top: 3vh; }
   .index-go { grid-template-columns: 1fr 1fr; gap: 2px 18px; }
   .go-sub { font-size: 11.5px; }
@@ -1081,20 +1074,78 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 .mark.proposed { opacity: 0.85; }
 .mark.proposed .mk-ring { animation: breathe 2600ms ease-in-out infinite; }
 
-/* where scroll itself can drive the change, the word opens at full poster
-   scale and compresses over the first arm's length of scrolling. browsers
-   without scroll timelines keep the statically smaller word above. */
+/* One rule for every summoned surface, at every width: the surface keeps
+   its word and its close in a slim bar, and everything else yields to the
+   content. Where scroll can drive it, the word opens at full poster scale
+   and compresses over the first arm's length of scrolling, the head's own
+   padding tightening with it. Browsers without scroll timelines fall back
+   below: small screens get a statically smaller stuck word, large screens
+   keep the head in the flow and escape stands for close. */
 @supports (animation-timeline: scroll()) {
+  .poster { padding-top: 0; }
+  .poster-head {
+    position: sticky; top: 0; z-index: 3;
+    padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
+    padding-bottom: 10px;
+    background: var(--field);
+    animation: head-tighten linear both;
+    animation-timeline: scroll(nearest);
+    animation-range: 0px 160px;
+  }
+  .poster-head::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 100%;
+    height: 22px; pointer-events: none;
+    background: linear-gradient(var(--field), transparent);
+  }
+  .poster-word {
+    animation: poster-yield linear both;
+    animation-timeline: scroll(nearest);
+    animation-range: 0px 160px;
+  }
+}
+@supports not (animation-timeline: scroll()) {
   @media (max-width: 760px) {
-    .poster-word {
-      font-size: clamp(64px, 12vh, 150px);
-      animation: poster-yield linear both;
-      animation-timeline: scroll(nearest);
-      animation-range: 0px 160px;
+    .poster { padding-top: 0; }
+    .poster-head {
+      position: sticky; top: 0; z-index: 3;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: 10px;
+      background: var(--field);
     }
+    .poster-head::after {
+      content: ""; position: absolute; left: 0; right: 0; top: 100%;
+      height: 22px; pointer-events: none;
+      background: linear-gradient(var(--field), transparent);
+    }
+    .poster-word { font-size: clamp(40px, 8vh, 60px); }
   }
 }
 @keyframes poster-yield { to { font-size: 26px; } }
+@keyframes head-tighten { to { padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: 8px; } }
+
+/* the plate's first line is its bar: number, coordinates, close, in reach
+   however long the notes run. the mobile sheet keeps its own gradient top,
+   so only the tall plate wears this. */
+@media (min-width: 761px) {
+  .plate .plate-eyebrow {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--field);
+    padding-top: 6px; padding-bottom: 8px;
+  }
+}
+
+/* a report is a letter, but close must not wait at the letter's end */
+.rp-x {
+  position: sticky;
+  top: 0; /* pins at the letter's own top margin line */
+  display: block; margin-left: auto;
+  z-index: 3;
+  font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--field);
+  padding: 6px 0 6px 16px;
+}
+.rp-x:hover { color: var(--ink); }
 
 /* ---------- the sheet: the atlas typeset for paper, or pdf ---------- */
 #sheet { display: none; }
