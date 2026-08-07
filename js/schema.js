@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf52';
+import { decodePath } from './route.js?v=rf53';
 
 export const SCHEMA_VERSION = 4;
 
@@ -28,16 +28,11 @@ export const LIMITS = {
   photoBytes: 3_000_000,
 };
 
-// Whether you have been is a fact. Whether you would recommend it is the
-// only judgement the atlas asks for, and it is a word you either say or do
-// not. Everything else belongs in the note. The old five-star number is still
-// read from links sealed before this, and is never written again.
-export const WORDS = ['recommend'];
-
-// a number becomes the word, once, and the same way everywhere
-export function wordFromRating(r) {
-  return (Number(r) || 0) >= 4 ? 'recommend' : '';
-}
+// An atlas holds the places that matter to you. Keeping one IS the
+// recommendation, so nothing here asks for a verdict beside it: only whether
+// you have been, which is a fact, and the note, where a sentence says what a
+// label never could. The old five-star number is still read from links sealed
+// before this, and is never written again.
 
 export const PHOTO_ID = /^ph_[a-z0-9]{1,40}$/;
 
@@ -95,7 +90,6 @@ export function normPlace(raw, i = 0) {
     // the number survives only so links and files from before the words still
     // open; nothing writes it, and no surface shows it
     rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
-    word: WORDS.includes(p.word) ? p.word : '',
     note: str(p.note, LIMITS.note),
     url: /^https?:\/\//i.test(String(p.url ?? '')) ? str(p.url, LIMITS.url) : '',
     photos,
@@ -158,7 +152,6 @@ export function normRoute(raw, i = 0, decode = null) {
       : [],
     status: r.status === 'walked' ? 'walked' : 'wishlist',
     rating: Math.max(0, Math.min(5, Math.floor(Number(r.rating) || 0))),
-    word: WORDS.includes(r.word) ? r.word : '',
     note: str(r.note, LIMITS.note),
     url: /^https?:\/\//i.test(String(r.url ?? '')) ? str(r.url, LIMITS.url) : '',
     km: nn(r.km, 100000),

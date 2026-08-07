@@ -3,16 +3,16 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf52';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf52';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf52';
-import * as mapView from './map.js?v=rf52';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf52';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf52';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf52';
-import { exifGPS } from './exif.js?v=rf52';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf52';
-import * as photoStore from './photos.js?v=rf52';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf53';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf53';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf53';
+import * as mapView from './map.js?v=rf53';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf53';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf53';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf53';
+import { exifGPS } from './exif.js?v=rf53';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf53';
+import * as photoStore from './photos.js?v=rf53';
 
 // ---------- helpers ----------
 
@@ -61,23 +61,12 @@ function fmtDate(iso) {
   catch { return ''; }
 }
 
-// Whether you have been is a fact. Whether you would recommend it is the one
-// judgement the atlas asks for: a word you say, or do not. Anything more
-// belongs in the note, where a sentence says what a label cannot.
-
-// a word said long ago may no longer be true, and the place says so quietly
-const STALE_MONTHS = 18;
-function staleWord(p) {
-  if (p.word !== 'recommend' || !p.updatedAt) return '';
-  const months = (Date.now() - Date.parse(p.updatedAt)) / (30.44 * 864e5);
-  if (!(months >= STALE_MONTHS)) return '';
-  const years = Math.floor(months / 12);
-  return years >= 1 ? `${years} year${years === 1 ? '' : 's'} ago` : `${Math.floor(months)} months ago`;
-}
+// An atlas holds the places that matter to you, so keeping one is already
+// the recommendation. Nothing here asks for a verdict beside it: only whether
+// you have been, and the note.
 
 // what a place says of itself in one line, wherever it is listed
 function datumWord(p) {
-  if (p.word === 'recommend') return 'recommend';
   return p.status === 'wishlist' ? 'want to go' : 'been';
 }
 function fmtNo(n) { return String(n).padStart(2, '0'); }
@@ -118,8 +107,15 @@ function filteredPlaces() {
   switch (state.sort) {
     case 'name': list.sort((a, b) => a.name.localeCompare(b.name)); break;
     case 'distance': list.sort((a, b) => haversineKm(center, a) - haversineKm(center, b)); break;
-    case 'rating':
-      list.sort((a, b) => (b.word === 'recommend') - (a.word === 'recommend') || a.name.localeCompare(b.name));
+    case 'city':
+      // an atlas is read by where things are: cities in order, and the
+      // placeless gathered at the end rather than scattered through it
+      list.sort((a, b) => {
+        const ac = (a.city || a.country || '').trim();
+        const bc = (b.city || b.country || '').trim();
+        if (!ac !== !bc) return ac ? -1 : 1;
+        return ac.localeCompare(bc) || a.name.localeCompare(b.name);
+      });
       break;
     default: list.sort((a, b) => nos.get(b.id) - nos.get(a.id));
   }
@@ -497,7 +493,7 @@ function renderList() {
   wrap.innerHTML = places.map((p, i) => {
     const tag = tagById(p.tags[0]);
     const locale = [p.city, p.country].filter(Boolean).join(' · ');
-    const datum = p.word ? datumWord(p) : fmtDistance(haversineKm(center, p));
+    const datum = fmtDistance(haversineKm(center, p));
     const prov = p.provenance ? `<span class="prov">after <b>${esc(p.provenance.name)}</b></span>` : '';
     return `<button class="ix ${p.status === 'wishlist' ? 'wish' : ''} ${p.id === state.selectedId ? 'selected' : ''}"
       data-id="${esc(p.id)}" style="--i:${i}">
@@ -642,10 +638,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       <div class="plate-words" id="pStatus">
         <button data-st="visited" aria-pressed="${place.status === 'visited'}">been</button>
         <button data-st="wishlist" aria-pressed="${place.status === 'wishlist'}">want to go</button>
-        <button data-word="recommend" class="reco" aria-pressed="${place.word === 'recommend'}">recommend</button>
       </div>
-      ${staleWord(place) ? `<div class="set-row-sub" id="pStale">recommended ${esc(staleWord(place))}. still true?
-        <button class="word-btn quiet" id="pStillTrue" style="display:inline;margin-left:10px">still true</button></div>` : ''}
 
       <div class="plate-sec">
         <div class="plate-sec-head"><span>tags</span></div>
@@ -721,21 +714,11 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
   $('#pStatus').addEventListener('click', (e) => {
     const st = e.target.closest('[data-st]');
-    if (st) {
-      save({ status: st.dataset.st });
-      renderPlate(placeById(place.id)); renderList(); syncMarkers();
-      return;
-    }
-    const w = e.target.closest('[data-word]');
-    if (!w) return;
-    save({ word: place.word === 'recommend' ? '' : 'recommend' });
-    renderPlate(placeById(place.id)); renderList();
+    if (!st) return;
+    save({ status: st.dataset.st });
+    renderPlate(placeById(place.id)); renderList(); syncMarkers();
   });
 
-  $('#pStillTrue')?.addEventListener('click', () => {
-    // re-affirming is a real edit: it moves the date the word was last meant
-    if (save({ word: place.word })) { renderPlate(placeById(place.id)); toast('still true'); }
-  });
 
 
   $('#pTags').addEventListener('click', (e) => {
@@ -1098,7 +1081,6 @@ function renderRoutePlate(route) {
     <div class="plate-words" id="pRouteStatus">
       <button data-rst="walked" aria-pressed="${route.status === 'walked'}">walked</button>
       <button data-rst="wishlist" aria-pressed="${route.status === 'wishlist'}">want to walk</button>
-      <button data-rword="recommend" class="reco" aria-pressed="${route.word === 'recommend'}">recommend</button>
     </div>
 
     <div class="plate-sec">
@@ -1133,11 +1115,8 @@ function renderRoutePlate(route) {
     else nameEl.textContent = route.name;
   });
   $('#pClose').addEventListener('click', () => { state.selectedRouteId = null; popSurface(); syncMarkers(); applyWorldState(); });
-  $$('#pRouteStatus button').forEach(b => b.addEventListener('click', () => {
+  $$('#pRouteStatus [data-rst]').forEach(b => b.addEventListener('click', () => {
     if (save({ status: b.dataset.rst })) renderRoutePlate(routeById(route.id));
-  }));
-  $$('#pRouteStatus [data-rword]').forEach(b => b.addEventListener('click', () => {
-    if (save({ word: route.word === 'recommend' ? '' : 'recommend' })) renderRoutePlate(routeById(route.id));
   }));
   $$('#pRouteTags button').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.rtag;
@@ -1432,7 +1411,7 @@ function openFolioReport(payload) {
         <div class="rp-pick">
           <span class="no">${fmtNo(i + 1)}</span>
           <span class="nm">${esc(p.name)}</span>
-          <span class="why">${esc(p.city || '')}${p.word ? ' · ' + esc(datumWord(p)) : ''}</span>
+          <span class="why">${esc(p.city || '')}</span>
           ${holdAlready(p)
             ? '<span class="held">you hold this</span>'
             : `<button class="adopt" data-adopt="${i}">adopt</button>`}
@@ -1571,7 +1550,7 @@ function openAtlasReport(payload) {
         <div class="rp-pick" data-i="${i}">
           <span class="no">${fmtNo(i + 1)}</span>
           <span class="nm">${esc(pk.place.name)}</span>
-          <span class="why">${pk.expands ? 'new ground' : esc((pk.domainLabels[0] || '').toLowerCase())}${pk.place.word ? ' · ' + esc(datumWord(pk.place)) : ''}</span>
+          <span class="why">${pk.expands ? 'new ground' : esc((pk.domainLabels[0] || '').toLowerCase())}</span>
           <button class="adopt" data-adopt="${i}">adopt</button>
         </div>`).join('')}
     </div>` : ''}
@@ -1758,7 +1737,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
           <span class="in">${chosen.has(p.id) ? 'in' : 'out'}</span>
           <span class="nm">${esc(p.name)}</span>
-          <span class="sub">${esc(p.city || '')}${p.word ? ' · ' + esc(datumWord(p)) : ''}</span>
+          <span class="sub">${esc(p.city || '')}</span>
         </button>`).join('')}
       ${wayPool.length ? wayPool.map(r => `
         <button class="fol-row" data-wid="${esc(r.id)}" aria-pressed="${chosenWays.has(r.id)}">
@@ -2116,7 +2095,7 @@ function publishBlock(title, dedication, author, sel) {
     places: sel.map(p => ({
       name: p.name, lat: p.lat, lng: p.lng, address: p.address, city: p.city,
       country: p.country, tags: p.tags.map(t => tagName.get(t)).filter(Boolean),
-      status: p.status, word: p.word, rating: p.rating, note: p.note,
+      status: p.status, note: p.note,
     })),
   }, null, 1);
 }
@@ -2199,7 +2178,7 @@ async function shareMap() {
       <ul class="sh-list">
         <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
         ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: the whole line walked, and its climb</li>` : ''}
-        <li>addresses, cities, countries, tags, been or want to go, what you recommend</li>
+        <li>addresses, cities, countries, tags, been or want to go</li>
         ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
         ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
         <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
@@ -2808,7 +2787,7 @@ function corrMatches(q) {
 function rowHTML(item, i) {
   const hl = i === palette.hl ? ' hl' : '';
   if (item.kind === 'corrplace') {
-    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.p.name)} <span class="after">· after ${esc(item.c.name)}</span></span><span class="row-sub">${esc([item.p.city, item.p.country].filter(Boolean).join(' · '))}${item.p.word ? ' · ' + esc(datumWord(item.p)) : ''}</span></button>`;
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${esc(item.p.name)} <span class="after">· after ${esc(item.c.name)}</span></span><span class="row-sub">${esc([item.p.city, item.p.country].filter(Boolean).join(' · '))}</span></button>`;
   }
   if (item.kind === 'local') {
     const p = item.place;

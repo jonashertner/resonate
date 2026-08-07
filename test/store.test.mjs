@@ -159,41 +159,30 @@ test('a photo id that is not one is still refused', () => {
 
 // ---------- the words a place is held in ----------
 
-test('an atlas of stars learns the one word on the way in', () => {
+test('an atlas from the age of stars keeps its places and drops the score', () => {
   fresh();
   localStorage.setItem('resonate.places.v1', JSON.stringify([
     { id: 'w5', name: 'Loved', lat: 46, lng: 8, tags: [], status: 'visited', rating: 5 },
-    { id: 'w4', name: 'Liked', lat: 46, lng: 8, tags: [], status: 'visited', rating: 4 },
-    { id: 'w3', name: 'Middling', lat: 46, lng: 8, tags: [], status: 'visited', rating: 3 },
-    { id: 'w0', name: 'Unsaid', lat: 46, lng: 8, tags: [], status: 'wishlist', rating: 0 },
+    { id: 'w0', name: 'Wanted', lat: 46, lng: 8, tags: [], status: 'wishlist', rating: 0 },
   ]));
   store.load();
-  assert.equal(store.placeById('w5').word, 'recommend');
-  assert.equal(store.placeById('w4').word, 'recommend');
-  assert.equal(store.placeById('w3').word, '', 'a middling number was never a recommendation');
-  assert.equal(store.placeById('w0').word, '', 'silence stays silence');
-  assert.equal(store.placeById('w5').status, 'visited', 'the fact of having been is untouched');
+  assert.equal(store.places.length, 2, 'nothing is lost to the change');
+  assert.equal(store.placeById('w5').status, 'visited', 'having been is the fact that survives');
+  assert.equal(store.placeById('w0').status, 'wishlist');
+  assert.equal('word' in store.placeById('w5'), false, 'and no verdict is stored beside it');
 });
 
-test('a word a person chose is never overwritten by the old number', () => {
+test('a verdict a hostile link invents is not kept', () => {
   fresh();
-  localStorage.setItem('resonate.places.v1', JSON.stringify([
-    { id: 'k1', name: 'Theirs', lat: 46, lng: 8, tags: [], status: 'visited', rating: 5, word: '' },
-  ]));
-  store.load();
-  // an explicit empty word is silence the person chose; only a missing one is learned
-  assert.equal(store.placeById('k1').word, 'recommend', 'an absent word is learned from the number');
-  store.updatePlace('k1', { word: '' });
-  store.load();
-  assert.equal(store.placeById('k1').word, 'recommend', 'and learned again, since nothing distinguishes it');
-});
-
-test('a made-up word is refused', () => {
-  fresh();
-  const p = store.addPlace(aPlace('Hostile'));
-  store.updatePlace(p.id, { word: 'transcendent' });
-  store.load();
-  assert.equal(store.placeById(p.id).word, '');
+  const added = store.merge({
+    version: 4,
+    places: [{ id: 'h1', name: 'Theirs', lat: 45, lng: 9, tags: [], word: 'essential', relation: 'regular' }],
+    tags: [], settings: {},
+  });
+  assert.equal(added, 1);
+  const p = store.placeById('h1');
+  assert.equal('word' in p, false);
+  assert.equal('relation' in p, false);
 });
 
 // ---------- two exports, two promises ----------
