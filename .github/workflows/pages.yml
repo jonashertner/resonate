@@ -32,7 +32,7 @@ jobs:
         run: node --test test/*.test.mjs club/test/*.test.mjs
       - name: no em-dash reaches a reader
         run: |
-          if grep -rn '—' index.html; then
+          if grep -rn '—' index.html SECURITY.md README.md; then
             echo "an em-dash is in the page copy"
             exit 1
           fi
@@ -51,6 +51,7 @@ jobs:
           rsync -a --exclude '.git' --exclude '.github' --exclude '.claude' \
                 --exclude '_site' --exclude 'test' --exclude 'node_modules' \
                 --exclude 'club' \
+                --exclude 'tools' \
                 ./ _site/
       - uses: actions/upload-pages-artifact@v3
         with:

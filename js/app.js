@@ -3,15 +3,15 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf48';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf48';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf48';
-import * as mapView from './map.js?v=rf48';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf48';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf48';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf48';
-import { exifGPS } from './exif.js?v=rf48';
-import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf48';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf49';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf49';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf49';
+import * as mapView from './map.js?v=rf49';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf49';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf49';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf49';
+import { exifGPS } from './exif.js?v=rf49';
+import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf49';
 
 // ---------- helpers ----------
 
@@ -38,10 +38,18 @@ function safeUrl(u) {
 
 let toastTimer;
 let lastToastAt = 0;
-function toast(msg, ms = 2800) {
+function toast(msg, ms = 2800, act = null) {
   lastToastAt = Date.now();
   const el = $('#toast');
   el.textContent = msg;
+  if (act) {
+    const b = document.createElement('button');
+    b.className = 'toast-act';
+    b.textContent = act.word;
+    b.addEventListener('click', () => { el.hidden = true; act.run(); });
+    el.append(' ', b);
+    ms = Math.max(ms, 9000);
+  }
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
@@ -681,16 +689,39 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   $$('#pPhotos .ph-x').forEach(btn => btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const i = parseInt(btn.dataset.phx, 10);
+    const kept = place.photos[i];
     save({ photos: place.photos.filter((_, k) => k !== i) });
     renderPlate(place); renderList();
+    toast('photo removed.', 9000, { word: 'take it back', run: () => {
+      const p2 = placeById(place.id);
+      if (!p2) return;
+      const back = p2.photos.slice(); back.splice(Math.min(i, back.length), 0, kept);
+      store.updatePlace(p2.id, { photos: back });
+      if (!$('#plate').hidden && state.selectedId === place.id) renderPlate(placeById(place.id));
+      renderList();
+    } });
   }));
 
   $('#pDelete').addEventListener('click', () => {
-    if (!confirm(`Remove “${place.name}” from your atlas?`)) return;
+    const inFolios = store.folios.filter(f => f.placeIds.includes(place.id));
+    const warn = inFolios.length
+      ? ` ${inFolios.length === 1 ? 'One folio encloses it and' : `${inFolios.length} folios enclose it and`} will stop saying it.`
+      : '';
+    if (!confirm(`Remove “${place.name}” from your atlas?${warn} A link already sent keeps its copy.`)) return;
+    const kept = { place: { ...place, photos: place.photos.slice() }, folioIds: inFolios.map(f => f.id) };
     store.removePlace(place.id);
     closeSurface('plate');
     renderAll();
-    toast('removed');
+    toast('removed.', 9000, { word: 'take it back', run: () => {
+      const back = store.addPlace(kept.place);
+      if (!back) return toast('this browser refused to take it back');
+      kept.folioIds.forEach(id => {
+        const f = store.folioById(id);
+        if (f && !f.placeIds.includes(back.id)) store.updateFolio(id, { placeIds: [...f.placeIds, back.id] });
+      });
+      renderAll();
+      toast('back where it was');
+    } });
   });
 
   if (edit) {
@@ -833,7 +864,6 @@ function addPlaceFromResult(r) {
   store.saveSettings();
   renderAll();
   selectPlace(place.id, { fly: true });
-  return place;
   return place;
 }
 
@@ -1010,7 +1040,8 @@ function renderRoutePlate(route) {
   $('#pRouteNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
   $('#pRouteGpx').addEventListener('click', () => downloadGPX(route));
   $('#pRouteRemove').addEventListener('click', () => {
-    if (!confirm(`Remove “${route.name}” from your atlas?`)) return;
+    const wayFolios = store.folios.filter(f => f.routeIds.includes(route.id)).length;
+    if (!confirm(`Remove “${route.name}” from your atlas?${wayFolios ? ` ${wayFolios === 1 ? 'One folio encloses it' : `${wayFolios} folios enclose it`} and will stop saying it.` : ''} A link already sent keeps its copy.`)) return;
     store.removeRoute(route.id);
     state.selectedRouteId = null;
     popSurface();
@@ -1268,7 +1299,7 @@ function openReport(payload) {
 
 // a folio arrives: an envelope, not a feed item
 function openFolioReport(payload) {
-  const author = String(payload.author || '').trim() || 'unsigned';
+  const author = String(payload.author || '').trim() || 'no byline';
   const places = (payload.places || [])
     .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng))
     .map(p => newPlace({ ...p, photos: [] }));
@@ -1413,7 +1444,7 @@ function openAtlasReport(payload) {
       .map(p => newPlace({ ...p, photos: [] })),
   };
   const theirWays = payload.routes || [];
-  const name = String(payload.author || '').trim() || 'an unsigned atlas';
+  const name = String(payload.author || '').trim() || 'an atlas without a byline';
   const r = resonance(myAtlas(), theirs);
   const v = verdict(r);
   const ev = evidenceLines(r, name);
@@ -1485,7 +1516,7 @@ function openAtlasReport(payload) {
     toast(`${added} places are yours now. make them true`);
   });
   $('#rpKeep').addEventListener('click', () => {
-    const finalName = prompt('Keep this atlas under which name?', name === 'an unsigned atlas' ? '' : name);
+    const finalName = prompt('Keep this atlas under which name?', name === 'an atlas without a byline' ? '' : name);
     if (finalName === null) return;
     const kept = store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
     if (!kept) return toast('this browser refused to keep them');
@@ -1522,7 +1553,7 @@ function holdAlready(p) {
   });
 }
 
-// a signature is asked for at the moment it is used, never at the door
+// a byline is asked for at the moment it is used, never at the door
 function ensureAuthor() {
   if (store.settings.authorName) return Promise.resolve(store.settings.authorName);
   const ask = $('#nameAsk');
@@ -1637,6 +1668,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         <button class="word-btn quiet" id="folNone">everything out</button>
         ${kept ? '<button class="word-btn quiet" id="folRemove">remove from the shelf</button>' : ''}
       </div>
+      ${kept?.offeredAt ? `<div class="news-note">offered to the newsstand ${fmtDate(kept.offeredAt).toLowerCase()}. a folio comes down the way it went up: <button class="word-btn quiet" id="folRetract" style="display:inline">ask for its removal</button></div>` : ''}
       <div class="news-note">Keeping shares nothing: the folio stays here, and follows your atlas as it
       improves. A link carries a copy of what is enclosed today, without photographs.</div>`;
 
@@ -1690,6 +1722,9 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         places: sel,
         routes: wraySelection(),
       });
+      if (url.length > LINK_HARD_LIMIT) {
+        return toast('this folio is too long to travel as one link. fewer places, or print it');
+      }
       handOver(url, 'the folio', {
         title: t,
         text: `${t}${author ? `, a folio from ${author}` : ', a folio'}`,
@@ -1715,10 +1750,19 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         + '?title=' + encodeURIComponent('folio: ' + t)
         + '&body=' + encodeURIComponent('Paste the folio below this line. It is already on your clipboard.\n\n');
       window.open(issueUrl, '_blank', 'noopener');
+      if (kept) { store.updateFolio(kept.id, { offeredAt: new Date().toISOString() }); }
       toast('on your clipboard. paste it in and submit, and a person reads it before it goes up');
     });
+    $('#folRetract')?.addEventListener('click', () => {
+      const subject = `take down: ${kept.title}`;
+      const bodyTx = 'please take this folio off the stand.';
+      const issue = 'https://github.com/jonashertner/resonate-commons/issues/new'
+        + '?title=' + encodeURIComponent(subject)
+        + '&body=' + encodeURIComponent(bodyTx);
+      window.open(issue, '_blank', 'noopener');
+    });
     $('#folRemove')?.addEventListener('click', () => {
-      if (!confirm(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.`)) return;
+      if (!confirm(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.${kept.offeredAt ? ' A copy offered to the newsstand stays there until you ask for its removal.' : ''}`)) return;
       store.removeFolio(kept.id);
       toast('off the shelf. every place is still yours');
       openFolioShelf();
@@ -2051,7 +2095,7 @@ async function shareMap() {
         <li>addresses, cities, countries, tags, been or want to go, stars</li>
         ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
         ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
-        <li>${author ? `signed <b>${esc(author)}</b>` : 'unsigned'}</li>
+        <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
       </ul>
       <div class="sec-head">what stays</div>
       <ul class="sh-list">
@@ -2122,15 +2166,15 @@ function renderStats() {
       <div class="country-cols">${countryList.map(([c, n]) => `<div class="tally"><span class="name">${esc(c)}</span><span class="n">${n}</span></div>`).join('')}</div>` : ''}`;
 }
 
-// yours: signature and data, nothing else
+// yours: the byline and the data, nothing else
 function renderSettings() {
   const body = $('#settingsBody');
   body.innerHTML = `
     <div class="set-sec">
-      <div class="sec-head">signature</div>
+      <div class="sec-head">your byline</div>
       <div class="set-row">
-        <div class="set-row-sub">Your atlas signs its share links with this name.</div>
-        <input class="text-input" id="authorName" style="max-width:220px" placeholder="unsigned" value="${esc(store.settings.authorName)}">
+        <div class="set-row-sub">This name rides as the byline on what you hand over. A typed name, nothing more.</div>
+        <input class="text-input" id="authorName" style="max-width:220px" placeholder="no byline" value="${esc(store.settings.authorName)}">
       </div>
     </div>
 
@@ -2175,7 +2219,7 @@ function renderSettings() {
   });
   $('#eraseAll').addEventListener('click', () => {
     if (!confirm('Erase every place and tag in this atlas? Export first if you want a keepsake.')) return;
-    if (!confirm('This cannot be undone. Really erase everything?')) return;
+    if (!confirm('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?')) return;
     store.clearAll();
     state.selectedId = null;
     state.foreign = null;
@@ -2234,7 +2278,7 @@ function renderTags() {
     const tag = store.tagById(id);
     if (e.target.closest('[data-del]')) {
       const n = store.tagCount(id);
-      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}?`)) return;
+      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}? The places keep their other tags.`)) return;
       store.removeTag(id);
       renderTags(); renderAll();
     }
@@ -2373,7 +2417,13 @@ function renderClub() {
   $('#clubSync').addEventListener('click', clubSync);
   $('#clubBurn').addEventListener('click', async () => {
     if (!confirm('Burn both envelopes at the club? Your atlas here is untouched.')) return;
-    try { await clubClient().delVault(); toast('the envelopes are gone'); renderClub(); }
+    try {
+      await clubClient().delVault();
+      // an emptied vault must be sealable again: the count starts over
+      store.settings.clubSeq = 0; store.settings.clubSealedAt = '';
+      store.saveSettings();
+      toast('the envelopes are gone'); renderClub();
+    }
     catch { toast('the vault did not answer'); }
   });
   $('#clubForget').addEventListener('click', () => {
@@ -2462,9 +2512,9 @@ const VERBS = {
   share: { run: shareMap, hint: 'hand your atlas to someone' },
   census: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
   stats: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
-  yours: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
-  kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
-  settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
+  yours: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'your byline, your data, erase' },
+  kept: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'your byline, your data, erase' },
+  settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'your byline, your data, erase' },
   tags: { run: () => openSurface('tagsOverlay', renderTags), hint: 'the domains of your taste' },
   voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'the atlases you keep' },
   club: { run: () => openSurface('clubOverlay', renderClub), hint: 'the travellers club. backup and sync, sealed' },

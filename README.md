@@ -19,12 +19,14 @@ for good.
 ## Run it
 
 ```bash
-python3 -m http.server 5178
+node tools/dev.mjs
 ```
 
-Then open http://localhost:5178. Any static file server works. Note that
-python's server does not answer range requests, so the intro film cannot seek;
-it starts from the first frame locally and from the right frame in production.
+Any static file server works too (`python3 -m http.server 5178`); the dev
+server additionally lets the intro film seek and admits the local club mock
+into the page's security policy.
+
+Then open http://localhost:5178.
 
 ## Tests
 
@@ -49,7 +51,7 @@ colour on it means a mark and the domain it belongs to. Notes can be dictated.
 newsstand, and, when you ask it to, the world. Prefixes: `#tag`, `>verb`,
 `@voice`, or a bare `lat,lng`.
 
-**Hand over.** A folio is a titled, signed set of places for one person. An ask
+**Hand over.** A folio is a titled set of places under your byline, for one person. An ask
 is a question that arrives with the reply already drafted from the recipient's
 own atlas. Both travel as a link and nothing else.
 
@@ -71,8 +73,8 @@ Hand-written ES modules. No framework, no bundler.
 | Tiles | CARTO light and dark raster, stripped to grey |
 | Geocoding | Nominatim, on an explicit press only, never as you type |
 | Links | lz-string into the URL hash |
-| Storage | localStorage: `resonate.places.v1`, `.tags.v1`, `.correspondents.v1`, `.settings.v1` |
-| Type | Bricolage Grotesque variable, Fragment Mono |
+| Storage | localStorage: `resonate.places.v1`, `.routes.v1`, `.folios.v1`, `.tags.v1`, `.correspondents.v1`, `.settings.v1` |
+| Type | Bricolage Grotesque variable, Fragment Mono, vendored under `fonts/` (OFL) |
 
 ```
 index.html      the shell: corner marks, the index, posters, the command line

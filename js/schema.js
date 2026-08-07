@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf48';
+import { decodePath } from './route.js?v=rf49';
 
 export const SCHEMA_VERSION = 3;
 
@@ -279,6 +279,8 @@ export function normFolioRef(raw, i = 0) {
     routeIds: ids(f.routeIds, LIMITS.routes),
     createdAt: str(f.createdAt, 40),
     updatedAt: str(f.updatedAt, 40),
+    // when this folio was offered to the newsstand, so the shelf can say so
+    offeredAt: str(f.offeredAt, 40),
   };
 }
 
@@ -315,7 +317,7 @@ export function normFolioCard(raw) {
     id: id(f.id, file),
     file,
     title,
-    author: str(f.author, LIMITS.author) || 'unsigned',
+    author: str(f.author, LIMITS.author) || 'no byline',
     dedication: str(f.dedication, LIMITS.dedication),
     n: Math.max(0, Math.min(LIMITS.places, Math.floor(Number(f.n) || 0))),
     cities: strList(f.cities, 120, 12),

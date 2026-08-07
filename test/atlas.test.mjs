@@ -257,6 +257,21 @@ test('a hostile line is refused like anything else from outside', () => {
   assert.ok(r.km <= 100000);
 });
 
+test('an atlas link carries no diary of when', () => {
+  const url = share.makeShareUrl(
+    [{ id: 't1', name: 'Wine', hue: 12 }],
+    [{ id: 'p1', name: 'Septime', lat: 48.85, lng: 2.38, tags: ['t1'], status: 'visited',
+       rating: 5, note: 'book ahead', url: '', address: '', city: 'Paris', country: 'France',
+       countryCode: 'fr', photos: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' }],
+    'Ada', []);
+  location.hash = new URL(url).hash;
+  const back = share.parseShareHash();
+  assert.ok(back && back.places.length === 1, 'the link round-trips');
+  const raw = JSON.stringify(back.places[0]);
+  assert.ok(!raw.includes('2024-01-01'), 'no created date travels');
+  assert.ok(!raw.includes('2026-08-01'), 'no updated date travels');
+});
+
 test('a way in a link is bounded', () => {
   const many = Array.from({ length: 9000 }, (_, i) => ({ lat: 46 + i * 1e-5, lng: 8 }));
   const r = schema.normRoute({ path: many });

@@ -2,8 +2,8 @@
 
 /* global LZString */
 
-import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf48';
-import { encodePath, simplify } from './route.js?v=rf48';
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf49';
+import { encodePath, simplify } from './route.js?v=rf49';
 
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
@@ -61,7 +61,6 @@ export function makeShareUrl(tags, places, author = '', routes = []) {
       id: p.id, name: p.name, lat: p.lat, lng: p.lng,
       address: p.address, city: p.city, country: p.country, countryCode: p.countryCode,
       tags: p.tags, status: p.status, rating: p.rating, note: p.note, url: p.url,
-      createdAt: p.createdAt, updatedAt: p.updatedAt,
     })),
   };
   const packed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
