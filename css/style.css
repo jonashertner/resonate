@@ -635,6 +635,9 @@ a.word-btn { text-decoration: none; display: inline-block; }
 
 .stars-line { display: flex; gap: 4px; margin-top: 18px; }
 .stars-line button { font-size: 17px; line-height: 1; color: var(--ink-3); padding: 3px 2px; transition: color var(--mo-reflex); }
+.stars-line button { transition: transform 150ms var(--e-reflex); }
+.stars-line button:active { transform: scale(1.22); }
+@media (prefers-reduced-motion: reduce) { .stars-line button:active { transform: none; } }
 .stars-line button.on { color: var(--ink); }
 .stars-line button:hover { color: var(--ink-2); }
 
@@ -701,6 +704,41 @@ a.word-btn { text-decoration: none; display: inline-block; }
 
 .plate-acts { display: flex; flex-wrap: wrap; gap: 12px 22px; margin-top: 34px; }
 .plate-foot { margin-top: 26px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ---------- arrival: the word is greeted, the rest rises ----------
+
+   The intro signs the app with an underlined word. Every summoned surface
+   repeats that signature once, on arrival: a hairline draws beneath the
+   word, holds a breath, and dries away. It is a gesture, not furniture:
+   at rest nothing remains. The sub and the body rise a step behind it,
+   and the surface itself resolves from the field. Leaving stays instant;
+   only arriving is soft. */
+
+.poster-word::after, .index-count::after {
+  content: ""; display: block;
+  height: 2px; margin-top: 0.06em;
+  background: currentColor;
+  transform-origin: left;
+  opacity: 0;
+  animation: underline-greet 1500ms var(--e-enter) both;
+}
+.index-count { width: fit-content; }
+@keyframes underline-greet {
+  0% { transform: scaleX(0); opacity: 1; }
+  38% { transform: scaleX(1); opacity: 1; }
+  70% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+.poster.opening, .index.opening { animation: cmd-in 180ms linear both; }
+.poster.opening .poster-sub { animation: rise 320ms var(--e-enter) both 60ms; }
+.poster.opening .poster-body { animation: rise 380ms var(--e-enter) both 110ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-word::after, .index-count::after { animation: none; opacity: 0; }
+  .poster.opening, .index.opening,
+  .poster.opening .poster-sub, .poster.opening .poster-body { animation: none; }
+}
 
 /* ---------- posters (census · kept · voices · keys) ---------- */
 
@@ -909,7 +947,7 @@ a.word-btn { text-decoration: none; display: inline-block; }
   background: var(--field);
   padding: 8px 18px;
   box-shadow: 0 0 0 1px var(--ink-4), 0 8px 30px color-mix(in srgb, var(--ink) 12%, transparent);
-  animation: cmd-in 140ms linear both;
+  animation: foot-rise 220ms var(--e-enter) both;
   pointer-events: none;
   max-width: min(calc(100vw - 40px), 64ch);
   text-align: center;
@@ -1411,6 +1449,9 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 }
 .visit-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--counter); }
 
+@keyframes foot-rise { from { opacity: 0; transform: translate(-50%, 7px); } }
+@media (prefers-reduced-motion: reduce) { .toast, .hand-bar { animation: none; } }
+
 /* the hand bar: the link is copied, and the two rails stand beside the word */
 .hand-bar {
   position: fixed; z-index: 1100;
@@ -1420,6 +1461,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   background: var(--field);
   box-shadow: 0 0 0 1px var(--edge);
   white-space: nowrap;
+  animation: foot-rise 220ms var(--e-enter) both;
 }
 .hand-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2); }
 .hand-bar .word-btn { font-size: 11px; }
