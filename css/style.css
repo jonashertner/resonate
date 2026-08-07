@@ -408,15 +408,21 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   backdrop-filter: blur(20px) saturate(1.05);
   -webkit-backdrop-filter: blur(20px) saturate(1.05);
   padding: clamp(20px, 5vw, 72px);
-  padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
+  padding-top: 0;
   scrollbar-width: thin;
 }
+/* the count and the go words are an opening, not furniture: they scroll
+   away with the reading. only the working lines stay. */
 .index-head {
+  padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
+  padding-bottom: 6px;
+}
+.index-tools {
   position: sticky; top: 0; z-index: 2;
-  padding-bottom: 18px;
+  padding: 10px 0 14px;
   background: var(--field);
 }
-.index-head::after {
+.index-tools::after {
   content: ""; position: absolute; left: 0; right: 0; top: 100%;
   height: 26px; pointer-events: none;
   background: linear-gradient(var(--field), transparent);
@@ -919,7 +925,9 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   .fm-sw { left: 16px; bottom: max(12px, env(safe-area-inset-bottom)); }
   .word-btn { font-size: 13px; padding: 10px 0 4px; }
   .index-line { font-size: 13px; }
-  .index-head { position: static; background: none; } /* the list must not fight a tall sticky header */
+  /* the chip lines wrap tall on a phone: nothing sticks, everything scrolls */
+  .index-tools { position: static; background: none; padding: 0; }
+  .index-tools::after { content: none; }
 
   /* the folio under a thumb: the word yields to the list. the head stays,
      small and stuck, so close is always in reach; everything else scrolls. */

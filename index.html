@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf43">
+<link rel="stylesheet" href="css/style.css?v=rf44">
 </head>
 <body class="boot">
 
@@ -63,6 +63,8 @@
       <button data-go="yours"><span class="go-word">yours</span><span class="go-sub">signature, your data, erase</span></button>
       <button data-go="how"><span class="go-word">how</span><span class="go-sub">what this is and what it shares</span></button>
     </nav>
+  </header>
+  <div class="index-tools">
     <div class="index-line" id="statusSeg" role="group" aria-label="Which places">
       <button data-status="all" aria-pressed="true">all</button>
       <button data-status="visited" aria-pressed="false">been</button>
@@ -76,7 +78,7 @@
       <button data-sort="distance" aria-pressed="false">nearest</button>
       <button data-sort="rating" aria-pressed="false">rated</button>
     </div>
-  </header>
+  </div>
   <div class="index-list" id="listView" aria-label="Your places"></div>
   <footer class="index-keys">
     <button id="indexKeys">keys. the keyboard speaks. press ? anywhere.</button>
@@ -228,6 +230,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf43"></script>
+<script type="module" src="js/app.js?v=rf44"></script>
 </body>
 </html>
