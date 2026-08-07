@@ -3,15 +3,15 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf49';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf49';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf49';
-import * as mapView from './map.js?v=rf49';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf49';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf49';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf49';
-import { exifGPS } from './exif.js?v=rf49';
-import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf49';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf50';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf50';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf50';
+import * as mapView from './map.js?v=rf50';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf50';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf50';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf50';
+import { exifGPS } from './exif.js?v=rf50';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf50';
 
 // ---------- helpers ----------
 
@@ -2388,6 +2388,7 @@ function renderClub() {
       </div>
       <div class="word-row" style="margin-top:14px">
         <button class="word-btn" id="clubSync">sync now</button>
+        <button class="word-btn quiet" id="clubPrev">the envelope before</button>
       </div>
       <div class="set-row-sub" id="clubMeta" style="margin-top:10px"></div>
       <div class="set-row-sub" style="margin-top:10px">Sync brings home what the envelope holds and this atlas lacks, then seals everything back. Nothing is deleted by sync. Lose the phrase and the envelope is lost with it; nobody can open it for you.</div>
@@ -2415,12 +2416,41 @@ function renderClub() {
   })();
 
   $('#clubSync').addEventListener('click', clubSync);
+  $('#clubPrev').addEventListener('click', async () => {
+    const phrase = $('#clubPhrase').value;
+    if (phrase.length < 8) return toast('a sealing phrase of at least eight characters');
+    const btn = $('#clubPrev');
+    btn.disabled = true;
+    try {
+      const got = await clubClient().getVault(true);
+      if (!got) return toast('the club keeps no envelope before this one');
+      let text;
+      try { text = await unseal(got.bytes, phrase, { bind: store.settings.clubKey }); }
+      catch (e) {
+        return toast(e.message === 'wrong-phrase' ? 'that phrase does not open this envelope'
+          : e.message === 'sealed-for-another-key' ? 'this envelope was sealed under a different key'
+          : e.message === 'this-device-cannot-open-it' ? 'the envelope is fine; this device cannot open it. a newer browser, or another device, can'
+          : 'what the club holds is not an envelope');
+      }
+      let wrapper;
+      try { wrapper = JSON.parse(text); } catch { return toast('the envelope opened but its content is unreadable'); }
+      const atlas = wrapper.atlas ?? wrapper;
+      const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
+      const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
+      if (!confirm(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`)) return;
+      const brought = store.merge(atlas);
+      if (brought === null) return toast('this device refused the merge; nothing changed');
+      if (brought) renderAll();
+      toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
+    } catch { toast('the vault did not answer'); }
+    finally { btn.disabled = false; }
+  });
   $('#clubBurn').addEventListener('click', async () => {
-    if (!confirm('Burn both envelopes at the club? Your atlas here is untouched.')) return;
+    if (!confirm('Burn both envelopes at the club? Your atlas here is untouched, and the key stays so you can seal again. If an envelope would not open on this device, burning still destroys it everywhere.')) return;
     try {
       await clubClient().delVault();
       // an emptied vault must be sealable again: the count starts over
-      store.settings.clubSeq = 0; store.settings.clubSealedAt = '';
+      Object.assign(store.settings, burnPatch());
       store.saveSettings();
       toast('the envelopes are gone'); renderClub();
     }
@@ -2448,7 +2478,7 @@ async function clubSync() {
     // an empty answer over a vault this device has already sealed is not
     // trusted: it is a stale edge or a hollowed club, and pushing over it
     // would demote the real envelope. nothing is written on a doubt.
-    if (!got && lastSeq > 0) {
+    if (syncGuard(!!got, lastSeq) === 'refuse-empty') {
       toast('the club answered empty, but something was sealed before. nothing written; try again shortly');
       return;
     }
@@ -2457,10 +2487,11 @@ async function clubSync() {
     let remoteSeq = 0;
     if (got) {
       let text;
-      try { text = await unseal(got.bytes, phrase); }
+      try { text = await unseal(got.bytes, phrase, { bind: store.settings.clubKey }); }
       catch (e) {
-        toast(e.message === 'wrong-phrase'
-          ? 'that phrase does not open this envelope'
+        toast(e.message === 'wrong-phrase' ? 'that phrase does not open this envelope'
+          : e.message === 'sealed-for-another-key' ? 'this envelope was sealed under a different key'
+          : e.message === 'this-device-cannot-open-it' ? 'the envelope is fine; this device cannot open it. a newer browser, or another device, can'
           : 'what the club holds is not an envelope');
         return;
       }
@@ -2489,13 +2520,13 @@ async function clubSync() {
 
     const seq = Math.max(remoteSeq, lastSeq) + 1;
     const sealed = await seal(JSON.stringify({
-      seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(store.exportJSON()),
-    }), phrase);
+      v: 2, seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(store.exportJSON()),
+    }), phrase, { bind: store.settings.clubKey });
     const meta = await c.putVault(sealed);
     store.settings.clubSeq = seq;
     store.settings.clubSealedAt = meta.at;
     store.saveSettings();
-    $('#clubMeta').textContent = `last sealed ${meta.at.slice(0, 10)}, ${meta.bytes.toLocaleString()} bytes`;
+    $('#clubMeta').textContent = `last sealed ${meta.at.slice(0, 10)}, ${meta.bytes.toLocaleString()} bytes, ${sealed[5] === 2 ? 'argon2id' : 'pbkdf2'}`;
     toast(brought
       ? `${brought} place${brought === 1 ? '' : 's'} came home. everything sealed and kept`
       : 'sealed and kept');

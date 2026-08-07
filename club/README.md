@@ -71,6 +71,13 @@ old field shapes and the basil ones, the door opens once per subscription,
 the vault keeps exactly what it was given and refuses what is unsealed, too
 small, or too large.
 
+## The specification
+
+The envelope's exact bytes, the KDF parameters and their bounds, the AAD
+binding, the seq refusal rules, and the burn state transition live in
+SPEC.md beside this file, published on the site as /SPEC.md. The adversarial
+accounting is THREATS.md at the repository root, published as /THREATS.md.
+
 ## The honest sentence
 
 Lose the phrase and the envelope is lost with it. Nobody can open it for a

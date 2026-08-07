@@ -21,9 +21,11 @@ jobs:
           for f in js/*.js sw.js; do node --check "$f" || exit 1; done
       - name: the invariants a hostile link must not break
         run: node --test test/*.test.mjs club/test/*.test.mjs
+      - name: the vendored argon2 matches its committed digest
+        run: cd vendor/argon2 && shasum -a 256 -c SHA256SUMS
       - name: no em-dash reaches a reader
         run: |
-          if grep -rn '—' index.html SECURITY.md README.md; then
+          if grep -rn '—' index.html SECURITY.md README.md THREATS.md club/SPEC.md; then
             echo "an em-dash is in the page copy"
             exit 1
           fi

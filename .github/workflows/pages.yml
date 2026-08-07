@@ -30,9 +30,11 @@ jobs:
           for f in js/*.js sw.js; do node --check "$f" || exit 1; done
       - name: the invariants a hostile link must not break
         run: node --test test/*.test.mjs club/test/*.test.mjs
+      - name: the vendored argon2 matches its committed digest
+        run: cd vendor/argon2 && shasum -a 256 -c SHA256SUMS
       - name: no em-dash reaches a reader
         run: |
-          if grep -rn '—' index.html SECURITY.md README.md; then
+          if grep -rn '—' index.html SECURITY.md README.md THREATS.md club/SPEC.md; then
             echo "an em-dash is in the page copy"
             exit 1
           fi
@@ -53,6 +55,7 @@ jobs:
                 --exclude 'club' \
                 --exclude 'tools' \
                 ./ _site/
+          cp club/SPEC.md _site/SPEC.md
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -86,14 +89,16 @@ jobs:
           exit 1
       - name: the shell it needs is reachable
         run: |
-          for p in css/style.css js/app.js js/schema.js sw.js assets/intro.mp4 manifest.webmanifest; do
+          for p in css/style.css js/app.js js/club.js js/schema.js sw.js assets/intro.mp4 manifest.webmanifest \
+                   vendor/argon2/argon2.umd.min.js fonts/bricolage-latin.woff2 \
+                   SPEC.md THREATS.md SECURITY.md .well-known/security.txt; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 200 ] || exit 1
           done
       - name: the repository's machinery is not published
         run: |
-          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json; do
+          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json tools/dev.mjs club/src/worker.js; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 404 ] || exit 1
