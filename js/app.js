@@ -103,32 +103,43 @@ function filteredPlaces() {
 
 const rootStyle = document.documentElement.style;
 
-function setWorld({ hue, split = 0, tint = 1 }) {
-  rootStyle.setProperty('--hue', hue);
-  rootStyle.setProperty('--split', split);
-  rootStyle.setProperty('--tint', tint);
-  document.documentElement.dataset.hueband = (hue >= 120 && hue <= 170) ? 'green' : '';
+// One rule holds the whole palette together: on the field, colour means a
+// mark and the domain it belongs to. Nothing else moves. The interface wears
+// a single tone, the one you chose, and it stays where you put it — a chrome
+// that changed with every selection was colour saying nothing at all.
+const FIELD_TONES = [
+  { name: 'plum', hue: 300 },
+  { name: 'iris', hue: 265 },
+  { name: 'sea', hue: 228 },
+  { name: 'moss', hue: 152 },
+  { name: 'olive', hue: 116 },
+  { name: 'amber', hue: 74 },
+  { name: 'clay', hue: 40 },
+  { name: 'rose', hue: 12 },
+];
+
+function fieldTone() {
+  const h = Number(store.settings.hue);
+  return FIELD_TONES.find(t => t.hue === h) || FIELD_TONES[0];
 }
 
-function clearWorld() {
-  rootStyle.removeProperty('--hue');
-  rootStyle.removeProperty('--split');
-  rootStyle.removeProperty('--tint');
-  document.documentElement.dataset.hueband = '';
-}
-
-// the world's color follows attention: selection > filter > rest
 function applyWorldState() {
-  const sel = state.selectedId && placeById(state.selectedId);
-  if (sel && sel.tags[0]) {
-    const t = tagById(sel.tags[0]);
-    if (t) return setWorld({ hue: t.hue, tint: 0.55 });
-  }
-  if (state.filters.tags.size) {
-    const first = tagById([...state.filters.tags][0]);
-    if (first) return setWorld({ hue: first.hue, tint: 1 });
-  }
-  clearWorld();
+  rootStyle.setProperty('--hue', fieldTone().hue);
+}
+
+// pressing the tone word walks the wheel, and the word is the only label
+function turnField() {
+  const i = FIELD_TONES.indexOf(fieldTone());
+  const next = FIELD_TONES[(i + 1) % FIELD_TONES.length];
+  store.settings.hue = next.hue;
+  store.saveSettings();
+  applyWorldState();
+  renderFieldWord();
+}
+
+function renderFieldWord() {
+  const b = $('#fieldWord');
+  if (b) b.textContent = fieldTone().name;
 }
 
 // ---------- theme ----------
@@ -180,6 +191,14 @@ function setHeroExit(fn) { leaveHero = fn; }
 // the first-run door, reachable from anywhere that needs to offer it again
 let openThreshold = () => {};
 function setThresholdOpener(fn) { openThreshold = fn; }
+
+// reading the opening again: the same words, without the first-run choices,
+// since the choosing is long done
+function showOpening() {
+  const th = $('#threshold');
+  th.classList.toggle('revisited', store.places.length > 0 || !!store.settings.chosen);
+  openThreshold();
+}
 
 // the plate stands beside a living map and must never deaden it: you go on
 // tapping marks while it is open. only a surface that covers the field
@@ -330,7 +349,8 @@ function renderChips() {
   wrap.innerHTML = allTags().map(t => {
     const n = allPlaces().reduce((k, p) => k + (p.tags.includes(t.id) ? 1 : 0), 0);
     const on = state.filters.tags.has(t.id);
-    return `<button data-tag="${esc(t.id)}" aria-pressed="${on}">${esc(t.name)}<sup>${n}</sup></button>`;
+    const h = Number(t.hue);
+    return `<button data-tag="${esc(t.id)}" aria-pressed="${on}"${Number.isFinite(h) ? ` style="--mk-hue:${h}"` : ''}>${esc(t.name)}<sup>${n}</sup></button>`;
   }).join('') + `<button class="edit-tags" id="editTags">edit</button>`;
   $('#editTags').addEventListener('click', () => {
     closeSurface('indexOverlay');
@@ -417,7 +437,7 @@ function renderList() {
 
 function syncMarkers() {
   mapView.renderMarkers(filteredPlaces(), tagById, state.selectedId);
-  mapView.renderRoutes(filteredRoutes(), state.selectedRouteId);
+  mapView.renderRoutes(filteredRoutes(), tagById, state.selectedRouteId);
 }
 
 // ways obey the same filters the marks do
@@ -871,8 +891,6 @@ function selectRoute(id, { fly = true } = {}) {
   if (!r) return;
   state.selectedRouteId = id;
   state.selectedId = null;
-  const t = tagById(r.tags[0]);
-  if (t) setWorld({ hue: t.hue, tint: 0.55 }); else applyWorldState();
   syncMarkers();
   if (fly) mapView.frameRoute(r);
   renderRoutePlate(r);
@@ -1132,7 +1150,6 @@ function openForeignPlate(corrId, placeId) {
   const p = c?.places.find(x => x.id === placeId);
   if (!c || !p) return;
   state.foreign = { corrId, name: c.name, sig: mapView.sigAngle(c.id), place: p };
-  setWorld({ hue: c.hue, tint: 0.55 });
   renderPlate(p, { foreign: state.foreign });
   openSurface('plate');
 }
@@ -1204,8 +1221,7 @@ function renderVoices() {
     row.querySelectorAll('[data-hue]').forEach(b => b.addEventListener('click', () => {
       store.updateCorrespondent(id, { hue: parseInt(b.dataset.hue, 10) });
       renderVoices();
-      setWorld({ hue: parseInt(b.dataset.hue, 10), tint: 0.7 });
-      setTimeout(clearWorld, 1600);
+      syncMarkers();
     }));
   });
 }
@@ -1218,7 +1234,7 @@ function leaveVisit() {
   clearShareHash();
   $('#visitBar').hidden = true;
   pushCorrespondentsToMap();
-  clearWorld();
+  applyWorldState();
   renderAll();
   if (store.places.length) mapView.fitAll(store.places);
   toast('their marks are put away');
@@ -1229,7 +1245,7 @@ function leaveVisit() {
 function leaveReport(el) {
   clearShareHash();
   dropDialog(el);
-  clearWorld();
+  applyWorldState();
   state.visiting = null;
   pushCorrespondentsToMap();
   renderAll();
@@ -1259,7 +1275,6 @@ function openFolioReport(payload) {
   const held = places.filter(holdAlready);
   const fresh = places.filter(p => !holdAlready(p));
   const sig = mapView.sigAngle(author);
-  setWorld({ hue: 42, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -1334,7 +1349,7 @@ function openFolioReport(payload) {
     renderAll();
     clearShareHash();
     dropDialog(el);
-    clearWorld();
+    applyWorldState();
     mapView.fitAll(store.places);
     toast(remaining.length
       ? `${remaining.length} place${remaining.length === 1 ? '' : 's'} taken, after ${author}`
@@ -1359,7 +1374,6 @@ function openAskReport(payload) {
   const from = String(payload.from || '').trim() || 'someone';
   const q = String(payload.q || '').trim();
   const matches = q ? queryMyAtlas(q) : [];
-  setWorld({ hue: 155, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -1378,7 +1392,7 @@ function openAskReport(payload) {
   $('#askCompose')?.addEventListener('click', () => {
     clearShareHash();
     dropDialog(el);
-    clearWorld();
+    applyWorldState();
     openFolioComposer({
       title: q,
       dedication: `for ${from}, who asked`,
@@ -1402,8 +1416,6 @@ function openAtlasReport(payload) {
   const ev = evidenceLines(r, name);
   const picks = r.picks.slice(0, 7);
   const sig = mapView.sigAngle(name);
-
-  setWorld({ hue: 278, tint: 0.45 });
 
   const el = $('#reportOverlay');
   el.innerHTML = `
@@ -1476,7 +1488,7 @@ function openAtlasReport(payload) {
     pushCorrespondentsToMap();
     clearShareHash();
     dropDialog(el);
-    clearWorld();
+    applyWorldState();
     renderAll();
     // fly to where their marks actually are, so the toast tells the truth
     if (kept.places.length) mapView.fitAll(kept.places);
@@ -1615,7 +1627,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       <div class="fol-acts">
         <button class="word-btn" id="folKeep">${kept ? 'keep the changes' : 'keep this folio'}</button>
         <button class="word-btn quiet" id="folCopy">hand it over as a link</button>
-        <button class="word-btn quiet" id="folPublish">publish to the newsstand</button>
+        <button class="word-btn quiet" id="folPublish">offer it to the newsstand</button>
         <button class="word-btn quiet" id="folPrint">print, or save as pdf</button>
         <button class="word-btn quiet" id="folAll">everything in</button>
         <button class="word-btn quiet" id="folNone">everything out</button>
@@ -1699,7 +1711,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         + '?title=' + encodeURIComponent('folio: ' + t)
         + '&body=' + encodeURIComponent('Paste the folio below this line. It is already on your clipboard.\n\n');
       window.open(issueUrl, '_blank', 'noopener');
-      toast('the folio is on your clipboard. paste it into the issue and submit');
+      toast('on your clipboard. paste it in and submit, and a person reads it before it goes up');
     });
     $('#folRemove')?.addEventListener('click', () => {
       if (!confirm(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.`)) return;
@@ -1901,7 +1913,7 @@ async function openNewsstand(initialQ = '') {
             <span class="why">${esc(why)}</span>
           </span>
         </button>`).join('')
-      : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet. publish the folio that should.</div>`}
+      : `<div class="news-note">nothing on the stand answers “${esc(q)}” yet. offer the folio that should.</div>`}
       <div class="news-note">Ranking happens here, against your own atlas. The newsstand never learns what you like.
       Publish from any folio you compose (&gt;folio).</div>`;
     const input = $('#newsQ');
@@ -2139,7 +2151,7 @@ function renderSettings() {
     state.filters.tags.clear();
     closeSurface('settingsOverlay');
     pushCorrespondentsToMap();
-    clearWorld();
+    applyWorldState();
     renderAll();
     toast('the field is blank again');
   });
@@ -2172,8 +2184,6 @@ function renderTags() {
     if (!b) return;
     picked = { hue: parseInt(b.dataset.hue, 10), hex: b.dataset.hex };
     $$('#tagHues button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    setWorld({ hue: picked.hue, tint: 0.8 });
-    setTimeout(() => { applyWorldState(); }, 1400);
   });
   $('#tagAdd').addEventListener('click', () => {
     const name = $('#tagName').value.trim();
@@ -2554,12 +2564,12 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
     document.body.classList.add('entering');
     el.classList.add('dissolve');
     clearTimeout(cutoff);
+    onDone();
     setTimeout(() => {
       cancelAnimationFrame(raf);
       try { video.pause(); } catch { /* fine */ }
       el.hidden = true;
       document.body.classList.remove('entering');
-      onDone();
     }, (brief ? 0.6 : DISSOLVE_S) * 1000);
   };
 
@@ -2646,6 +2656,8 @@ function init() {
     }, 80);
   });
   store.load();
+  applyWorldState();
+  renderFieldWord();
 
   mapView.setRouteClickHandler((id) => selectRoute(id, { fly: false }));
   mapView.initMap({
@@ -2726,8 +2738,11 @@ function init() {
 
   // plain words, then a choice: nothing is seeded and nobody is named until
   // the visitor has said which start they want
+  let thresholdWired = false;
   setThresholdOpener(function openThreshold() {
     const th = $('#threshold');
+    if (thresholdWired) return raiseDialog(th, 'What Resonate is');
+    thresholdWired = true;
     const done = (fn) => {
       store.settings.chosen = true;
       store.saveSettings();
@@ -2790,6 +2805,12 @@ function init() {
 
   setTimeout(() => document.body.classList.remove('boot'), 700);
 
+  $('#howOpening')?.addEventListener('click', () => {
+    closeSurface('howOverlay');
+    closeSurface('indexOverlay');
+    showOpening();
+  });
+
   $('#visitLeave').addEventListener('click', leaveVisit);
 
   // corner marks
@@ -2798,6 +2819,7 @@ function init() {
   });
   $('#fmCommand').addEventListener('click', togglePalette);
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
+  $('#fieldWord').addEventListener('click', turnField);
   $('#themeWord').addEventListener('click', () => {
     // day, night, or whatever this device is doing: one press moves along,
     // so following the system is somewhere you can get back to
@@ -2937,7 +2959,9 @@ function init() {
     if (e.key === 'Escape') {
       if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
       if (state.visiting) { leaveVisit(); return; }
-      if (!$('#reportOverlay').hidden) { dropDialog($('#reportOverlay')); clearWorld(); clearShareHash(); return; }
+      if (!$('#reportOverlay').hidden) { dropDialog($('#reportOverlay')); applyWorldState(); clearShareHash(); return; }
+      const th = $('#threshold');
+      if (th && !th.hidden && th.classList.contains('revisited')) { dropDialog(th); return; }
       if (popSurface()) return;
     }
     if (inField) return;

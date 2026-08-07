@@ -91,7 +91,7 @@ export function initMap({ onMarkerClick, onCorrClick, onLongPress, onPointerMove
 let onRouteClick = null;
 export function setRouteClickHandler(fn) { onRouteClick = fn; }
 
-export function renderRoutes(routes, selectedId) {
+export function renderRoutes(routes, tagById, selectedId) {
   if (!routeLayer) return;
   routeLayer.clearLayers();
   routesById.clear();
@@ -99,6 +99,8 @@ export function renderRoutes(routes, selectedId) {
     if (!Array.isArray(r.path) || r.path.length < 2) return;
     const latlngs = r.path.map(p => [p.lat, p.lng]);
     const sel = r.id === selectedId;
+    const hue = hueOf(r, tagById);
+    const tone = Number.isFinite(hue) ? `--mk-hue:${hue};` : '';
 
     // the casing carries the field's own colour, so linework beneath can
     // never break the line; the way itself is drawn over it
@@ -122,7 +124,7 @@ export function renderRoutes(routes, selectedId) {
       interactive: false,
       icon: L.divIcon({
         className: 'way-cap-icon',
-        html: `<div class="way-cap ${cls}"><svg width="18" height="18" viewBox="0 0 18 18">
+        html: `<div class="way-cap ${cls}" style="${tone}"><svg width="18" height="18" viewBox="0 0 18 18">
             <circle cx="9" cy="9" r="6" class="wc-halo"/>
             <circle cx="9" cy="9" r="6" class="wc-ring"/>
           </svg></div>`,
@@ -132,6 +134,7 @@ export function renderRoutes(routes, selectedId) {
 
     routeLayer.addLayer(casing);
     routeLayer.addLayer(way);
+    if (Number.isFinite(hue)) way.getElement()?.style.setProperty('--mk-hue', hue);
     if (!r.loop) {
       routeLayer.addLayer(cap(latlngs[0], 'start'));
       routeLayer.addLayer(cap(latlngs[latlngs.length - 1], 'end'));
@@ -211,13 +214,14 @@ export function sigAngle(id) {
 const MARK_BOX = 44; // a thumb needs this much, even if the ring is smaller
 const MARK_C = MARK_BOX / 2;
 
-function markHTML(place, selected) {
+function markHTML(place, selected, hue) {
   const wish = place.status === 'wishlist';
+  const tone = Number.isFinite(hue) ? `--mk-hue:${hue};` : '';
   // sig lands inside an attribute: it is a number or it is nothing
   const graft = place.provenance
     ? `<circle class="graft" cx="${MARK_C}" cy="${MARK_C}" r="13.5" pathLength="360" style="--sig:${Number(place.provenance.sig) || 0}deg"/>`
     : '';
-  return `<div class="mark${wish ? ' wish' : ''}${selected ? ' sel' : ''}" style="--seed:${seedFor(place.id)}ms">
+  return `<div class="mark${wish ? ' wish' : ''}${selected ? ' sel' : ''}" style="${tone}--seed:${seedFor(place.id)}ms">
     <svg width="${MARK_BOX}" height="${MARK_BOX}" viewBox="0 0 ${MARK_BOX} ${MARK_BOX}">
       <circle cx="${MARK_C}" cy="${MARK_C}" r="${MARK_C}" class="mk-hit"/>
       ${graft}
@@ -227,23 +231,29 @@ function markHTML(place, selected) {
     </svg></div>`;
 }
 
-function makeIcon(place, selected) {
+function makeIcon(place, selected, hue) {
   return L.divIcon({
     className: 'mark-icon',
-    html: markHTML(place, selected),
+    html: markHTML(place, selected, hue),
     iconSize: [MARK_BOX, MARK_BOX],
     iconAnchor: [MARK_C, MARK_C],
   });
 }
 
-export function renderMarkers(places, _tagById, selectedId) {
+// the hue of a place is the hue of the first domain it was filed under
+function hueOf(place, tagById) {
+  const t = place.tags && place.tags.length ? tagById?.(place.tags[0]) : null;
+  return t && Number.isFinite(t.hue) ? t.hue : null;
+}
+
+export function renderMarkers(places, tagById, selectedId) {
   selectedIdRef = selectedId;
   clusterGroup.clearLayers();
   markersById.clear();
   nameById.clear();
   places.forEach(place => {
     const marker = L.marker([place.lat, place.lng], {
-      icon: makeIcon(place, place.id === selectedId),
+      icon: makeIcon(place, place.id === selectedId, hueOf(place, tagById)),
       riseOnHover: true,
       keyboard: true,
       alt: place.name,
@@ -257,11 +267,11 @@ export function renderMarkers(places, _tagById, selectedId) {
   refreshLabels(true);
 }
 
-export function refreshMarkerIcon(place, _tagById, selected) {
+export function refreshMarkerIcon(place, tagById, selected) {
   const m = markersById.get(place.id);
   if (!m) return;
   if (selected) selectedIdRef = place.id;
-  m.setIcon(makeIcon(place, selected));
+  m.setIcon(makeIcon(place, selected, hueOf(place, tagById)));
   nameById.set(place.id, { name: place.name, wish: place.status === 'wishlist' });
   bindLabel(place.id, m);
 }

@@ -154,7 +154,7 @@ export function newTag(partial = {}) {
   return t;
 }
 
-const DEFAULT_SETTINGS = { theme: 'auto', lastView: null, seeded: false, authorName: '' };
+const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '' };
 
 export const store = {
   places: [],
@@ -411,6 +411,7 @@ export const store = {
       this.settings.authorName = data.settings.authorName;
     }
     if (data.settings.theme) this.settings.theme = data.settings.theme;
+    if (Number.isFinite(Number(data.settings.hue))) this.settings.hue = Number(data.settings.hue);
     // an import is one act: if any part of it cannot be written, none of it
     // is kept, and the caller is told nothing came in
     const ok = this.savePlaces() && this.saveTags() && this.saveRoutes()

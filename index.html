@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf41">
+<link rel="stylesheet" href="css/style.css?v=rf42">
 </head>
 <body class="boot">
 
@@ -67,7 +67,7 @@
       <button data-status="all" aria-pressed="true">all</button>
       <button data-status="visited" aria-pressed="false">been</button>
       <button data-status="wishlist" aria-pressed="false">want to go</button>
-      <button id="themeWord" class="theme-word">night</button>
+      <span class="line-end"><button id="fieldWord" class="tone-word">plum</button><button id="themeWord" class="theme-word">night</button></span>
     </div>
     <div class="index-line" id="filterChips" role="group" aria-label="Filter by tag"></div>
     <div class="index-line ix-sorts" id="sortLine" role="group" aria-label="Arrange">
@@ -144,10 +144,15 @@
     <p>Keep a person as a voice and their marks stay on your field, open rings you may adopt. An adopted place says after their name, forever.</p>
 
     <div class="sec-head">the newsstand</div>
-    <p>Anyone may publish a folio to the commons. Your device fetches the list and ranks it against your own atlas. The ranking happens on your device. The newsstand never learns what you like, what you read, or who you are.</p>
+    <p>The newsstand is a shelf, not a feed. Folios that people have published sit on a separate address as a plain list. Your device fetches that list and ranks it against your own atlas, here. Nothing about what you hold, what you open, or who you are goes back. There is no account to read it and no algorithm behind it.</p>
+    <p>Publishing runs the other way, and it is not automatic. A folio you offer is read by a person before it goes up, and only the folio goes: its title, the name you sign, and the places it encloses. Never your atlas, never your photographs. That reading happens on GitHub today, so offering a folio asks for an account there. Reading the stand asks for nothing.</p>
 
     <div class="sec-head">yours</div>
     <p>Export everything as a file, whenever. Print a folio, or the whole atlas, as a typeset page or a pdf. Erase everything, whenever, and it does not come back. Trust is a person, not a platform.</p>
+
+    <div class="word-row" style="margin-top:34px">
+      <button class="word-btn quiet" id="howOpening">see the opening again</button>
+    </div>
   </div>
 </section>
 
@@ -223,6 +228,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf41"></script>
+<script type="module" src="js/app.js?v=rf42"></script>
 </body>
 </html>

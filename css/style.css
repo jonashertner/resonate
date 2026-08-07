@@ -1,16 +1,17 @@
 /* ============================================================
    Resonate — THE RESONANT FIELD
-   The map is the entire interface. Every color on screen is a
-   function of three registered properties (--hue, --split,
-   --tint): one field, one ink — and one counter-ink, reserved
-   for other people. Filter by a tag and the world re-inks
-   itself. Type: Bricolage Grotesque variable + Fragment Mono.
+   The map is the entire interface, and it is paper: the tiles
+   are grey and stay grey. Colour on this field means one thing,
+   a mark and the domain it belongs to. The interface itself
+   wears a single tone (--hue, --split) that you choose and that
+   never moves on its own: one field, one ink, and one
+   counter-ink reserved for other people.
+   Type: Bricolage Grotesque variable + Fragment Mono.
    No panels, no buttons, no boxes: typography on a field.
    ============================================================ */
 
 @property --hue { syntax: '<number>'; inherits: true; initial-value: 300; }
 @property --split { syntax: '<number>'; inherits: true; initial-value: -225; }
-@property --tint { syntax: '<number>'; inherits: true; initial-value: 0; }
 
 :root {
   /* Role constants, solved rather than chosen. Lightness is fixed per role,
@@ -47,14 +48,18 @@
 
   transition:
     --hue 800ms cubic-bezier(0.32, 0, 0.16, 1),
-    --split 500ms cubic-bezier(0.32, 0, 0.16, 1),
-    --tint 550ms cubic-bezier(0.32, 0, 0.16, 1);
+    --split 500ms cubic-bezier(0.32, 0, 0.16, 1);
 }
 
 /* rest state: BONE × IODINE, cross-hued; dark swaps the families */
-:root { --hue: 300; --split: -225; --tint: 0; }
+:root { --hue: 300; --split: -225; }
+/* the mark role: a domain's colour must read as a colour, not as tinted ink.
+   measured against the field across all eight stations, 0.46/0.15 holds
+   5.4:1 to 7.0:1 in day and 0.78/0.15 holds 8.6:1 to 10.3:1 at night. */
+:root { --L-m: 0.46; --C-m: 0.15; }
 :root[data-theme="dark"] {
   --hue: 75; --split: 225;
+  --L-m: 0.78; --C-m: 0.15;
   --L-f: 0.17; --C-f: 0.024;
   --L-i: 0.93; --C-i: 0.033;   /* 0.04 fell outside sRGB at five of the ten hues */
   --L-c: 0.75; --C-c: 0.075;
@@ -122,26 +127,16 @@ a { color: inherit; }
 .leaflet-container { font: inherit; background: var(--field); }
 .leaflet-control-attribution { display: none; }
 
-/* the tiles obey --hue: grayscale strips CARTO, sepia re-seeds at ~48°, rotate steers */
+/* The map is paper and stays paper. Colour on this field means one thing only:
+   a mark, and the domain it belongs to. A tinted world would compete with the
+   very marks it is there to hold, so the tiles are stripped to grey and the
+   invert-amplify-invert keeps linework dark while the ground stays light. */
 #map .leaflet-tile-pane {
-  /* invert-amplify-invert: darkens linework proportionally, ground stays paper.
-     the tint is a breath of colour through the map's features, never a wash
-     over its paper: measured, a squared curve to 1.35 drove the ground itself
-     to 0.26 chroma and cost the linework its separation. linear to 0.5 keeps
-     the paper paper, and reads more clearly. */
-  filter: grayscale(1) invert(1) brightness(2.05) invert(1)
-    sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * 0.5))
-    contrast(1.02);
+  filter: grayscale(1) invert(1) brightness(2.05) invert(1) contrast(1.02);
 }
 :root[data-theme="dark"] #map .leaflet-tile-pane {
-  filter: grayscale(1) brightness(1.55)
-    sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg))
-    saturate(calc(var(--tint) * 0.75))
-    contrast(1.04) brightness(1.02);
+  filter: grayscale(1) brightness(1.55) contrast(1.04) brightness(1.02);
 }
-/* greens land dull in filter space — boost the band */
-:root[data-hueband="green"] #map .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(2.05) invert(1) sepia(1) hue-rotate(calc((var(--field-hue) - 48) * 1deg)) saturate(calc(var(--tint) * 0.62)) contrast(1.02); }
 
 .locate-dot { stroke: var(--ink); fill: none; }
 
@@ -246,7 +241,11 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* ---------- resonance marks ---------- */
 
 .mark-icon { background: none; border: 0; }
-.mark { color: var(--ink); width: 44px; height: 44px; }
+/* --mk-hue arrives on the element from the place's first tag. Its lightness
+   and chroma are the ink's, so every station on the wheel keeps the same
+   contrast against the field. Untagged falls back to plain ink. */
+.mark, .way, .way-cap, .wc-ring { --tone: oklch(var(--L-m) var(--C-m) var(--mk-hue, var(--hue))); }
+.mark { color: var(--tone); width: 44px; height: 44px; }
 .mark svg { overflow: visible; }
 /* the whole box takes the tap, not only the ring */
 .mk-hit { fill: transparent; }
@@ -401,7 +400,13 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .index {
   position: fixed; inset: 0; height: var(--app-h); z-index: 40;
   overflow-y: auto; overscroll-behavior: contain;
-  background: color-mix(in oklab, var(--field) 96%, transparent);
+  background: color-mix(in oklab, var(--field) 92%, transparent);
+  /* the field stays visible behind a summoned surface, but its place names
+     must not be readable through the copy: blurring the backdrop keeps the
+     map present as ground and takes its letterforms out of the argument.
+     where a browser cannot blur, the surface simply closes up instead. */
+  backdrop-filter: blur(20px) saturate(1.05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
   padding: clamp(20px, 5vw, 72px);
   padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
   scrollbar-width: thin;
@@ -409,7 +414,12 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .index-head {
   position: sticky; top: 0; z-index: 2;
   padding-bottom: 18px;
-  background: linear-gradient(var(--field) 65%, transparent);
+  background: var(--field);
+}
+.index-head::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%;
+  height: 26px; pointer-events: none;
+  background: linear-gradient(var(--field), transparent);
 }
 .index-count {
   font-size: clamp(88px, 17vh, 200px);
@@ -487,6 +497,16 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 }
 .index-line button:hover { color: var(--ink-2); }
 .index-line button[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
+/* a chip is drawn in the colour it commands, so the vocabulary and the field
+   are visibly one thing */
+#filterChips button[data-tag] { --tone: oklch(var(--L-m) var(--C-m) var(--mk-hue, var(--hue))); }
+#filterChips button[data-tag][aria-pressed="true"] { color: var(--tone); box-shadow: 0 2px 0 var(--tone); }
+/* the tone word is written in the tone it names. it carries the push to the
+   right-hand end of the line, and the theme word follows it. */
+.tone-word { color: oklch(var(--L-m) var(--C-m) var(--hue)) !important; }
+/* tone and theme are one pair: they take the right-hand end of the line
+   together, and when the line breaks they go over together */
+.line-end { margin-left: auto; display: flex; gap: 24px; }
 .index-line button sup { font-family: var(--mono); font-size: 8px; letter-spacing: 0; margin-left: 3px; vertical-align: 0.5em; }
 .ix-sorts button[aria-pressed="true"] { box-shadow: none; font-variation-settings: 'wght' 750; }
 
@@ -672,7 +692,13 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .poster {
   position: fixed; inset: 0; height: var(--app-h); z-index: 55;
   overflow-y: auto; overscroll-behavior: contain;
-  background: color-mix(in oklab, var(--field) 97%, transparent);
+  background: color-mix(in oklab, var(--field) 92%, transparent);
+  /* the field stays visible behind a summoned surface, but its place names
+     must not be readable through the copy: blurring the backdrop keeps the
+     map present as ground and takes its letterforms out of the argument.
+     where a browser cannot blur, the surface simply closes up instead. */
+  backdrop-filter: blur(20px) saturate(1.05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
   padding: clamp(20px, 5vw, 72px);
   padding-top: max(clamp(20px, 5vw, 72px), env(safe-area-inset-top));
   scrollbar-width: thin;
@@ -752,7 +778,13 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .report {
   position: fixed; inset: 0; height: var(--app-h); z-index: 60;
   overflow-y: auto; overscroll-behavior: contain;
-  background: color-mix(in oklab, var(--field) 96%, transparent);
+  background: color-mix(in oklab, var(--field) 92%, transparent);
+  /* the field stays visible behind a summoned surface, but its place names
+     must not be readable through the copy: blurring the backdrop keeps the
+     map present as ground and takes its letterforms out of the argument.
+     where a browser cannot blur, the surface simply closes up instead. */
+  backdrop-filter: blur(20px) saturate(1.05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
   padding: clamp(20px, 6vw, 90px);
 }
 .rp-eyebrow { font-size: 10px; letter-spacing: 0.34em; text-transform: uppercase; color: var(--ink-3); }
@@ -874,6 +906,10 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 .boot #map, .boot .fm { animation: field-in 500ms var(--e-enter) both; }
 @keyframes field-in { from { opacity: 0; } }
 
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .index, .poster, .report { background: var(--field); }
+}
+
 /* ---------- mobile ---------- */
 
 @media (max-width: 760px) {
@@ -943,7 +979,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 
 .how-body p { max-width: 58ch; font-size: 15px; line-height: 1.6; color: var(--ink); margin-bottom: 14px; }
 
-.theme-word { margin-left: auto; color: var(--ink-2) !important; }
+.theme-word { color: var(--ink-2) !important; }
 .theme-word:hover { color: var(--ink) !important; }
 .edit-tags { color: var(--ink-3); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; padding: 9px 0; }
 .edit-tags:hover { color: var(--ink); }
@@ -1094,7 +1130,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 .intro-skip:hover { border-color: rgba(247, 242, 232, 0.8); background: rgba(10, 7, 5, 0.55); }
 
 .threshold {
-  position: fixed; inset: 0; height: var(--app-h); z-index: 240;
+  position: fixed; inset: 0; height: var(--app-h); z-index: 2400;
   display: flex; flex-direction: column; justify-content: center;
   overflow-y: auto; overscroll-behavior: contain;
   gap: 14px;
@@ -1148,11 +1184,11 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 /* the casing carries the field's own colour so no linework can break the way */
 .way-casing { stroke: var(--field); fill: none; opacity: 0.92; }
 .way {
-  stroke: var(--ink); fill: none;
+  stroke: var(--tone); fill: none;
   transition: stroke-width 220ms var(--e-reflex);
 }
 .way.wish { stroke-dasharray: 1 7; stroke-linecap: round; }
-.way.sel { stroke: var(--ink); }
+.way.sel { stroke: var(--tone); }
 .way:hover { cursor: pointer; }
 /* a selected way is drawn on, from its beginning */
 .way.sel { stroke-dasharray: 4000; animation: way-draw 1400ms var(--e-enter) forwards; }
@@ -1160,7 +1196,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 .way.sel.wish { animation: none; stroke-dasharray: 1 7; }
 
 .way-cap-icon { background: none; border: 0; }
-.way-cap { color: var(--ink); }
+.way-cap { color: var(--tone); }
 .wc-halo { fill: var(--field); stroke: var(--field); stroke-width: 3.4; }
 .wc-ring { fill: var(--field); stroke: currentColor; stroke-width: 1.8; }
 .way-cap.end .wc-ring { fill: currentColor; }
@@ -1310,3 +1346,14 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 @keyframes mark-in { from { opacity: 0; } }
 #intro.brief .intro-mark { animation-duration: 500ms; animation-delay: 0ms; }
 @media (prefers-reduced-motion: reduce) { .intro-mark { animation: none; } }
+
+/* read again, once the choosing is done: the words stay, the choices go */
+.threshold.revisited .th-go,
+.threshold.revisited .th-how { display: none; }
+.threshold.revisited::after {
+  content: "press escape to go back to the field";
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-2);
+  margin-top: 30px;
+}
