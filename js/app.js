@@ -3,15 +3,15 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf45';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf45';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf45';
-import * as mapView from './map.js?v=rf45';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf45';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf45';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf45';
-import { exifGPS } from './exif.js?v=rf45';
-import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf45';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf46';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf46';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf46';
+import * as mapView from './map.js?v=rf46';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf46';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf46';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf46';
+import { exifGPS } from './exif.js?v=rf46';
+import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf46';
 
 // ---------- helpers ----------
 
@@ -1986,16 +1986,44 @@ const LINK_HARD_LIMIT = 16000;
 
 function handOver(url, what, { title = '', text = '' } = {}) {
   const send = async () => {
+    // where a system sheet exists it is the one true door: mail, whatsapp,
+    // messages, whatever the device holds, chosen by its owner
     if (navigator.share) {
       try {
         await navigator.share(title || text ? { title, text, url } : { url });
         return;
       } catch (e) { if (e && e.name === 'AbortError') return; }
     }
-    try { await navigator.clipboard.writeText(url); toast(`${what} copied. hand it to one person`); }
-    catch { window.prompt('Copy this:', url); }
+    // no sheet: the link is copied when the device allows, and the two
+    // rails stand at the foot either way
+    let copied = true;
+    try { await navigator.clipboard.writeText(url); } catch { copied = false; }
+    raiseHandBar(url, what, { title, text, copied });
   };
   send();
+}
+
+function raiseHandBar(url, what, { title = '', text = '', copied = true } = {}) {
+  const bar = $('#handBar');
+  $('#hbCopied').textContent = copied ? `${what} copied` : what;
+  const cp = $('#hbCopy');
+  cp.hidden = copied;
+  cp.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      $('#hbCopied').textContent = `${what} copied`;
+      cp.hidden = true;
+    } catch { window.prompt('Copy this:', url); }
+  };
+  $('#hbMail').href = 'mailto:?subject=' + encodeURIComponent(title || what)
+    + '&body=' + encodeURIComponent((text ? text + '\n\n' : '') + url);
+  $('#hbWa').href = 'https://wa.me/?text=' + encodeURIComponent((text ? text + '\n' : '') + url);
+  // some desktop mail clients cut a body around two thousand characters;
+  // said here, once, rather than discovered in a broken paste
+  $('#hbNote').hidden = url.length <= 1800;
+  bar.hidden = false;
+  clearTimeout(raiseHandBar.t);
+  raiseHandBar.t = setTimeout(() => { bar.hidden = true; }, 14000);
 }
 
 async function shareMap() {
@@ -3024,6 +3052,7 @@ function init() {
     $('#indexOverlay').hidden ? openIndex() : closeSurface('indexOverlay');
   });
   $('#fmCommand').addEventListener('click', togglePalette);
+  $('#hbDone').addEventListener('click', () => { $('#handBar').hidden = true; });
   $('#indexClose').addEventListener('click', () => closeSurface('indexOverlay'));
   $('#fieldWord').addEventListener('click', turnField);
   $('#themeWord').addEventListener('click', () => {

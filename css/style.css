@@ -1360,6 +1360,21 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
 }
 .visit-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--counter); }
 
+/* the hand bar: the link is copied, and the two rails stand beside the word */
+.hand-bar {
+  position: fixed; z-index: 1100;
+  bottom: max(18px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: 20px;
+  padding: 10px 18px;
+  background: var(--field);
+  box-shadow: 0 0 0 1px var(--edge);
+  white-space: nowrap;
+}
+.hand-bar .mono { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2); }
+.hand-bar .word-btn { font-size: 11px; }
+.hand-bar .hb-note { color: var(--ink-3); }
+@media (max-width: 640px) { .hand-bar { flex-wrap: wrap; white-space: normal; max-width: 92vw; justify-content: center; } }
+
 
 /* ---------- the mark on the film ---------- */
 /* It sits where the hero wordmark sits, at the same size and letterspacing, so

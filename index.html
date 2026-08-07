@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf45">
+<link rel="stylesheet" href="css/style.css?v=rf46">
 </head>
 <body class="boot">
 
@@ -230,6 +230,16 @@
 
 <div class="toast mono" id="toast" role="status" aria-live="polite" hidden></div>
 
+<!-- where no share sheet exists, the copied link stands here with its two rails -->
+<div class="hand-bar" id="handBar" hidden>
+  <span class="mono" id="hbCopied">copied</span>
+  <button class="word-btn quiet" id="hbCopy" hidden>copy</button>
+  <a class="word-btn quiet" id="hbMail" href="#">by email</a>
+  <a class="word-btn quiet" id="hbWa" href="#" target="_blank" rel="noopener">by whatsapp</a>
+  <button class="word-btn quiet" id="hbDone">done</button>
+  <span class="mono hb-note" id="hbNote" hidden>a long link. mail may break it; whatsapp holds it</span>
+</div>
+
 <!-- the sheet: print-only, typeset on demand -->
 <section id="sheet" aria-hidden="true"></section>
 
@@ -241,6 +251,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf45"></script>
+<script type="module" src="js/app.js?v=rf46"></script>
 </body>
 </html>
