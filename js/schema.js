@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf53';
+import { decodePath } from './route.js?v=rf54';
 
 export const SCHEMA_VERSION = 4;
 
@@ -87,6 +87,8 @@ export function normPlace(raw, i = 0) {
       ? p.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
       : [],
     status: p.status === 'visited' ? 'visited' : 'wishlist',
+    // a place marked this way is kept out of every link, folio and publish
+    private: p.private === true,
     // the number survives only so links and files from before the words still
     // open; nothing writes it, and no surface shows it
     rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),

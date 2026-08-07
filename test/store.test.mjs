@@ -221,6 +221,26 @@ test('the backup kept for yourself carries everything', async () => {
   assert.equal(backup.settings.authorName, 'Jonas');
 });
 
+test('a place marked never leaves is in no file a stranger is given', () => {
+  fresh();
+  store.addPlace(newPlace({ name: 'Public', lat: 46, lng: 8 }));
+  const home = store.addPlace(newPlace({ name: 'Home', lat: 47, lng: 8 }));
+  store.updatePlace(home.id, { private: true });
+
+  const share = JSON.parse(store.exportShareJSON());
+  assert.equal(share.places.length, 1, 'only the one that may travel');
+  assert.equal(share.places[0].name, 'Public');
+  assert.ok(!JSON.stringify(share).includes('Home'), 'not by name, not by coordinate');
+});
+
+test('a way handed over carries no record of when it was walked', () => {
+  fresh();
+  const r = store.addRoute(newRoute({ name: 'The ridge', path: [{ lat: 46, lng: 8 }, { lat: 46.1, lng: 8.1 }] }));
+  store.updateRoute(r.id, { status: 'walked', walkedAt: '2026-08-01T09:00:00Z' });
+  const share = JSON.parse(store.exportShareJSON());
+  assert.equal('walkedAt' in share.routes[0], false, 'a routine is not a recommendation');
+});
+
 // ---------- erase means erase ----------
 
 test('an erased atlas does not grow a sample back', () => {

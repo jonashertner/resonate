@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf53';
-import { measure, simplify } from './route.js?v=rf53';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf54';
+import { measure, simplify } from './route.js?v=rf54';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -88,6 +88,7 @@ export function newPlace(partial = {}) {
     countryCode: '',
     tags: [],
     status: 'wishlist', // 'visited' | 'wishlist'
+    private: false,     // true: it never leaves this device
     rating: 0,          // read from old links, never written
     note: '',
     url: '',
@@ -436,6 +437,7 @@ export const store = {
   // what may be handed to someone else: the atlas without the private layer.
   // the share surface promises photographs never leave the device, and a file
   // offered in place of a link has to keep that promise.
+  // what a stranger may be given: never a place marked as never leaving
   exportShareJSON() {
     return JSON.stringify({
       app: 'resonate',
@@ -443,8 +445,8 @@ export const store = {
       version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       tags: this.tags,
-      places: this.places.map(({ photos, ...rest }) => rest),
-      routes: this.routes,
+      places: this.places.filter(p => !p.private).map(({ photos, ...rest }) => rest),
+      routes: this.routes.map(({ walkedAt, ...rest }) => rest),
     }, null, 2);
   },
 

@@ -3,16 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf53';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf53';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf53';
-import * as mapView from './map.js?v=rf53';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf53';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf53';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf53';
-import { exifGPS } from './exif.js?v=rf53';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf53';
-import * as photoStore from './photos.js?v=rf53';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf54';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf54';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf54';
+import * as mapView from './map.js?v=rf54';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf54';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf54';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf54';
+import { exifGPS } from './exif.js?v=rf54';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf54';
+import * as photoStore from './photos.js?v=rf54';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf54';
 
 // ---------- helpers ----------
 
@@ -84,6 +85,8 @@ const state = {
 };
 
 function allPlaces() { return store.places; }
+// the pool anything may be handed from: a place that never leaves is not in it
+function sharablePlaces() { return store.places.filter(p => !p.private); }
 function allTags() { return store.tags; }
 function tagById(id) { return allTags().find(t => t.id === id); }
 function placeById(id) { return allPlaces().find(p => p.id === id); }
@@ -203,6 +206,76 @@ function paintPhotos(root) {
   $$('img[data-ph]', root).forEach(async (img) => {
     const url = await photoStore.urlFor(img.dataset.ph);
     if (url) img.src = url; else img.closest('.fig')?.remove();
+  });
+}
+
+// ---------- a place arrives from elsewhere ----------
+//
+// A share sheet, a pasted link, a set of coordinates. One surface answers all
+// of them: what we understood, one choice, one press. Nothing is demanded
+// that the source did not already carry.
+
+const INBOX_KEY = 'resonate.inbox.v1';
+
+function inboxRead() {
+  try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]'); } catch { return []; }
+}
+function inboxWrite(list) {
+  try { localStorage.setItem(INBOX_KEY, JSON.stringify(list.slice(-20))); } catch { /* full is full */ }
+}
+
+async function receiveShared(raw) {
+  const found = readShared(raw);
+  if (!found) return toast('nothing in that to keep');
+
+  const held = alreadyHeld(found, allPlaces());
+  if (held) {
+    selectPlace(held.id, { fly: true });
+    return toast('you hold this already');
+  }
+
+  // coordinates in hand: propose it on the field, as any found place
+  if (found.at) {
+    const named = found.name || 'this point';
+    proposePlace({ name: named, lat: found.at.lat, lng: found.at.lng,
+      sub: found.address || found.source, address: found.address || '', url: found.url || '' });
+    if (!found.name || !found.address) {
+      // the world can fill in what the link did not carry, once
+      reverseGeo(found.at.lat, found.at.lng).then(g => {
+        if (!g || !state.proposal) return;
+        state.proposal = { ...state.proposal, city: g.city, country: g.country,
+          countryCode: g.countryCode, address: state.proposal.address || g.address };
+        $('.plate-sub') && ($('.plate-sub').textContent = [g.city, g.country].filter(Boolean).join(' · '));
+      }).catch(() => { /* offline is fine; the point stands */ });
+    }
+    return;
+  }
+
+  // a name and no point: ask the world where it is, once, on this press
+  if (!navigator.onLine) {
+    inboxWrite([...inboxRead(), { ...found, at: null, arrivedAt: new Date().toISOString() }]);
+    return toast('kept for later. it will be placed when there is a network');
+  }
+  toast('looking for it…');
+  try {
+    const results = await searchGeo(found.name, 1);
+    if (results?.length) return proposePlace({ ...results[0], url: found.url || '' });
+  } catch { /* the world did not answer */ }
+  toast(`nothing found for “${found.name}”. try the command line`);
+}
+
+// what waited for a network, offered when there is one
+async function drainInbox() {
+  const waiting = inboxRead();
+  if (!waiting.length || !navigator.onLine) return;
+  toast(`${waiting.length} share${waiting.length === 1 ? '' : 's'} waiting to be placed`, 5000, {
+    word: 'place them',
+    run: async () => {
+      inboxWrite([]);
+      for (const item of waiting) { await receiveShared(item); break; } // one at a time, gently
+      const rest = waiting.slice(1);
+      if (rest.length) inboxWrite(rest);
+    },
   });
 }
 
@@ -638,6 +711,8 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       <div class="plate-words" id="pStatus">
         <button data-st="visited" aria-pressed="${place.status === 'visited'}">been</button>
         <button data-st="wishlist" aria-pressed="${place.status === 'wishlist'}">want to go</button>
+        <button data-private class="reco" aria-pressed="${place.private === true}"
+          title="kept out of every link, folio and publish">never leaves</button>
       </div>
 
       <div class="plate-sec">
@@ -714,9 +789,16 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
   $('#pStatus').addEventListener('click', (e) => {
     const st = e.target.closest('[data-st]');
-    if (!st) return;
-    save({ status: st.dataset.st });
-    renderPlate(placeById(place.id)); renderList(); syncMarkers();
+    if (st) {
+      save({ status: st.dataset.st });
+      renderPlate(placeById(place.id)); renderList(); syncMarkers();
+      return;
+    }
+    if (!e.target.closest('[data-private]')) return;
+    const now = !place.private;
+    save({ private: now });
+    renderPlate(placeById(place.id)); renderList();
+    toast(now ? 'this place never leaves the device' : 'this place may travel again');
   });
 
 
@@ -1704,7 +1786,7 @@ function openFolioShelf() {
 
 function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [] } = {}) {
   const kept = folioId ? store.folioById(folioId) : null;
-  const pool = kept || fresh ? allPlaces() : (places || filteredPlaces());
+  const pool = (kept || fresh ? allPlaces() : (places || filteredPlaces())).filter(p => !p.private);
   const wayPool = allRoutes();
   const chosen = new Set(
     kept ? kept.placeIds.filter(id => placeById(id))
@@ -2160,8 +2242,9 @@ function raiseHandBar(url, what, { title = '', text = '', copied = true } = {}) 
 }
 
 async function shareMap() {
-  const places = allPlaces();
-  if (!places.length) return toast('nothing to hand over yet');
+  const places = sharablePlaces();
+  const kept = allPlaces().length - places.length;
+  if (!places.length) return toast(kept ? 'every place here is marked as never leaving' : 'nothing to hand over yet');
   const author = await ensureAuthor();
   const routes = allRoutes();
   const url = makeShareUrl(allTags(), places, author, routes);
@@ -2190,6 +2273,7 @@ async function shareMap() {
       </ul>
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
       a link cannot be recalled once it is sent.</p>
+      ${kept ? `<p class="sh-warn">${kept} place${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place that way from its own plate.</p>` : ''}
       <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}</p>
     </div>
     <div class="word-row">
@@ -2743,8 +2827,9 @@ function route(q) {
   if (q[0] === '>') return { kind: 'verb', rest: q.slice(1).trim().toLowerCase() };
   if (q[0] === '#') return { kind: 'tag', rest: q.slice(1).trim().toLowerCase() };
   if (q[0] === '@') return { kind: 'voice', rest: q.slice(1).trim().toLowerCase() };
-  const m = q.match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/);
-  if (m) return { kind: 'coords', lat: +m[1], lng: +m[2] };
+  const at = coordsIn(q);
+  if (at) return { kind: 'coords', lat: at.lat, lng: at.lng };
+  if (/^https?:\/\//i.test(q)) return { kind: 'link', rest: q };
   return { kind: 'search', rest: q };
 }
 
@@ -2810,6 +2895,9 @@ function rowHTML(item, i) {
   if (item.kind === 'coords') {
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</span><span class="row-sub">↵ propose a place here</span></button>`;
   }
+  if (item.kind === 'link') {
+    return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">a link</span><span class="row-sub">${esc(item.host)} · ↵ read it for a place</span></button>`;
+  }
   if (item.kind === 'stand') {
     return `<button class="cmd-row${hl}" data-i="${i}"><span class="row-name">the newsstand answers</span><span class="row-sub">${item.n} folio${item.n > 1 ? 's' : ''} · ↵ open</span></button>`;
   }
@@ -2837,6 +2925,7 @@ function activateRow(i) {
   if (item.kind === 'remote') { popSurface(); proposePlace(item.r); return; }
   if (item.kind === 'verb') { popSurface(); item.run(); return; }
   if (item.kind === 'coords') { popSurface(); proposeAdd(item.lat, item.lng); return; }
+  if (item.kind === 'link') { popSurface(); receiveShared({ url: item.url }); return; }
   if (item.kind === 'tag') {
     const id = item.tag.id;
     state.filters.tags.has(id) ? state.filters.tags.delete(id) : state.filters.tags.add(id);
@@ -2915,6 +3004,11 @@ function renderPaletteResults(q) {
     return paint(items, items.length ? '' : store.correspondents.length ? 'no such voice' : 'no voices yet. >share to begin the exchange');
   }
   if (r.kind === 'coords') return paint([{ kind: 'coords', lat: r.lat, lng: r.lng }]);
+  if (r.kind === 'link') {
+    let host = 'that address';
+    try { host = new URL(r.rest).hostname.replace(/^www\./, ''); } catch { /* it will still be read */ }
+    return paint([{ kind: 'link', url: r.rest, host }]);
+  }
   const locals = localMatches(r.rest).map(p => ({ kind: 'local', place: p }));
   const voices = corrMatches(r.rest);
   if (!r.rest) {
@@ -3126,6 +3220,16 @@ function init() {
       await photoStore.snapshotPrune(3);
     }
   }, 2500);
+
+  // something was shared into the app: read it, then wipe the url clean
+  const q = new URLSearchParams(location.search);
+  if (q.has('title') || q.has('text') || q.has('url')) {
+    const shared = { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' };
+    history.replaceState(null, '', location.pathname + location.hash);
+    setTimeout(() => receiveShared(shared), 1200);
+  } else {
+    setTimeout(drainInbox, 3000);
+  }
 
   // a member returns from the door with a checkout session on the url.
   // the session becomes a key, the url is wiped clean of it.
