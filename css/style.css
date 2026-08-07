@@ -281,8 +281,20 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 }
 .fm-s:hover { color: var(--ink); }
 .fm-s kbd { font-family: var(--mono); font-size: 11px; margin-left: 0.8em; border-bottom: 1px solid var(--ink-3); }
+/* the way back to the opening, always in the same corner. a question mark
+   asks for no translation and no explaining of its own. */
+.fm-help {
+  right: 16px; bottom: max(10px, env(safe-area-inset-bottom));
+  width: 44px; height: 44px;               /* a thumb needs this much */
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 15px; line-height: 1;
+  color: var(--ink-3);
+  transition: color var(--mo-reflex) var(--e-reflex);
+}
+.fm-help:hover, .fm-help:focus-visible { color: var(--ink); }
+
 .fm-se {
-  right: 22px; bottom: max(16px, env(safe-area-inset-bottom));
+  right: 74px; bottom: max(16px, env(safe-area-inset-bottom));
   font-size: 9.5px; letter-spacing: 0.08em; color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }

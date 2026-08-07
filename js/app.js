@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf60';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf60';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf60';
-import * as mapView from './map.js?v=rf60';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf60';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf60';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf60';
-import { exifGPS } from './exif.js?v=rf60';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf60';
-import * as photoStore from './photos.js?v=rf60';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf60';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf61';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf61';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf61';
+import * as mapView from './map.js?v=rf61';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf61';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf61';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf61';
+import { exifGPS } from './exif.js?v=rf61';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf61';
+import * as photoStore from './photos.js?v=rf61';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf61';
 
 // ---------- helpers ----------
 
@@ -3618,6 +3618,11 @@ function init() {
     $('#indexOverlay').hidden ? openIndex() : closeSurface('indexOverlay');
   });
   $('#fmCommand').addEventListener('click', togglePalette);
+  $('#fmHelp').addEventListener('click', () => {
+    // wherever you are, the opening is one press away
+    closeSurface('indexOverlay'); closeSurface('howOverlay');
+    showOpening();
+  });
   $('#hbDone').addEventListener('click', () => { $('#handBar').hidden = true; });
   // a report's close word, present in every letter, wired here once
   $('#reportOverlay').addEventListener('click', (e) => {
