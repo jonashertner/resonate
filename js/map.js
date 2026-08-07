@@ -240,6 +240,17 @@ function makeIcon(place, selected, hue) {
   });
 }
 
+// what a mark says to a reader who cannot see its colour: the name, the
+// domain the hue stands for, and whether it has been visited
+function markLabel(place, tagById) {
+  const t = place.tags?.length ? tagById?.(place.tags[0]) : null;
+  return [
+    place.name,
+    t?.name ? t.name.toLowerCase() : '',
+    place.status === 'wishlist' ? 'want to go' : 'been',
+  ].filter(Boolean).join(', ');
+}
+
 // the hue of a place is the hue of the first domain it was filed under
 function hueOf(place, tagById) {
   const t = place.tags && place.tags.length ? tagById?.(place.tags[0]) : null;
@@ -256,8 +267,8 @@ export function renderMarkers(places, tagById, selectedId) {
       icon: makeIcon(place, place.id === selectedId, hueOf(place, tagById)),
       riseOnHover: true,
       keyboard: true,
-      alt: place.name,
-      title: place.name,
+      alt: markLabel(place, tagById),
+      title: markLabel(place, tagById),
     });
     marker.on('click', () => markersById._onMarkerClick?.(place.id));
     markersById.set(place.id, marker);

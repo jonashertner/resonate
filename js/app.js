@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf56';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf56';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf56';
-import * as mapView from './map.js?v=rf56';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf56';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf56';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf56';
-import { exifGPS } from './exif.js?v=rf56';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf56';
-import * as photoStore from './photos.js?v=rf56';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf56';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf57';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf57';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf57';
+import * as mapView from './map.js?v=rf57';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf57';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf57';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf57';
+import { exifGPS } from './exif.js?v=rf57';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf57';
+import * as photoStore from './photos.js?v=rf57';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf57';
 
 // ---------- helpers ----------
 
@@ -218,6 +218,58 @@ function directionsURL(lat, lng, name = '') {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+// ---------- the house asks, rather than the browser ----------
+//
+// A native confirm escapes the focus trap, ignores the inert background, and
+// wears the operating system's clothes in an app that has none. These do not.
+
+function ask(question, { yes = 'yes', no = 'no' } = {}) {
+  const box = $('#askBox');
+  $('#askWhat').textContent = question;
+  $('#askInput').hidden = true;
+  $('#askGo').textContent = yes;
+  $('#askNo').textContent = no;
+  return new Promise((resolve) => {
+    const done = (v) => {
+      $('#askGo').onclick = null; $('#askNo').onclick = null; box.onkeydown = null;
+      dropDialog(box);
+      resolve(v);
+    };
+    $('#askGo').onclick = () => done(true);
+    $('#askNo').onclick = () => done(false);
+    box.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(false); } };
+    raiseDialog(box, question);
+    $('#askGo').focus();
+  });
+}
+
+function askText(question, { value = '', yes = 'keep', no = 'never mind', placeholder = '' } = {}) {
+  const box = $('#askBox');
+  const input = $('#askInput');
+  $('#askWhat').textContent = question;
+  input.hidden = false;
+  input.value = value;
+  input.placeholder = placeholder;
+  $('#askGo').textContent = yes;
+  $('#askNo').textContent = no;
+  return new Promise((resolve) => {
+    const done = (v) => {
+      $('#askGo').onclick = null; $('#askNo').onclick = null; box.onkeydown = null;
+      input.hidden = true;
+      dropDialog(box);
+      resolve(v);
+    };
+    $('#askGo').onclick = () => done(input.value.trim());
+    $('#askNo').onclick = () => done(null);
+    box.onkeydown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+      if (e.key === 'Enter') { e.preventDefault(); done(input.value.trim()); }
+    };
+    raiseDialog(box, question);
+    input.focus(); input.select();
+  });
+}
+
 // ---------- a place arrives from elsewhere ----------
 //
 // A share sheet, a pasted link, a set of coordinates. One surface answers all
@@ -397,6 +449,7 @@ const NON_MODAL = new Set(['plate']);
 function modalUp() {
   if (!$('#reportOverlay').hidden) return true;
   if (!$('#threshold')?.hidden) return true;
+  if (!$('#askBox').hidden) return true;
   if (!$('#nameAsk').hidden) return true;
   return surfaces.some(id => !NON_MODAL.has(id));
 }
@@ -433,13 +486,16 @@ function dropDialog(el) {
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function focusables(el) {
-  return [...el.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null || n === document.activeElement);
+  // offsetParent is null for anything position: fixed, which the closes and
+  // the bars all are: measure the box instead, or the trap loses them
+  return [...el.querySelectorAll(FOCUSABLE)]
+    .filter(n => n.getClientRects().length > 0 || n === document.activeElement);
 }
 
 // whichever dialog is in front holds the focus: the surface stack, or a
 // report or prompt raised beside it
 function frontDialog() {
-  for (const id of ['nameAsk', 'threshold', 'reportOverlay']) {
+  for (const id of ['askBox', 'nameAsk', 'threshold', 'reportOverlay']) {
     const el = document.getElementById(id);
     if (el && !el.hidden) return el;
   }
@@ -886,12 +942,12 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     } });
   }));
 
-  $('#pDelete').addEventListener('click', () => {
+  $('#pDelete').addEventListener('click', async () => {
     const inFolios = store.folios.filter(f => f.placeIds.includes(place.id));
     const warn = inFolios.length
       ? ` ${inFolios.length === 1 ? 'One folio encloses it and' : `${inFolios.length} folios enclose it and`} will stop saying it.`
       : '';
-    if (!confirm(`Remove “${place.name}” from your atlas?${warn} A link already sent keeps its copy.`)) return;
+    if (!await ask(`Remove “${place.name}” from your atlas?${warn} A link already sent keeps its copy.`, { yes: 'remove it', no: 'keep it' })) return;
     const kept = { place: { ...place, photos: place.photos.slice() }, folioIds: inFolios.map(f => f.id) };
     store.removePlace(place.id);
     closeSurface('plate');
@@ -1216,9 +1272,9 @@ function renderRoutePlate(route) {
   }));
   $('#pRouteNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
   $('#pRouteGpx').addEventListener('click', () => downloadGPX(route));
-  $('#pRouteRemove').addEventListener('click', () => {
+  $('#pRouteRemove').addEventListener('click', async () => {
     const wayFolios = store.folios.filter(f => f.routeIds.includes(route.id)).length;
-    if (!confirm(`Remove “${route.name}” from your atlas?${wayFolios ? ` ${wayFolios === 1 ? 'One folio encloses it' : `${wayFolios} folios enclose it`} and will stop saying it.` : ''} A link already sent keeps its copy.`)) return;
+    if (!await ask(`Remove “${route.name}” from your atlas?${wayFolios ? ` ${wayFolios === 1 ? 'One folio encloses it' : `${wayFolios} folios enclose it`} and will stop saying it.` : ''} A link already sent keeps its copy.`, { yes: 'remove it', no: 'keep it' })) return;
     store.removeRoute(route.id);
     state.selectedRouteId = null;
     popSurface();
@@ -1391,8 +1447,8 @@ function renderVoices() {
       </div>
     </div>`;
     $('#ceShare').addEventListener('click', shareMap);
-    $('#ceImport').addEventListener('click', () => {
-      const url = prompt('Paste the link you were sent:');
+    $('#ceImport').addEventListener('click', async () => {
+      const url = await askText('Paste the link you were sent.', { yes: 'open it', placeholder: 'https://resonate.select/#…' });
       if (url && url.includes('#m=')) location.href = url.slice(url.indexOf('#m='));
       if (url && url.includes('#m=')) location.reload();
     });
@@ -1435,8 +1491,8 @@ function renderVoices() {
       pushCorrespondentsToMap();
       renderVoices();
     });
-    row.querySelector('[data-part]').addEventListener('click', () => {
-      if (!confirm(`Part ways with ${c.name}? Their marks leave your field. Places you adopted stay yours, and still say “after ${c.name}”.`)) return;
+    row.querySelector('[data-part]').addEventListener('click', async () => {
+      if (!await ask(`Part ways with ${c.name}? Their marks leave your field. Places you adopted stay yours, and still say “after ${c.name}”.`, { yes: 'part ways', no: 'keep them' })) return;
       store.removeCorrespondent(id);
       pushCorrespondentsToMap();
       renderVoices();
@@ -1556,7 +1612,7 @@ function openFolioReport(payload) {
         </div>`).join('')}
       ${ways.map((r, i) => `
         <div class="rp-pick">
-          <span class="no">${r.loop ? '◯' : '⟋'}</span>
+          <span class="no" aria-label="${r.loop ? 'a loop' : 'there and back'}">${r.loop ? '◯' : '⟋'}</span>
           <span class="nm">${esc(r.name)}</span>
           <span class="why">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
           <button class="adopt" data-adopt-way="${i}">adopt</button>
@@ -1733,7 +1789,7 @@ function openAtlasReport(payload) {
       <div class="sec-head">the ways they walk</div>
       ${theirWays.map((r, i) => `
         <div class="rp-pick">
-          <span class="no">${r.loop ? '◯' : '⟋'}</span>
+          <span class="no" aria-label="${r.loop ? 'a loop' : 'there and back'}">${r.loop ? '◯' : '⟋'}</span>
           <span class="nm">${esc(r.name)}</span>
           <span class="why">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
           <button class="adopt" data-adopt-way="${i}">adopt</button>
@@ -1776,8 +1832,8 @@ function openAtlasReport(payload) {
     leaveReport(el);
     toast(`${added} places are yours now. make them true`);
   });
-  $('#rpKeep').addEventListener('click', () => {
-    const finalName = prompt('Keep this atlas under which name?', name === 'an atlas without a byline' ? '' : name);
+  $('#rpKeep').addEventListener('click', async () => {
+    const finalName = await askText('Keep this atlas under which name?', { value: name === 'an atlas without a byline' ? '' : name, yes: 'keep as a voice' });
     if (finalName === null) return;
     const kept = store.addCorrespondent({ name: finalName || name, tags: theirs.tags, places: theirs.places });
     if (!kept) return toast('this browser refused to keep them');
@@ -2027,8 +2083,8 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         + '&body=' + encodeURIComponent(bodyTx);
       window.open(issue, '_blank', 'noopener');
     });
-    $('#folRemove')?.addEventListener('click', () => {
-      if (!confirm(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.${kept.offeredAt ? ' A copy offered to the newsstand stays there until you ask for its removal.' : ''}`)) return;
+    $('#folRemove')?.addEventListener('click', async () => {
+      if (!await ask(`Take “${kept.title}” off the shelf? The places themselves stay in your atlas.${kept.offeredAt ? ' A copy offered to the newsstand stays there until you ask for its removal.' : ''}`, { yes: 'take it off', no: 'keep it' })) return;
       store.removeFolio(kept.id);
       toast('off the shelf. every place is still yours');
       openFolioShelf();
@@ -2073,7 +2129,7 @@ function fileIntoFolio(placeId) {
 }
 
 async function composeAsk() {
-  const q = prompt('Ask for… (a city, a taste, anything)', '');
+  const q = await askText('Ask for a city, a taste, anything.', { yes: 'make the ask', placeholder: 'wine bars in lisbon' });
   if (!q || !q.trim()) return;
   const from = await ensureAuthor();
   const url = makeAskUrl({ from, q: q.trim() });
@@ -2545,8 +2601,8 @@ function renderSettings() {
     file.click();
   });
   $('#eraseAll').addEventListener('click', async () => {
-    if (!confirm('Erase every place and tag in this atlas? Export first if you want a keepsake.')) return;
-    if (!confirm('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?')) return;
+    if (!await ask('Erase every place and tag in this atlas? Export first if you want a keepsake.', { yes: 'go on', no: 'not yet' })) return;
+    if (!await ask('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?', { yes: 'erase everything', no: 'stop' })) return;
     store.clearAll();
     await photoStore.clear();
     state.selectedId = null;
@@ -2599,7 +2655,7 @@ function renderTags() {
   });
   $('#tagName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#tagAdd').click(); });
 
-  $('.tag-rows', body).addEventListener('click', (e) => {
+  $('.tag-rows', body).addEventListener('click', async (e) => {
     const row = e.target.closest('[data-tid]');
     if (!row) return;
     const id = row.dataset.tid;

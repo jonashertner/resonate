@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf56">
+<link rel="stylesheet" href="css/style.css?v=rf57">
 </head>
 <body class="boot">
 
@@ -26,7 +26,7 @@
 </div>
 
 <div id="app" class="app">
-  <div id="map" aria-label="The field, a map of your saved places"></div>
+  <div id="map" role="region" aria-label="The field, a map of your saved places"></div>
 
   <!-- the four corner marks: the only chrome that exists at rest -->
   <button class="fm fm-nw" id="fmIndex" aria-label="Open the index">
@@ -222,6 +222,16 @@
   <button class="th-how" id="thHow">what it keeps, and what it shares</button>
 </section>
 
+<!-- the house asks its own questions: focus-trapped, styled, and inert behind -->
+<div class="name-ask" id="askBox" role="dialog" aria-modal="true" aria-labelledby="askWhat" hidden>
+  <p id="askWhat" class="ask-what"></p>
+  <input id="askInput" type="text" spellcheck="false" maxlength="200" enterkeyhint="done" hidden>
+  <div class="word-row">
+    <button class="word-btn" id="askGo">yes</button>
+    <button class="word-btn quiet" id="askNo">no</button>
+  </div>
+</div>
+
 <div class="name-ask" id="nameAsk" role="dialog" aria-modal="true" aria-label="Your name" hidden>
   <label for="nameAskInput">a byline for what you hand over. a typed name, nothing more.</label>
   <input id="nameAskInput" type="text" autocomplete="name" spellcheck="false" maxlength="60" enterkeyhint="done">
@@ -268,6 +278,6 @@
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
 <script src="vendor/argon2/argon2.umd.min.js" integrity="sha384-tP0Wy54CKmng7i9EoTlPySD0hBx6Octj0VS6MfwlnUu111MPa+JLm0CCbep6XJ1W"></script>
-<script type="module" src="js/app.js?v=rf56"></script>
+<script type="module" src="js/app.js?v=rf57"></script>
 </body>
 </html>

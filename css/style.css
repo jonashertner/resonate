@@ -1101,6 +1101,8 @@ a.word-btn { text-decoration: none; display: inline-block; }
 .edit-tags { color: var(--ink-3); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; padding: 9px 0; }
 .edit-tags:hover { color: var(--ink); }
 
+.ask-what { margin: 0 0 18px; font-size: clamp(15px, 1.9vw, 19px); line-height: 1.4; max-width: 46ch; }
+#askInput { width: 100%; max-width: 420px; margin-bottom: 18px; }
 .name-ask {
   position: fixed; inset: 0; height: var(--app-h); z-index: 90;
   display: flex; flex-direction: column; justify-content: flex-end;
