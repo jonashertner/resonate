@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf54';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf54';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf54';
-import * as mapView from './map.js?v=rf54';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf54';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf54';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf54';
-import { exifGPS } from './exif.js?v=rf54';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf54';
-import * as photoStore from './photos.js?v=rf54';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf54';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf55';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf55';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf55';
+import * as mapView from './map.js?v=rf55';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf55';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf55';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf55';
+import { exifGPS } from './exif.js?v=rf55';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf55';
+import * as photoStore from './photos.js?v=rf55';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf55';
 
 // ---------- helpers ----------
 
@@ -207,6 +207,15 @@ function paintPhotos(root) {
     const url = await photoStore.urlFor(img.dataset.ph);
     if (url) img.src = url; else img.closest('.fig')?.remove();
   });
+}
+
+// the map a person actually uses: their platform's own, then the web's
+function directionsURL(lat, lng, name = '') {
+  const ua = navigator.userAgent;
+  const q = encodeURIComponent(name || `${lat},${lng}`);
+  if (/iPhone|iPad|iPod|Macintosh/.test(ua)) return `https://maps.apple.com/?daddr=${lat},${lng}&q=${q}`;
+  if (/Android/.test(ua)) return `geo:${lat},${lng}?q=${lat},${lng}(${q})`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
 // ---------- a place arrives from elsewhere ----------
@@ -753,7 +762,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   });
   $('#pFolio')?.addEventListener('click', () => fileIntoFolio(place.id));
   $('#pDirections')?.addEventListener('click', () => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`, '_blank', 'noopener');
+    window.open(directionsURL(place.lat, place.lng, place.name), '_blank', 'noopener');
   });
 
   if (ro) {
@@ -1024,7 +1033,7 @@ function proposePlace(r) {
     if (addPlaceFromResult(r)) toast('kept. make it true');
   });
   $('#ppDirections').addEventListener('click', () => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`, '_blank', 'noopener');
+    window.open(directionsURL(r.lat, r.lng, r.name), '_blank', 'noopener');
   });
 }
 
@@ -1442,9 +1451,40 @@ function leaveVisit() {
 
 // leaving a report opens the atlas it was offered to, rather than reloading
 // the page out from under the reader
-function leaveReport(el) {
+// The strongest loop this app has is not publishing. It is: someone sends
+// you places, you keep two, and you send three back. The ask is bounded on
+// purpose. Three is a kindness; an open request is a chore.
+function askForThree(author) {
+  if (!author || author === 'no byline') return false;
+  const asked = new Set(store.settings.answered || []);
+  const key = author.toLowerCase();
+  if (asked.has(key)) return false;
+  if (store.places.filter(p => !p.private).length < 3) return false;
+
+  const bar = $('#answerBar');
+  $('#answerWho').textContent = `answer with three, for ${author}`;
+  bar.hidden = false;
+  const close = () => {
+    bar.hidden = true;
+    store.settings.answered = [...asked, key];
+    store.saveSettings();
+  };
+  $('#answerGo').onclick = () => {
+    close();
+    openFolioComposer({
+      fresh: true, cap: 3,
+      title: `three for ${author}`,
+      dedication: `after yours`,
+    });
+  };
+  $('#answerNo').onclick = close;
+  return true;
+}
+
+function leaveReport(el, author = '') {
   clearShareHash();
   dropDialog(el);
+  if (author && askForThree(author)) return;
   applyWorldState();
   state.visiting = null;
   pushCorrespondentsToMap();
@@ -1494,6 +1534,7 @@ function openFolioReport(payload) {
           <span class="no">${fmtNo(i + 1)}</span>
           <span class="nm">${esc(p.name)}</span>
           <span class="why">${esc(p.city || '')}</span>
+          <a class="adopt quiet" href="${esc(directionsURL(p.lat, p.lng, p.name))}" target="_blank" rel="noopener">directions</a>
           ${holdAlready(p)
             ? '<span class="held">you hold this</span>'
             : `<button class="adopt" data-adopt="${i}">adopt</button>`}
@@ -1507,10 +1548,13 @@ function openFolioReport(payload) {
         </div>`).join('')}
     </div>
     <div class="rp-foot">
+      ${places.length ? '<button class="word-btn" id="rpField">see them on the field</button>' : ''}
       ${fresh.length ? `<button class="word-btn" id="rpTakeAll">take all ${fresh.length}</button>` : ''}
+      <button class="word-btn quiet" id="rpGeo">download as geojson</button>
       <button class="word-btn quiet" id="rpPrint">print, or save as pdf</button>
       <button class="word-btn quiet" id="rpLeave">${store.places.length || store.routes.length ? 'open my atlas' : 'begin my own atlas'}</button>
-    </div>`;
+    </div>
+    <p class="rp-foot-note">These places are yours to keep, to walk to, or to take away in a file. Nothing here has touched your own atlas.</p>`;
   raiseDialog(el, 'Resonance report');
   requestAnimationFrame(() => el.querySelector('.rp-name').style.setProperty('--rp-w', 650));
 
@@ -1555,8 +1599,35 @@ function openFolioReport(payload) {
     toast(remaining.length
       ? `${remaining.length} place${remaining.length === 1 ? '' : 's'} taken, after ${author}`
       : 'you already hold them all');
+    setTimeout(() => askForThree(author), 1400);
   });
-  $('#rpLeave').addEventListener('click', () => leaveReport(el));
+  $('#rpField')?.addEventListener('click', () => {
+    // their marks on a field of yours that is untouched: the visiting pattern
+    state.visiting = { id: 'visit-' + Date.now(), name: author, hue: 278, visible: true,
+      tags: foreignTags, places };
+    mapView.setCorrespondents([...store.correspondents, state.visiting]);
+    dropDialog(el);
+    mapView.fitAll(places);
+    const bar = $('#visitBar');
+    bar.hidden = false;
+    $('#visitWho').textContent = `visiting ${author}`;
+    toast('their places, on a field of yours that is untouched');
+  });
+
+  $('#rpGeo').addEventListener('click', () => {
+    const fc = {
+      type: 'FeatureCollection',
+      features: places.map(p => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: { name: p.name, city: p.city, country: p.country, note: p.note, from: author },
+      })),
+    };
+    download(`${(payload.title || 'folio').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.geojson`,
+      JSON.stringify(fc, null, 2), 'application/geo+json');
+  });
+
+  $('#rpLeave').addEventListener('click', () => leaveReport(el, author));
   $('#rpPrint').addEventListener('click', () => {
     const theirTags = new Map((payload.tags || []).map(t => [t.id, t.name]));
     printSheet({
@@ -1784,7 +1855,7 @@ function openFolioShelf() {
   openSurface('folioOverlay');
 }
 
-function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [] } = {}) {
+function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [], cap = 0 } = {}) {
   const kept = folioId ? store.folioById(folioId) : null;
   const pool = (kept || fresh ? allPlaces() : (places || filteredPlaces())).filter(p => !p.private);
   const wayPool = allRoutes();
@@ -1814,7 +1885,9 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       ${store.folios.length || kept ? `<button class="fol-back mono" id="folBack">‹ the shelf</button>` : ''}
       <div class="fol-field"><input class="fol-title" id="folTitle" placeholder="Lisbon, the good part" value="${esc(title)}" maxlength="80" aria-label="The folio's title"></div>
       <div class="fol-field"><input class="fol-ded" id="folDed" placeholder="for whom, and why. one line" value="${esc(dedication)}" maxlength="140" aria-label="Its dedication"></div>
-      <div class="fol-count">${chosen.size + chosenWays.size} of ${pool.length + wayPool.length} enclosed</div>
+      <div class="fol-count">${cap
+        ? `${chosen.size} of ${cap} chosen`
+        : `${chosen.size + chosenWays.size} of ${pool.length + wayPool.length} enclosed`}</div>
       ${pool.map(p => `
         <button class="fol-row" data-fid="${esc(p.id)}" aria-pressed="${chosen.has(p.id)}">
           <span class="in">${chosen.has(p.id) ? 'in' : 'out'}</span>
@@ -1828,13 +1901,13 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
           <span class="sub">${esc(fmtKm(r.km))}${Number.isFinite(r.ascent) ? ` · ${r.ascent} m up` : ''}</span>
         </button>`).join('') : ''}
       <div class="fol-acts">
-        <button class="word-btn" id="folKeep">${kept ? 'keep the changes' : 'keep this folio'}</button>
-        <button class="word-btn quiet" id="folCopy">hand it over as a link</button>
-        <button class="word-btn quiet" id="folPublish">offer it to the newsstand</button>
-        <button class="word-btn quiet" id="folPrint">print, or save as pdf</button>
-        <button class="word-btn quiet" id="folAll">everything in</button>
-        <button class="word-btn quiet" id="folNone">everything out</button>
-        ${kept ? '<button class="word-btn quiet" id="folRemove">remove from the shelf</button>' : ''}
+        ${cap ? '' : `<button class="word-btn" id="folKeep">${kept ? 'keep the changes' : 'keep this folio'}</button>`}
+        <button class="word-btn${cap ? '' : ' quiet'}" id="folCopy">${cap ? 'send them back' : 'hand it over as a link'}</button>
+        ${cap ? '' : '<button class="word-btn quiet" id="folPublish">offer it to the newsstand</button>'}
+        ${cap ? '' : '<button class="word-btn quiet" id="folPrint">print, or save as pdf</button>'}
+        ${cap ? '' : '<button class="word-btn quiet" id="folAll">everything in</button>'}
+        <button class="word-btn quiet" id="folNone">${cap ? 'start over' : 'everything out'}</button>
+        ${kept && !cap ? '<button class="word-btn quiet" id="folRemove">remove from the shelf</button>' : ''}
       </div>
       ${kept?.offeredAt ? `<div class="news-note">offered to the newsstand ${fmtDate(kept.offeredAt).toLowerCase()}. a folio comes down the way it went up: <button class="word-btn quiet" id="folRetract" style="display:inline">ask for its removal</button></div>` : ''}
       <div class="news-note">Keeping shares nothing: the folio stays here, and follows your atlas as it
@@ -1844,11 +1917,14 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
     $$('.fol-row', body).forEach(row => row.addEventListener('click', () => {
       readHead();
       const pid = row.dataset.fid, wid = row.dataset.wid;
+      if (pid && cap && !chosen.has(pid) && chosen.size >= cap) {
+        return toast(`three is the ask. take one out to put another in`);
+      }
       if (pid) chosen.has(pid) ? chosen.delete(pid) : chosen.add(pid);
       if (wid) chosenWays.has(wid) ? chosenWays.delete(wid) : chosenWays.add(wid);
       paint();
     }));
-    $('#folAll').addEventListener('click', () => {
+    $('#folAll')?.addEventListener('click', () => {
       readHead();
       pool.forEach(p => chosen.add(p.id));
       wayPool.forEach(r => chosenWays.add(r.id));
@@ -1861,7 +1937,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       paint();
     });
 
-    $('#folKeep').addEventListener('click', () => {
+    $('#folKeep')?.addEventListener('click', () => {
       const t = needsTitle();
       if (!t) return;
       const patch = {
@@ -1898,7 +1974,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         text: `${t}${author ? `, a folio from ${author}` : ', a folio'}`,
       });
     });
-    $('#folPrint').addEventListener('click', () => {
+    $('#folPrint')?.addEventListener('click', () => {
       const t = needsTitle();
       if (!t) return;
       printSheet({
@@ -1908,7 +1984,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
         routes: wraySelection(),
       });
     });
-    $('#folPublish').addEventListener('click', async () => {
+    $('#folPublish')?.addEventListener('click', async () => {
       const t = needsTitle();
       if (!t) return;
       const author = await ensureAuthor();
