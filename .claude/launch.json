@@ -7,6 +7,13 @@
       "runtimeArgs": ["-m", "http.server", "5178", "--bind", "127.0.0.1"],
       "port": 5178,
       "autoPort": false
+    },
+    {
+      "name": "club-mock",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["club/mock.mjs"],
+      "port": 5179,
+      "autoPort": false
     }
   ]
 }

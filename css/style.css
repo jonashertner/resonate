@@ -578,6 +578,7 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
   transition: border-color var(--mo-reflex) var(--e-reflex);
 }
 .word-btn:hover { border-color: var(--ink); }
+a.word-btn { text-decoration: none; display: inline-block; }
 .word-btn.quiet { color: var(--ink-2); border-color: var(--edge); }
 .word-btn.quiet:hover { color: var(--ink); }
 

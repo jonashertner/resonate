@@ -1,0 +1,11 @@
+name = "resonate-club"
+main = "src/worker.js"
+compatibility_date = "2026-08-01"
+
+kv_namespaces = [
+  { binding = "BOX", id = "PUT-THE-ID-HERE" }
+]
+
+# secrets, set with `wrangler secret put`:
+#   STRIPE_SECRET          sk_live_… restricted: read checkout sessions, nothing else
+#   STRIPE_WEBHOOK_SECRET  whsec_… from the webhook endpoint you create

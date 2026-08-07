@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.basemaps.cartocdn.com; connect-src 'self' https://nominatim.openstreetmap.org https://jonashertner.github.io; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.basemaps.cartocdn.com; connect-src 'self' https://nominatim.openstreetmap.org https://jonashertner.github.io https://*.workers.dev http://localhost:5179; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Resonate. A personal atlas</title>
 <meta name="description" content="Save the places that resonate with you. A local-first personal atlas and a quiet trust network: hand your atlas to people whose taste you trust.">
 <meta name="theme-color" content="#EFF1E9" media="(prefers-color-scheme: light)">
@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Fragment+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf44">
+<link rel="stylesheet" href="css/style.css?v=rf45">
 </head>
 <body class="boot">
 
@@ -61,6 +61,7 @@
       <button data-go="voices"><span class="go-word">voices</span><span class="go-sub">the people whose atlases you keep</span></button>
       <button data-go="census"><span class="go-word">census</span><span class="go-sub">your atlas, counted</span></button>
       <button data-go="yours"><span class="go-word">yours</span><span class="go-sub">signature, your data, erase</span></button>
+      <button data-go="club"><span class="go-word">club</span><span class="go-sub">the travellers club. backup and sync, sealed</span></button>
       <button data-go="how"><span class="go-word">how</span><span class="go-sub">what this is and what it shares</span></button>
     </nav>
   </header>
@@ -94,6 +95,12 @@
   <p class="poster-sub">the story your atlas tells in numbers.</p>
   <div class="poster-body" id="statsBody"></div>
 </section>
+<section class="poster" id="clubOverlay" hidden aria-label="The travellers club">
+  <header class="poster-head"><h1 class="poster-word">club</h1><button class="poster-x" data-close>close</button></header>
+  <p class="poster-sub">the travellers club. what needs a keeper, kept: your atlas, sealed on this device, held where this browser cannot lose it.</p>
+  <div class="poster-body" id="clubBody"></div>
+</section>
+
 <section class="poster" id="settingsOverlay" hidden aria-label="Yours">
   <header class="poster-head"><h1 class="poster-word">yours</h1><button class="poster-x" data-close>close</button></header>
   <p class="poster-sub">signature, your data, erase.</p>
@@ -151,6 +158,10 @@
 
     <div class="sec-head">yours</div>
     <p>Export everything as a file, whenever. Print a folio, or the whole atlas, as a typeset page or a pdf. Erase everything, whenever, and it does not come back. Trust is a person, not a platform.</p>
+
+    <div class="sec-head">the travellers club</div>
+    <p>The app is free and stays free. The club is for what needs a keeper: a backup of your whole atlas, and the same atlas on your other devices. Before anything travels it is sealed on your device with a phrase only you know. The club keeps bytes it cannot read. What it knows about you, in full: a key, a paid-until date, and when the envelope was last sealed. No name, no address, and nothing else.</p>
+    <p>The plain cost of that privacy: lose the phrase and the envelope is lost with it. Nobody can open it for you, and that is the point.</p>
 
     <div class="word-row" style="margin-top:34px">
       <button class="word-btn quiet" id="howOpening">see the opening again</button>
@@ -230,6 +241,6 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
-<script type="module" src="js/app.js?v=rf44"></script>
+<script type="module" src="js/app.js?v=rf45"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf41';
-import { measure, simplify } from './route.js?v=rf41';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf45';
+import { measure, simplify } from './route.js?v=rf45';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -154,7 +154,7 @@ export function newTag(partial = {}) {
   return t;
 }
 
-const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '' };
+const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '', clubKey: '', clubUrl: '', clubSeq: 0, clubSealedAt: '' };
 
 export const store = {
   places: [],
@@ -342,8 +342,11 @@ export const store = {
         .filter(k => k.startsWith('resonate.'))
         .forEach(k => localStorage.removeItem(k));
     } catch { /* nothing left to do */ }
-    // an erased atlas is not a new one: a specimen must never grow back over it
-    this.settings = { ...DEFAULT_SETTINGS, seeded: true, erasedAt: new Date().toISOString() };
+    // an erased atlas is not a new one: a specimen must never grow back over
+    // it. the club key survives an erase; the club room holds the word that
+    // forgets it on purpose.
+    const { clubKey, clubUrl, clubSeq, clubSealedAt } = this.settings;
+    this.settings = { ...DEFAULT_SETTINGS, seeded: true, erasedAt: new Date().toISOString(), clubKey, clubUrl, clubSeq, clubSealedAt };
     this.saveSettings();
   },
 
@@ -424,7 +427,7 @@ export const store = {
       this.correspondents = before.correspondents;
       this.settings = before.settings;
       this.savePlaces(); this.saveTags(); this.saveRoutes(); this.saveFolios(); this.saveCorrespondents();
-      return 0;
+      return null; // refused is not the same as nothing new
     }
     this.saveSettings();
     return added;
@@ -456,7 +459,9 @@ export const store = {
       routes: this.routes,
       folios: this.folios,
       correspondents: this.correspondents,
-      settings: this.settings,
+      // the club key is a bearer credential for the vault itself: it never
+      // rides in a file that leaves this device
+      settings: { ...this.settings, clubKey: '' },
     }, null, 2);
   },
 

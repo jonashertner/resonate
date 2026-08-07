@@ -3,14 +3,15 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf41';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf41';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf41';
-import * as mapView from './map.js?v=rf41';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf41';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf41';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf41';
-import { exifGPS } from './exif.js?v=rf41';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf45';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf45';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf45';
+import * as mapView from './map.js?v=rf45';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf45';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf45';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf45';
+import { exifGPS } from './exif.js?v=rf45';
+import { seal, unseal, makeClient, CLUB_URL, JOIN_URL } from './club.js?v=rf45';
 
 // ---------- helpers ----------
 
@@ -2242,6 +2243,190 @@ function download(filename, text, type) {
 
 const palette = { input: null, results: null, hl: 0, rows: [], remoteAbort: null };
 
+// ---------- the travellers club ----------
+//
+// The one rule, said everywhere it matters: the envelope is sealed on this
+// device before it travels, and the phrase never leaves. The club is a
+// keeper of bytes it cannot read.
+
+const clubBase = () => store.settings.clubUrl || CLUB_URL;
+const clubClient = () => makeClient(clubBase(), () => store.settings.clubKey);
+
+function renderClub() {
+  const body = $('#clubBody');
+  const key = store.settings.clubKey;
+
+  if (!clubBase()) {
+    body.innerHTML = `
+      <div class="set-sec">
+        <p class="ce-law">The door is not open yet.</p>
+        <div class="set-row-sub" style="max-width:52ch">When it opens, membership will keep a sealed backup of your whole atlas, photographs included, and carry it to your other devices. Sealed here, with a phrase only you know. The club will never be able to read what it keeps.</div>
+      </div>`;
+    return;
+  }
+
+  if (!key) {
+    body.innerHTML = `
+      <div class="set-sec">
+        <div class="sec-head">join</div>
+        ${JOIN_URL ? `<div class="word-row"><a class="word-btn" href="${esc(JOIN_URL)}" rel="noopener">become a member</a></div>
+        <div class="set-row-sub" style="margin-top:10px">One subscription. On the other side of the door you are handed a key, once.</div>`
+        : `<div class="set-row-sub">The door is not open yet. If you already hold a key, it works below.</div>`}
+      </div>
+      <div class="set-sec">
+        <div class="sec-head">already a member</div>
+        <div class="set-row">
+          <input class="text-input mono" id="clubKeyIn" style="max-width:320px" placeholder="tc_…" autocomplete="off" spellcheck="false" aria-label="Your membership key">
+          <button class="word-btn quiet" id="clubKeyKeep">keep the key on this device</button>
+        </div>
+      </div>`;
+    $('#clubKeyKeep').addEventListener('click', async () => {
+      const v = $('#clubKeyIn').value.trim();
+      if (/^cs_/.test(v)) {
+        // a checkout session pasted whole: walk it through the door
+        try {
+          const got = await clubClient().door(v);
+          store.settings.clubKey = got.key; store.saveSettings();
+          toast('the door opened. your key is kept on this device');
+          renderClub();
+        } catch (e) { toast(String(e.message || 'the door did not answer')); }
+        return;
+      }
+      if (!/^tc_[0-9a-z]{20,27}$/.test(v)) return toast('a key reads tc_ and then its letters');
+      store.settings.clubKey = v; store.saveSettings();
+      renderClub();
+    });
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="set-sec">
+      <div class="sec-head">membership</div>
+      <div class="set-row-sub mono" id="clubStanding">asking the club…</div>
+      <div class="set-row-sub mono" style="margin-top:6px">${esc(key)}</div>
+      <div class="set-row-sub" style="margin-top:6px">This is the key. Write it somewhere that is not this browser: it is how another device, or this one after an erase, reaches the vault.</div>
+    </div>
+    <div class="set-sec">
+      <div class="sec-head">the envelope</div>
+      <div class="set-row">
+        <input class="text-input" type="password" id="clubPhrase" style="max-width:320px" placeholder="the sealing phrase. yours alone, never stored" autocomplete="off" aria-label="Sealing phrase">
+      </div>
+      <div class="word-row" style="margin-top:14px">
+        <button class="word-btn" id="clubSync">sync now</button>
+      </div>
+      <div class="set-row-sub" id="clubMeta" style="margin-top:10px"></div>
+      <div class="set-row-sub" style="margin-top:10px">Sync brings home what the envelope holds and this atlas lacks, then seals everything back. Nothing is deleted by sync. Lose the phrase and the envelope is lost with it; nobody can open it for you.</div>
+    </div>
+    <div class="set-sec">
+      <div class="sec-head">leaving</div>
+      <div class="word-row">
+        <button class="word-btn quiet" id="clubBurn">the envelopes, gone</button>
+        <button class="word-btn quiet" id="clubForget">forget the key on this device</button>
+      </div>
+    </div>`;
+
+  (async () => {
+    try {
+      const m = await clubClient().membership();
+      const until = m.until ? new Date(m.until * 1000).toISOString().slice(0, 10) : '';
+      $('#clubStanding').textContent =
+        m.standing === 'good' ? `in good standing${until ? ` until ${until}` : ''}${m.leaving ? '. leaving at the period’s end' : ''}`
+        : m.standing === 'lapsed' ? 'lapsed. the envelope stays yours; renewing lets you seal again'
+        : m.standing === 'left' ? 'the membership has ended. the envelope stays yours'
+        : 'the club does not know this key';
+      const got = await clubClient().getVault().catch(() => null);
+      $('#clubMeta').textContent = got?.at ? `last sealed ${got.at.slice(0, 10)}, ${got.bytes.length.toLocaleString()} bytes` : 'nothing sealed yet';
+    } catch { $('#clubStanding').textContent = 'the club did not answer'; }
+  })();
+
+  $('#clubSync').addEventListener('click', clubSync);
+  $('#clubBurn').addEventListener('click', async () => {
+    if (!confirm('Burn both envelopes at the club? Your atlas here is untouched.')) return;
+    try { await clubClient().delVault(); toast('the envelopes are gone'); renderClub(); }
+    catch { toast('the vault did not answer'); }
+  });
+  $('#clubForget').addEventListener('click', () => {
+    store.settings.clubKey = ''; store.settings.clubSeq = 0; store.settings.clubSealedAt = '';
+    store.saveSettings();
+    toast('forgotten here. the membership itself lives on');
+    renderClub();
+  });
+}
+
+async function clubSync() {
+  const phrase = $('#clubPhrase').value;
+  if (phrase.length < 8) return toast('a sealing phrase of at least eight characters');
+  const btn = $('#clubSync');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'sealing…';
+  try {
+    const c = clubClient();
+    const got = await c.getVault();
+    const lastSeq = Number(store.settings.clubSeq) || 0;
+
+    // an empty answer over a vault this device has already sealed is not
+    // trusted: it is a stale edge or a hollowed club, and pushing over it
+    // would demote the real envelope. nothing is written on a doubt.
+    if (!got && lastSeq > 0) {
+      toast('the club answered empty, but something was sealed before. nothing written; try again shortly');
+      return;
+    }
+
+    let brought = 0;
+    let remoteSeq = 0;
+    if (got) {
+      let text;
+      try { text = await unseal(got.bytes, phrase); }
+      catch (e) {
+        toast(e.message === 'wrong-phrase'
+          ? 'that phrase does not open this envelope'
+          : 'what the club holds is not an envelope');
+        return;
+      }
+      // the envelope carries its own count. an older envelope than this
+      // device has already seen is never sealed over.
+      let wrapper;
+      try { wrapper = JSON.parse(text); } catch {
+        toast('the envelope opened but its content is unreadable. nothing written');
+        return;
+      }
+      remoteSeq = Number(wrapper.seq) || 0;
+      const atlas = wrapper.atlas ?? wrapper;
+      if (remoteSeq < lastSeq) {
+        toast('the club returned an older envelope than this device has seen. nothing written; try again shortly');
+        return;
+      }
+      brought = store.merge(atlas);
+      if (brought === null) {
+        // the device refused the write and rolled back: sealing now would
+        // keep the poorer atlas. the promise on this panel holds.
+        toast('this device refused the merge, so nothing was sealed over the envelope');
+        return;
+      }
+      if (brought) renderAll();
+    }
+
+    const seq = Math.max(remoteSeq, lastSeq) + 1;
+    const sealed = await seal(JSON.stringify({
+      seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(store.exportJSON()),
+    }), phrase);
+    const meta = await c.putVault(sealed);
+    store.settings.clubSeq = seq;
+    store.settings.clubSealedAt = meta.at;
+    store.saveSettings();
+    $('#clubMeta').textContent = `last sealed ${meta.at.slice(0, 10)}, ${meta.bytes.toLocaleString()} bytes`;
+    toast(brought
+      ? `${brought} place${brought === 1 ? '' : 's'} came home. everything sealed and kept`
+      : 'sealed and kept');
+  } catch (e) {
+    toast(e.message === 'lapsed' ? 'the membership has lapsed. renewing lets you seal again'
+      : e.message === 'too-large' ? 'the atlas is too large for one envelope'
+      : 'the club did not answer');
+  } finally {
+    btn.disabled = false; btn.textContent = 'sync now';
+  }
+}
+
 const VERBS = {
   share: { run: shareMap, hint: 'hand your atlas to someone' },
   census: { run: () => openSurface('statsOverlay', renderStats), hint: 'the story so far' },
@@ -2251,6 +2436,7 @@ const VERBS = {
   settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'signature, your data, erase' },
   tags: { run: () => openSurface('tagsOverlay', renderTags), hint: 'the domains of your taste' },
   voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'the atlases you keep' },
+  club: { run: () => openSurface('clubOverlay', renderClub), hint: 'the travellers club. backup and sync, sealed' },
   keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
   frame: { run: () => mapView.fitAll(filteredPlaces()), hint: 'fit everything in view' },
   locate: { run: () => mapView.locate(null, () => toast('location unavailable')), hint: 'find me' },
@@ -2658,6 +2844,26 @@ function init() {
   store.load();
   applyWorldState();
   renderFieldWord();
+
+  // a member returns from the door with a checkout session on the url.
+  // the session becomes a key, the url is wiped clean of it.
+  const backFromDoor = new URLSearchParams(location.search).get('club');
+  if (backFromDoor && clubBase() && !store.settings.clubKey) {
+    (async () => {
+      try {
+        const got = await clubClient().door(backFromDoor);
+        store.settings.clubKey = got.key; store.saveSettings();
+        openSurface('clubOverlay', renderClub);
+        toast(got.again ? 'welcome back. the key was already on this side' : 'welcome. your key is kept on this device');
+      } catch (e) {
+        toast(`${e.message || 'the door did not answer'}. the club room, from the index, can take the session again`);
+      }
+      history.replaceState(null, '', location.pathname + location.hash);
+    })();
+  } else if (backFromDoor) {
+    if (store.settings.clubKey) openSurface('clubOverlay', renderClub);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
 
   mapView.setRouteClickHandler((id) => selectRoute(id, { fly: false }));
   mapView.initMap({

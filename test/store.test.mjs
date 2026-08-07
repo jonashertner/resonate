@@ -51,6 +51,37 @@ test('a place the device refuses is not kept, in memory or on disk', () => {
   assert.equal(store.places.length, 0, 'nothing is left in memory to render');
 });
 
+test('erasing the atlas does not burn the membership key', () => {
+  fresh();
+  store.settings.clubKey = 'tc_testkey0000000000000';
+  store.settings.clubSeq = 4;
+  store.saveSettings();
+  store.clearAll();
+  assert.equal(store.settings.clubKey, 'tc_testkey0000000000000', 'the key survives an erase');
+  assert.equal(store.settings.clubSeq, 4, 'and so does what was sealed under it');
+  assert.equal(store.places.length, 0, 'while the atlas itself is gone');
+});
+
+test('the full export never carries the club key', () => {
+  fresh();
+  store.settings.clubKey = 'tc_testkey0000000000000';
+  store.saveSettings();
+  const out = JSON.parse(store.exportJSON());
+  assert.equal(out.settings.clubKey, '', 'a bearer credential rides in no file');
+});
+
+test('a refused merge says null, never a quiet zero', () => {
+  fresh();
+  storage.refuse = true;
+  const got = store.merge({
+    version: 3,
+    places: [{ id: 'mp1', name: 'Cafe', lat: 47.5, lng: 7.6, tags: [], photos: [], voices: [] }],
+    tags: [], settings: {},
+  });
+  assert.equal(got, null, 'refusal is distinguishable from nothing new');
+  assert.equal(store.places.length, 0, 'and the rollback held');
+});
+
 test('a tag, a way and a voice all refuse the same way', () => {
   fresh();
   storage.refuse = true;
@@ -91,7 +122,7 @@ test('an import is one act: refused in part, kept in none', () => {
     places: [{ id: 'i1', name: 'Theirs', lat: 45, lng: 9 }, { id: 'i2', name: 'Also theirs', lat: 44, lng: 9 }],
     tags: [{ id: 't1', name: 'Wine' }],
   });
-  assert.equal(added, 0, 'an import that could not be written imported nothing');
+  assert.equal(added, null, 'an import that could not be written says so, distinctly from nothing new');
   assert.equal(store.places.length, before, 'and left the atlas exactly as it was');
   assert.equal(store.tags.length, 0);
 });
