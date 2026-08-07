@@ -808,14 +808,21 @@ a.word-btn { text-decoration: none; display: inline-block; }
   scrollbar-width: thin;
 }
 .poster-x { padding: 12px 0 12px 16px; }
-.poster-head { display: flex; align-items: baseline; justify-content: space-between; }
+.poster-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .poster-word {
-  font-size: clamp(64px, 12vh, 150px);
+  /* The word is as large as the page can hold, which is a question of width
+     as much as height: "newsstand" at twelve per cent of a tall phone's
+     height is wider than the phone, and the close word was pushed off the
+     edge to make room for it. Whichever measure is smaller wins. */
+  font-size: clamp(40px, min(12vh, 14vw), 150px);
   line-height: 0.9; letter-spacing: -0.02em;
   font-variation-settings: 'opsz' 96, 'wdth' 76, 'wght' 780;
   text-transform: lowercase;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.poster-x { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-2); }
+/* whatever the word does, the way out stays on the screen */
+.poster-x { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-2); flex: 0 0 auto; }
 .poster-x:hover { color: var(--ink); }
 .poster-body { margin-top: 5vh; max-width: 760px; }
 
@@ -1217,7 +1224,7 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
       height: 22px; pointer-events: none;
       background: linear-gradient(var(--field), transparent);
     }
-    .poster-word { font-size: clamp(40px, 8vh, 60px); }
+    .poster-word { font-size: clamp(34px, min(8vh, 13vw), 60px); }
   }
 }
 @keyframes poster-yield { to { font-size: 26px; } }

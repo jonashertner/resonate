@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf59';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf59';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf59';
-import * as mapView from './map.js?v=rf59';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf59';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf59';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf59';
-import { exifGPS } from './exif.js?v=rf59';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf59';
-import * as photoStore from './photos.js?v=rf59';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf59';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf60';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf60';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf60';
+import * as mapView from './map.js?v=rf60';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf60';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf60';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf60';
+import { exifGPS } from './exif.js?v=rf60';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf60';
+import * as photoStore from './photos.js?v=rf60';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf60';
 
 // ---------- helpers ----------
 
