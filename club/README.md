@@ -7,8 +7,8 @@ member and the one before it.
 The envelope is sealed on the member's device before it travels. The phrase
 never leaves that device. The club cannot open what it keeps. What it holds
 about a member, in full: the key, the Stripe subscription id, a paid-until
-date, and the time the envelope was last sealed. No names, no addresses, no
-request logs. If the worker disappears, every atlas keeps living in its
+date, notice of cancellation, the envelope's size and the time it was last
+sealed, and the envelope before it. No names, no addresses, no request logs. If the worker disappears, every atlas keeps living in its
 browser; only the backup goes quiet.
 
 ## What it serves

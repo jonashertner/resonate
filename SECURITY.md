@@ -46,9 +46,11 @@ lives on its own address, resonate.select, and the commons stays where it was.
 
 ## Known limits
 
-**Photos and quota.** Photos live in `localStorage` as data URLs. A large atlas
-can exhaust the quota; a refused write says so and rolls back. Moving photos to
-IndexedDB is the next durability change.
+**Quota.** Records live in `localStorage`; photographs moved to IndexedDB,
+which is where the room is. A refused write still rolls back whole and says
+so. A browser may still evict storage it has not promised to keep, which is
+why the app asks for that promise, says whether it was given, and keeps three
+local snapshots of the records.
 
 **The deploy is the trust root.** The page is static and hand-readable, with no
 third-party script, but a compromised deployment could read anything, including

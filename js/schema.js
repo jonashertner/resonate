@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf50';
+import { decodePath } from './route.js?v=rf51';
 
 export const SCHEMA_VERSION = 3;
 
@@ -27,6 +27,8 @@ export const LIMITS = {
   photos: 12,
   photoBytes: 3_000_000,
 };
+
+export const PHOTO_ID = /^ph_[a-z0-9]{1,40}$/;
 
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = (v, n) => String(v ?? '').slice(0, n);
@@ -56,9 +58,13 @@ export function normPlace(raw, i = 0) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
 
+  // a photograph is either an inline picture or an id into this device's own
+  // store. both are strings, both are bounded, and neither reaches markup.
   const photos = Array.isArray(p.photos)
     ? p.photos
-      .filter(s => typeof s === 'string' && s.startsWith('data:image/') && s.length <= LIMITS.photoBytes)
+      .filter(s => typeof s === 'string' && (
+        (s.startsWith('data:image/') && s.length <= LIMITS.photoBytes)
+        || PHOTO_ID.test(s)))
       .slice(0, LIMITS.photos)
     : [];
 

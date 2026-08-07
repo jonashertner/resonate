@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf50';
-import { measure, simplify } from './route.js?v=rf50';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf51';
+import { measure, simplify } from './route.js?v=rf51';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -448,14 +448,27 @@ export const store = {
     }, null, 2);
   },
 
+  // the records alone, for a snapshot: the pictures are already durable
+  recordsJSON() {
+    return JSON.stringify({
+      app: 'resonate', version: SCHEMA_VERSION, at: new Date().toISOString(),
+      tags: this.tags, places: this.places, routes: this.routes,
+      folios: this.folios, correspondents: this.correspondents,
+    });
+  },
+
   // everything, for yourself: photographs, voices and settings included
-  exportJSON() {
+  // the file a member keeps for themselves carries the photographs, so the
+  // ids are resolved back into data urls on the way out. inline entries from
+  // before the move pass through untouched.
+  async exportJSON(inline = null) {
+    const places = inline ? await inline(this.places) : this.places;
     return JSON.stringify({
       app: 'resonate',
       version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       tags: this.tags,
-      places: this.places,
+      places,
       routes: this.routes,
       folios: this.folios,
       correspondents: this.correspondents,

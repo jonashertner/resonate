@@ -3,15 +3,16 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf50';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf50';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf50';
-import * as mapView from './map.js?v=rf50';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf50';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf50';
-import { resonance, verdict, evidenceLines } from './kinship.js?v=rf50';
-import { exifGPS } from './exif.js?v=rf50';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf50';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf51';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf51';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf51';
+import * as mapView from './map.js?v=rf51';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf51';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf51';
+import { resonance, verdict, evidenceLines } from './kinship.js?v=rf51';
+import { exifGPS } from './exif.js?v=rf51';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf51';
+import * as photoStore from './photos.js?v=rf51';
 
 // ---------- helpers ----------
 
@@ -106,6 +107,90 @@ function filteredPlaces() {
     default: list.sort((a, b) => nos.get(b.id) - nos.get(a.id));
   }
   return list;
+}
+
+// ---------- photographs: ids here, blobs in their own store ----------
+
+// A place's photos are ids; a file that leaves carries the pictures
+// themselves. A picture this device cannot read back is COUNTED, never
+// dropped in silence: a backup missing photographs must say so before it is
+// trusted, and must never be sealed over one that still has them.
+let lastInlineMisses = 0;
+async function inlinePhotos(places) {
+  lastInlineMisses = 0;
+  const out = [];
+  for (const p of places) {
+    if (!p.photos?.some(photoStore.isId)) { out.push(p); continue; }
+    const photos = [];
+    for (const entry of p.photos) {
+      if (!photoStore.isId(entry)) { photos.push(entry); continue; }
+      const blob = await photoStore.get(entry);
+      const uri = blob ? await photoStore.dataURLFromBlob(blob) : null;
+      if (uri) photos.push(uri); else lastInlineMisses += 1;
+    }
+    out.push({ ...p, photos });
+  }
+  return out;
+}
+
+// { json, misses }: the caller decides what an incomplete copy is worth
+async function fullExport() {
+  const json = await store.exportJSON(inlinePhotos);
+  return { json, misses: lastInlineMisses };
+}
+
+// The way back in: an arriving atlas carries its pictures inline, and they
+// belong in the store, not in the records. Anything the store refuses stays
+// inline, exactly as it would have before any of this.
+async function absorbPhotos(atlas) {
+  if (!atlas?.places?.length || !photoStore.available()) return atlas;
+  const places = [];
+  for (const p of atlas.places) {
+    const inline = (p.photos || []).filter(x => typeof x === 'string' && x.startsWith('data:'));
+    if (!inline.length) { places.push(p); continue; }
+    const photos = [];
+    for (const entry of p.photos) {
+      if (!(typeof entry === 'string' && entry.startsWith('data:'))) { photos.push(entry); continue; }
+      const blob = photoStore.blobFromDataURL(entry);
+      const id = blob ? await photoStore.put(blob) : null;
+      photos.push(id || entry);
+    }
+    places.push({ ...p, photos });
+  }
+  return { ...atlas, places };
+}
+
+// the pictures move out of the records once, and survive interruption: an id
+// replaces a data url only after the blob is safely kept, and any inline
+// entry still renders, forever.
+async function migratePhotos() {
+  if (!photoStore.available()) return 0;
+  let moved = 0;
+  for (const place of store.places) {
+    const inline = (place.photos || []).filter(x => typeof x === 'string' && x.startsWith('data:'));
+    if (!inline.length) continue;
+    const next = [...place.photos];
+    for (let i = 0; i < next.length; i++) {
+      if (!(typeof next[i] === 'string' && next[i].startsWith('data:'))) continue;
+      const blob = photoStore.blobFromDataURL(next[i]);
+      if (!blob) continue;
+      const id = await photoStore.put(blob);
+      if (!id) return moved; // this browser will not keep blobs; leave them inline
+      next[i] = id;
+      if (!store.updatePlace(place.id, { photos: next })) { await photoStore.del(id); return moved; }
+      moved += 1;
+    }
+  }
+  if (moved) renderAll();
+  return moved;
+}
+
+// an img drawn with a photo id gets its picture when the store answers
+function paintPhotos(root) {
+  $$('img[data-ph]', root).forEach(async (img) => {
+    const url = await photoStore.urlFor(img.dataset.ph);
+    if (url) img.src = url; else img.closest('.fig')?.remove();
+  });
 }
 
 // ---------- the world: hue engine ----------
@@ -517,7 +602,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   const stars = [1, 2, 3, 4, 5].map(i =>
     `<button data-star="${i}" class="${place.rating >= i ? 'on' : ''}" ${ro ? 'disabled' : ''} aria-label="${i} star${i > 1 ? 's' : ''}">★</button>`).join('');
   const photos = (place.photos || []).map((src, i) => `
-    <figure class="fig"><img src="${esc(src)}" alt="Photograph ${i + 1} of ${esc(place.name)}">
+    <figure class="fig"><img ${photoStore.isId(src) ? `data-ph="${esc(src)}"` : `src="${esc(src)}"`} alt="Photograph ${i + 1} of ${esc(place.name)}">
       ${ro ? '' : `<button class="ph-x" data-phx="${i}">remove</button>`}</figure>`).join('');
   const canDictate = !ro && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
@@ -605,6 +690,8 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     return true;
   };
 
+  paintPhotos(wrap);
+
   if (keepScroll) wrap.scrollTop = keepScroll;
 
   const nameEl = $('#pName');
@@ -677,10 +764,12 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       if (!f) return;
       try {
         const dataUri = await compressImage(f);
-        const photos = [...(place.photos || []), dataUri];
-        save({ photos });
-        if (!store.savePlaces()) toast('storage is full, photo not kept');
-        renderPlate(place); renderList();
+        const blob = photoStore.blobFromDataURL(dataUri);
+        const id = blob ? await photoStore.put(blob) : null;
+        const entry = id || dataUri; // no blob store here: keep it inline, as before
+        const photos = [...(place.photos || []), entry];
+        if (!save({ photos })) { if (id) await photoStore.del(id); toast('this browser refused to keep it'); return; }
+        renderPlate(placeById(place.id)); renderList();
       } catch { toast('could not read that image'); }
     };
     file.click();
@@ -2163,7 +2252,32 @@ function renderStats() {
     ${tagRows.length ? `<div class="sec-head">by tag</div>
       ${tagRows.map(({ t, n }) => `<div class="tally"><span class="name">${esc(t.name)}</span><span class="n">${n}</span></div>`).join('')}` : ''}
     ${countryList.length ? `<div class="sec-head">countries</div>
-      <div class="country-cols">${countryList.map(([c, n]) => `<div class="tally"><span class="name">${esc(c)}</span><span class="n">${n}</span></div>`).join('')}</div>` : ''}`;
+      <div class="country-cols">${countryList.map(([c, n]) => `<div class="tally"><span class="name">${esc(c)}</span><span class="n">${n}</span></div>`).join('')}</div>` : ''}
+    <div class="sec-head">kept where</div>
+    <div class="set-row-sub mono" id="statKept">counting…</div>`;
+  paintKept('#statKept');
+}
+
+// what this browser is holding, and whether it has promised to keep it
+async function keptWhere() {
+  const bytes = (await photoStore.estimate())?.used ?? null;
+  const promised = await photoStore.persisted();
+  const mb = bytes === null ? null : (bytes / 1_048_576).toFixed(bytes > 10_485_760 ? 0 : 1);
+  const last = store.settings.lastExportAt;
+  return [
+    `${store.places.length} place${store.places.length === 1 ? '' : 's'}`,
+    store.routes.length ? `${store.routes.length} way${store.routes.length === 1 ? '' : 's'}` : '',
+    store.folios.length ? `${store.folios.length} folio${store.folios.length === 1 ? '' : 's'}` : '',
+    store.correspondents.length ? `${store.correspondents.length} voice${store.correspondents.length === 1 ? '' : 's'}` : '',
+    mb === null ? '' : `${mb} mb here`,
+    promised === true ? 'the browser has promised to keep it'
+      : promised === false ? 'no promise from the browser yet' : '',
+    last ? `last exported ${fmtDate(last).toLowerCase()}` : 'never exported',
+  ].filter(Boolean).join(' · ');
+}
+
+function paintKept(sel) {
+  keptWhere().then(line => { const el = $(sel); if (el) el.textContent = line; });
 }
 
 // yours: the byline and the data, nothing else
@@ -2188,13 +2302,47 @@ function renderSettings() {
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
       <div class="set-row-sub" style="margin-top:10px">Everything lives in this browser. <b>Export everything</b> is your backup: it carries your photographs, your voices and your settings, so keep it to yourself. A file handed to someone else, from <b>hand over</b>, carries none of those.</div>
+    </div>
+
+    <div class="set-sec">
+      <div class="sec-head">kept where</div>
+      <div class="set-row-sub mono" id="setKept">counting…</div>
+      <div class="word-row" style="margin-top:14px">
+        <button class="word-btn quiet" id="snapRestore">the snapshots on this device</button>
+      </div>
+      <div class="set-row-sub" style="margin-top:10px">This device keeps its three most recent snapshots of the records, taken quietly as you work. Photographs are not in them; they are already kept apart. A snapshot brings back what it holds and this atlas lacks, and deletes nothing.</div>
     </div>`;
+  paintKept('#setKept');
+
+  $('#snapRestore').addEventListener('click', async () => {
+    const keys = (await photoStore.snapshotKeys()) || [];
+    if (!keys.length) return toast('no snapshot has been taken on this device yet');
+    const newest = keys.sort().reverse();
+    const when = newest.map(k => fmtDate(k).toLowerCase());
+    const pick = prompt(`Snapshots on this device:\n${when.map((w, i) => `${i + 1}. ${w}`).join('\n')}\n\nBring home which one? Nothing is deleted.`, '1');
+    const i = parseInt(pick, 10) - 1;
+    if (!Number.isFinite(i) || i < 0 || i >= newest.length) return;
+    const rec = await photoStore.snapshotGet(newest[i]);
+    if (!rec?.json) return toast('that snapshot could not be read');
+    let brought = null;
+    try { brought = store.merge(await absorbPhotos(JSON.parse(rec.json))); }
+    catch { return toast('that snapshot could not be read'); }
+    if (brought === null) return toast('this device refused the merge; nothing changed');
+    if (brought) renderAll();
+    toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks');
+  });
 
   $('#authorName').addEventListener('change', (e) => {
     store.settings.authorName = e.target.value.trim();
     store.saveSettings();
   });
-  $('#expJson').addEventListener('click', () => download('resonate-atlas.json', store.exportJSON(), 'application/json'));
+  $('#expJson').addEventListener('click', async () => {
+    const { json, misses } = await fullExport();
+    download('resonate-atlas.json', json, 'application/json');
+    store.settings.lastExportAt = new Date().toISOString(); store.saveSettings();
+    paintKept('#setKept');
+    if (misses) toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read back and are not in this file`, 6000);
+  });
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
   $('#expPdf').addEventListener('click', () => printSheet(atlasSheetOpts()));
   $('#impJson').addEventListener('click', () => {
@@ -2204,9 +2352,9 @@ function renderSettings() {
       file.value = '';
       if (!f) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
-          const data = JSON.parse(reader.result);
+          const data = await absorbPhotos(JSON.parse(reader.result));
           const added = store.merge(data);
           renderSettings(); renderAll();
           if (store.places.length) mapView.fitAll(store.places);
@@ -2217,10 +2365,11 @@ function renderSettings() {
     };
     file.click();
   });
-  $('#eraseAll').addEventListener('click', () => {
+  $('#eraseAll').addEventListener('click', async () => {
     if (!confirm('Erase every place and tag in this atlas? Export first if you want a keepsake.')) return;
     if (!confirm('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?')) return;
     store.clearAll();
+    await photoStore.clear();
     state.selectedId = null;
     state.foreign = null;
     state.visiting = null;
@@ -2438,7 +2587,7 @@ function renderClub() {
       const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
       const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
       if (!confirm(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`)) return;
-      const brought = store.merge(atlas);
+      const brought = store.merge(await absorbPhotos(atlas));
       if (brought === null) return toast('this device refused the merge; nothing changed');
       if (brought) renderAll();
       toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
@@ -2508,7 +2657,7 @@ async function clubSync() {
         toast('the club returned an older envelope than this device has seen. nothing written; try again shortly');
         return;
       }
-      brought = store.merge(atlas);
+      brought = store.merge(await absorbPhotos(atlas));
       if (brought === null) {
         // the device refused the write and rolled back: sealing now would
         // keep the poorer atlas. the promise on this panel holds.
@@ -2519,8 +2668,14 @@ async function clubSync() {
     }
 
     const seq = Math.max(remoteSeq, lastSeq) + 1;
+    const { json, misses } = await fullExport();
+    if (misses) {
+      // an envelope short of photographs must never replace one that has them
+      toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read from this device, so nothing was sealed`, 7000);
+      return;
+    }
     const sealed = await seal(JSON.stringify({
-      v: 2, seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(store.exportJSON()),
+      v: 2, seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(json),
     }), phrase, { bind: store.settings.clubKey });
     const meta = await c.putVault(sealed);
     store.settings.clubSeq = seq;
@@ -2558,7 +2713,12 @@ const VERBS = {
   hike: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
   route: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
   walk: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
-  export: { run: () => download('resonate-atlas.json', store.exportJSON(), 'application/json'), hint: 'your data, yours' },
+  export: { run: async () => {
+    const { json, misses } = await fullExport();
+    download('resonate-atlas.json', json, 'application/json');
+    store.settings.lastExportAt = new Date().toISOString(); store.saveSettings();
+    if (misses) toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read back and are not in this file`, 6000);
+  }, hint: 'your data, yours' },
   print: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   pdf: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   import: { run: () => { openSurface('settingsOverlay', renderSettings); $('#impJson').click(); }, hint: 'bring an atlas in' },
@@ -2957,6 +3117,19 @@ function init() {
   applyWorldState();
   renderFieldWord();
 
+  // the durable work happens after the field is standing, never in its way
+  setTimeout(async () => {
+    const moved = await migratePhotos();
+    if (moved) console.info(`${moved} photograph${moved === 1 ? '' : 's'} moved to their own store`);
+    const keys = (await photoStore.snapshotKeys()) || [];
+    const newest = keys.sort().pop();
+    const stale = !newest || (Date.now() - Date.parse(newest)) > 24 * 3600 * 1000;
+    if (stale && store.places.length) {
+      await photoStore.snapshotPut(store.recordsJSON());
+      await photoStore.snapshotPrune(3);
+    }
+  }, 2500);
+
   // a member returns from the door with a checkout session on the url.
   // the session becomes a key, the url is wiped clean of it.
   const backFromDoor = new URLSearchParams(location.search).get('club');
@@ -3091,9 +3264,9 @@ function init() {
         file.value = '';
         if (!f) return;
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           try {
-            const added = store.merge(JSON.parse(reader.result));
+            const added = store.merge(await absorbPhotos(JSON.parse(reader.result)));
             if (!added) return toast('that file brought nothing in');
             done(() => {
               renderAll();

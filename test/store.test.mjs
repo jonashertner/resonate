@@ -62,11 +62,11 @@ test('erasing the atlas does not burn the membership key', () => {
   assert.equal(store.places.length, 0, 'while the atlas itself is gone');
 });
 
-test('the full export never carries the club key', () => {
+test('the full export never carries the club key', async () => {
   fresh();
   store.settings.clubKey = 'tc_testkey0000000000000';
   store.saveSettings();
-  const out = JSON.parse(store.exportJSON());
+  const out = JSON.parse(await store.exportJSON());
   assert.equal(out.settings.clubKey, '', 'a bearer credential rides in no file');
 });
 
@@ -127,6 +127,36 @@ test('an import is one act: refused in part, kept in none', () => {
   assert.equal(store.tags.length, 0);
 });
 
+test('a photo id survives a reload, exactly as an inline picture does', () => {
+  fresh();
+  const p = store.addPlace(aPlace('With pictures'));
+  store.updatePlace(p.id, { photos: ['ph_msj14t2y11u6v', 'data:image/png;base64,iVBORw0KGgo='] });
+  // what a reload does
+  store.load();
+  const back = store.placeById(p.id);
+  assert.deepEqual(back.photos, ['ph_msj14t2y11u6v', 'data:image/png;base64,iVBORw0KGgo='],
+    'the id is a photograph like any other, or every migrated picture dies on reload');
+});
+
+test('an imported atlas keeps its photo ids too', () => {
+  fresh();
+  const added = store.merge({
+    version: 4,
+    places: [{ id: 'ip1', name: 'Theirs', lat: 45, lng: 9, photos: ['ph_abc123'], tags: [] }],
+    tags: [], settings: {},
+  });
+  assert.equal(added, 1);
+  assert.deepEqual(store.placeById('ip1').photos, ['ph_abc123']);
+});
+
+test('a photo id that is not one is still refused', () => {
+  fresh();
+  const p = store.addPlace(aPlace('Hostile'));
+  store.updatePlace(p.id, { photos: ['ph_../../etc', 'javascript:alert(1)', 'PH_UPPER', 'ph_ok1'] });
+  store.load();
+  assert.deepEqual(store.placeById(p.id).photos, ['ph_ok1'], 'only the well-formed id survives');
+});
+
 // ---------- two exports, two promises ----------
 
 test('the file offered in place of a link carries no photograph, no voice, no setting', () => {
@@ -151,13 +181,13 @@ test('the file offered in place of a link carries no photograph, no voice, no se
   assert.equal(share.settings, undefined, 'and no signature or setting');
 });
 
-test('the backup kept for yourself carries everything', () => {
+test('the backup kept for yourself carries everything', async () => {
   fresh();
   store.addPlace(newPlace({ name: 'A place', lat: 46, lng: 8, photos: ['data:image/png;base64,iVBORw0KGgo='] }));
   store.addCorrespondent({ name: 'Marta', tags: [], places: [] });
   store.settings.authorName = 'Jonas';
 
-  const backup = JSON.parse(store.exportJSON());
+  const backup = JSON.parse(await store.exportJSON());
   assert.ok(JSON.stringify(backup).includes('data:image/'), 'a backup without photographs is not a backup');
   assert.equal(backup.correspondents.length, 1);
   assert.equal(backup.settings.authorName, 'Jonas');
@@ -259,11 +289,11 @@ test('a folio the device refuses is not on the shelf', () => {
   assert.equal(store.folios.length, 0);
 });
 
-test('the shelf comes home in a backup and not in a share', () => {
+test('the shelf comes home in a backup and not in a share', async () => {
   fresh();
   const a = store.addPlace(newPlace({ name: 'A', lat: 46, lng: 8 }));
   store.addFolio(newFolio({ title: 'Mine', placeIds: [a.id] }));
-  assert.equal(JSON.parse(store.exportJSON()).folios.length, 1);
+  assert.equal(JSON.parse(await store.exportJSON()).folios.length, 1);
   assert.equal(JSON.parse(store.exportShareJSON()).folios, undefined,
     'a folio is a private arrangement; what you hand over is its contents');
 });

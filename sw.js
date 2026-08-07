@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first, because the field should never be stale when a network exists.
 
-const V = 'v=rf50';
+const V = 'v=rf51';
 const CACHE = `resonate-shell-${V}`;
 
 // everything the first paint needs, at the exact URLs the page asks for
@@ -20,6 +20,8 @@ const SHELL = [
   `./js/kinship.js?${V}`,
   `./js/geocode.js?${V}`,
   `./js/exif.js?${V}`,
+  `./js/club.js?${V}`,
+  `./js/photos.js?${V}`,
   './vendor/leaflet/leaflet.js',
   './vendor/leaflet/leaflet.css',
   './vendor/markercluster/leaflet.markercluster.js',

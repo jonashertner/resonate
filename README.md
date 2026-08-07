@@ -73,7 +73,7 @@ Hand-written ES modules. No framework, no bundler.
 | Tiles | CARTO light and dark raster, stripped to grey |
 | Geocoding | Nominatim, on an explicit press only, never as you type |
 | Links | lz-string into the URL hash |
-| Storage | localStorage: `resonate.places.v1`, `.routes.v1`, `.folios.v1`, `.tags.v1`, `.correspondents.v1`, `.settings.v1` |
+| Storage | localStorage for records: `resonate.places.v1`, `.routes.v1`, `.folios.v1`, `.tags.v1`, `.correspondents.v1`, `.settings.v1`. IndexedDB `resonate` for photographs and snapshots |
 | Type | Bricolage Grotesque variable, Fragment Mono, vendored under `fonts/` (OFL) |
 
 ```
@@ -96,8 +96,10 @@ published only when a maintainer applies a label to its issue.
 
 ## Known limits
 
-Photos live in localStorage and a large atlas can exhaust the quota; a refused
-write says so, and IndexedDB is the next move. See [SECURITY.md](SECURITY.md).
+Records live in localStorage; photographs live in IndexedDB, where the room
+is. A refused write rolls back whole and says so. Deletions do not travel
+through the club's envelope: it is a backup, not a ledger. See
+[SECURITY.md](SECURITY.md) and [THREATS.md](THREATS.md).
 
 ## Attribution
 
