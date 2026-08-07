@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf57';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf57';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf57';
-import * as mapView from './map.js?v=rf57';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf57';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf57';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf57';
-import { exifGPS } from './exif.js?v=rf57';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf57';
-import * as photoStore from './photos.js?v=rf57';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf57';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf58';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf58';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf58';
+import * as mapView from './map.js?v=rf58';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf58';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf58';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf58';
+import { exifGPS } from './exif.js?v=rf58';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf58';
+import * as photoStore from './photos.js?v=rf58';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf58';
 
 // ---------- helpers ----------
 
@@ -2067,7 +2067,8 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       if (!t) return;
       const author = await ensureAuthor();
       const block = '```json\n' + publishBlock(t, $('#folDed').value.trim(), author, selection()) + '\n```';
-      try { await navigator.clipboard.writeText(block); } catch { return prompt('Copy this, then paste it into the issue:', block); }
+      try { await navigator.clipboard.writeText(block); }
+      catch { return askText('Copy this, then paste it into the issue.', { value: block, yes: 'done', no: 'close' }); }
       const issueUrl = 'https://github.com/jonashertner/resonate-commons/issues/new'
         + '?title=' + encodeURIComponent('folio: ' + t)
         + '&body=' + encodeURIComponent('Paste the folio below this line. It is already on your clipboard.\n\n');
@@ -2382,7 +2383,7 @@ function raiseHandBar(url, what, { title = '', text = '', copied = true } = {}) 
       await navigator.clipboard.writeText(url);
       $('#hbCopied').textContent = `${what} copied`;
       cp.hidden = true;
-    } catch { window.prompt('Copy this:', url); }
+    } catch { askText('Copy this link.', { value: url, yes: 'done', no: 'close' }); }
   };
   $('#hbMail').href = 'mailto:?subject=' + encodeURIComponent(title || what)
     + '&body=' + encodeURIComponent((text ? text + '\n\n' : '') + url);
@@ -2554,7 +2555,7 @@ function renderSettings() {
     if (!keys.length) return toast('no snapshot has been taken on this device yet');
     const newest = keys.sort().reverse();
     const when = newest.map(k => fmtDate(k).toLowerCase());
-    const pick = prompt(`Snapshots on this device:\n${when.map((w, i) => `${i + 1}. ${w}`).join('\n')}\n\nBring home which one? Nothing is deleted.`, '1');
+    const pick = await askText(`Snapshots on this device: ${when.map((w, i) => `${i + 1}. ${w}`).join(' · ')}. Bring home which one? Nothing is deleted.`, { value: '1', yes: 'bring it home' });
     const i = parseInt(pick, 10) - 1;
     if (!Number.isFinite(i) || i < 0 || i >= newest.length) return;
     const rec = await photoStore.snapshotGet(newest[i]);
@@ -2662,12 +2663,12 @@ function renderTags() {
     const tag = store.tagById(id);
     if (e.target.closest('[data-del]')) {
       const n = store.tagCount(id);
-      if (!confirm(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}? The places keep their other tags.`)) return;
+      if (!await ask(`Remove tag “${tag.name}”${n ? ` from ${n} place${n === 1 ? '' : 's'}` : ''}? The places keep their other tags.`, { yes: 'remove it', no: 'keep it' })) return;
       store.removeTag(id);
       renderTags(); renderAll();
     }
     if (e.target.closest('[data-rename]')) {
-      const name = prompt('Tag name', tag.name);
+      const name = await askText('What should this domain be called?', { value: tag.name, yes: 'rename it' });
       if (name === null) return;
       store.updateTag(id, { name: name.trim() || tag.name });
       renderTags(); renderAll();
@@ -2821,7 +2822,7 @@ function renderClub() {
       const atlas = wrapper.atlas ?? wrapper;
       const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
       const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
-      if (!confirm(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`)) return;
+      if (!await ask(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`, { yes: 'bring it home', no: 'leave it' })) return;
       const brought = store.merge(await absorbPhotos(atlas));
       if (brought === null) return toast('this device refused the merge; nothing changed');
       if (brought) renderAll();
@@ -2830,7 +2831,7 @@ function renderClub() {
     finally { btn.disabled = false; }
   });
   $('#clubBurn').addEventListener('click', async () => {
-    if (!confirm('Burn both envelopes at the club? Your atlas here is untouched, and the key stays so you can seal again. If an envelope would not open on this device, burning still destroys it everywhere.')) return;
+    if (!await ask('Burn both envelopes at the club? Your atlas here is untouched, and the key stays so you can seal again. If an envelope would not open on this device, burning still destroys it everywhere.', { yes: 'burn them', no: 'keep them' })) return;
     try {
       await clubClient().delVault();
       // an emptied vault must be sealable again: the count starts over
