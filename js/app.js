@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf69';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf69';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf69';
-import * as mapView from './map.js?v=rf69';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf69';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf69';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf69';
-import { exifGPS } from './exif.js?v=rf69';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf69';
-import * as photoStore from './photos.js?v=rf69';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf69';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf70';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf70';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf70';
+import * as mapView from './map.js?v=rf70';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf70';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf70';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf70';
+import { exifGPS } from './exif.js?v=rf70';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf70';
+import * as photoStore from './photos.js?v=rf70';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf70';
 
 // ---------- helpers ----------
 
@@ -904,11 +904,15 @@ function renderCount() {
   const w = allRoutes().length;
   $('#placeCount').textContent = n || '';
   $('#ixN').textContent = n;
-  const ways = $('#ixWays');
-  if (ways) { ways.textContent = w ? `${w} way${w === 1 ? '' : 's'}` : ''; ways.hidden = !w; }
   const who = store.settings.authorName;
   const small = $('.index-count small');
-  if (small) small.textContent = who ? `places · ${who}` : 'places';
+  if (small) small.textContent = 'places';
+  // what else the tally says, in the order a person would say it
+  const rest = [];
+  if (w) rest.push(`${w} way${w === 1 ? '' : 's'}`);
+  if (who) rest.push(who);
+  const ways = $('#ixWays');
+  if (ways) { ways.textContent = rest.join(' · '); ways.hidden = !rest.length; }
 }
 
 function renderChips() {

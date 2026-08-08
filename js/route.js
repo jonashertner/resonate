@@ -4,7 +4,7 @@
 // a shape you can read, and an hour it asks of you. Everything here is
 // geometry and measure. Nothing here touches the page.
 
-import { haversineKm } from './geocode.js?v=rf69';
+import { haversineKm } from './geocode.js?v=rf70';
 
 // ---------- reading what a walking app exports ----------
 

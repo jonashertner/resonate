@@ -258,7 +258,7 @@ body.dropping::after {
 .fm-count {
   margin-left: 0.9em; font-size: 10.5px; letter-spacing: 0.1em;
   color: var(--ink-2); text-transform: none;
-  transition: font-size 1.15s var(--e-enter);
+  transition: font-size 1.15s var(--e-enter), opacity 0.5s var(--e-enter) 0.55s;
 }
 
 /* the start: the name stands in the middle of the field, and wanders to
@@ -270,7 +270,16 @@ body.hero .fm-nw {
   letter-spacing: 0.05em;
   text-align: center;
 }
-body.hero .fm-nw .fm-count { display: block; margin: 0.9em 0 0; font-size: 0.14em; }
+/* The name arrives alone. A count under it while it stands in the middle of
+   the field is bookkeeping over a title page: it says eight before it has
+   said what eight is of. The tally belongs to the corner mark, and it appears
+   once the word has gone there, a beat after the walk begins so it fades in
+   rather than travelling along. Space is still reserved for it, so nothing
+   shifts when it arrives. */
+body.hero .fm-nw .fm-count {
+  display: block; margin: 0.9em 0 0; font-size: 0.14em;
+  opacity: 0; transition: none;
+}
 body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 @media (prefers-reduced-motion: reduce) {
   .fm-nw, .fm-count, .fm-hint { transition: none; }
@@ -1547,10 +1556,14 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   break-inside: avoid;
 }
 .ix.way .ix-no { letter-spacing: 0; }
-.ix-ways {
-  display: block; margin-top: 4px;
-  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--ink-2);
+/* The tally is one line: 25 places, 1 way, and whose atlas it is.
+   The ways used to drop to a line of their own in a smaller, tighter face,
+   left aligned under the numeral, where they read as a heading for the list
+   below rather than as part of the count above. A count belongs beside what
+   it counts. */
+.ix-ways { color: var(--ink-3); }
+.ix-ways::before {
+  content: '\00b7'; margin: 0 0.55em 0 0; letter-spacing: 0; color: var(--ink-4);
 }
 
 @media (prefers-reduced-motion: reduce) {
