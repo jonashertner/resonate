@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf79">
+<link rel="stylesheet" href="css/style.css?v=rf80">
 </head>
 <body class="boot">
 
@@ -83,11 +83,11 @@
       <button data-status="visited" aria-pressed="false">been</button>
       <button data-status="wishlist" aria-pressed="false">want to go</button>
       <span class="line-end">
-        <button id="filterWord" aria-expanded="false" aria-controls="filterChips">domains</button>
+        <button id="filterWord" aria-expanded="false" aria-controls="filterChips">tags</button>
         <button id="sortWord" aria-expanded="false" aria-controls="sortLine">newest</button>
       </span>
     </div>
-    <div class="index-line" id="filterChips" role="group" aria-label="Filter by domain" hidden></div>
+    <div class="index-line" id="filterChips" role="group" aria-label="Filter by tag" hidden></div>
     <div class="index-line ix-sorts" id="sortLine" role="group" aria-label="Arrange" hidden>
       <button data-sort="recent" aria-pressed="true">newest</button>
       <button data-sort="name" aria-pressed="false">a–z</button>
@@ -113,7 +113,7 @@
 </section>
 <section class="poster" id="clubOverlay" hidden aria-label="The travellers club">
   <header class="poster-head"><h1 class="poster-word">club</h1><button class="poster-x" data-close>close</button></header>
-  <p class="poster-sub">the travellers club. what needs a keeper, kept: your atlas, sealed on this device, held where this browser cannot lose it.</p>
+  <p class="poster-sub">a backup of your whole atlas, locked on this device, kept where this browser cannot lose it.</p>
   <div class="poster-body" id="clubBody"></div>
 </section>
 
@@ -145,7 +145,7 @@
   <div class="poster-body how-body">
     <div class="sec-head">what this is</div>
     <p>An atlas of places that matter to you. It lives in your browser, on this device. There is no account, and the free atlas asks nothing of any server of ours. Close the tab and it waits.</p>
-    <p>What you write is yours to read and nobody else's. Places, notes, tags, paths and photographs are stored on this device only: not uploaded, not synchronised, not visible to us. We have no copy, and no account to look you up by. Nothing leaves until you hand it over, and then only the thing you handed, to the person you handed it to. Joining the club adds a sealed spare copy and changes none of that.</p>
+    <p>What you write is yours to read and nobody else's. Places, notes, tags, paths and photographs are stored on this device only: not uploaded, not synchronised, not visible to us. We have no copy, and no account to look you up by. Nothing leaves until you hand it over, and then only the thing you handed, to the person you handed it to. Joining the club adds a spare copy, locked before it leaves, and changes none of that.</p>
     <p>The other side of it: nothing on a device is forever. Clear this browser, lose the machine, or let a browser tidy away a site it thinks you have forgotten, and the atlas goes too. Export a file from <b>yours</b> and keep it somewhere. For a free atlas that is the whole backup story, and it is a real one.</p>
 
     <div class="sec-head">what it keeps</div>
@@ -168,7 +168,7 @@
       <li><b>CARTO</b> serves the map tiles, so it sees roughly where you are looking.</li>
       <li><b>Nominatim</b>, at OpenStreetMap, answers place search only when you press for it, never as you type, and sees what you searched.</li>
       <li><b>A separate GitHub address</b> holds the newsstand list, fetched only when you open the stand.</li>
-      <li><b>A Cloudflare worker of ours</b> is the club, if you join, and it receives an envelope it cannot open.</li>
+      <li><b>A Cloudflare worker of ours</b> is the club, if you join. It stores your backup locked, and cannot read it.</li>
     </ul>
     <p>None of them receives your atlas. The page's security policy bounds every address it may speak to; view the source and read it. Browsers keep storage per address, so nothing published elsewhere can read this atlas.</p>
 
@@ -195,7 +195,7 @@
     <p>Erase everything, under <b>yours</b>, and this browser forgets the atlas: places, paths, folios, tags, voices, photographs, the byline.</p>
     <ul class="how-list">
       <li>It cannot reach a link already sent, a file already exported, or a folio on the stand.</li>
-      <li>It keeps your club key on purpose, so a paid backup can still come home after an accident. The club room holds the separate words that burn the envelopes and forget the key.</li>
+      <li>It keeps your club key on purpose, so a paid backup can still come home after an accident. The club room holds the separate words that delete the backups and forget the key.</li>
     </ul>
 
     <div class="sec-head">yours</div>
@@ -204,10 +204,10 @@
     <p>Under <b>yours</b> and <b>census</b>, this browser says what it holds: how many places and paths, how much room they take, whether the browser has promised to keep them, and when you last took a copy away. Its three most recent snapshots are kept here too, and any of them can come home.</p>
 
     <div class="sec-head">the travellers club</div>
-    <p>The app is free and stays free. The club is for what needs a keeper: an encrypted backup of your whole atlas, photographs included, sealed here with a phrase only you know before anything travels.</p>
-    <p>What the club knows about you, in full: a key, a paid-until date, whether you have given notice, when the envelope was last sealed and how large it is, the envelope before the last, and the subscription id behind the payment. Your name and card live at Stripe; the club never receives them, though that subscription id could connect the two if Stripe were made to answer.</p>
-    <p>It is a backup and not a synchronisation, so the app uses the true word. It only adds: it changes no record this device already has, and carries no deletions, so a place you removed comes home again until this device seals. A second device with the key and the phrase gets what the envelope holds, which is how an atlas travels, but it is an addition rather than a mirror. Lose the phrase and the envelope is lost with it; nobody can open it for you, and that is the point.</p>
-    <p>None of this asks to be believed. The envelope's exact bytes are at <a href="SPEC.md">/SPEC.md</a>, sixteen adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is at <a href="METHOD.md">/METHOD.md</a>.</p>
+    <p>The app is free and stays free. The club is for what needs a keeper: a backup of your whole atlas, photographs included. It is locked on this device, with a phrase only you know, before any of it leaves.</p>
+    <p>What the club knows about you, in full: a key, a paid-until date, whether you have given notice, when your backup was last saved and how big it is, the one before it, and the subscription id behind the payment. Your name and card live at Stripe; the club never receives them, though that subscription id could connect the two if Stripe were made to answer.</p>
+    <p>It is a backup and not a synchronisation, so the app uses the true word. It only adds: it changes no record this device already has, and carries no deletions, so a place you removed comes back until this device saves again. A second device with the key and the phrase gets what the backup holds, which is how an atlas travels, but it adds rather than mirrors. Lose the phrase and the backup is lost with it. Nobody can unlock it for you, and that is the point.</p>
+    <p>None of this asks to be believed. Exactly how the locking works is at <a href="SPEC.md">/SPEC.md</a>, sixteen adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is at <a href="METHOD.md">/METHOD.md</a>.</p>
 
     <div class="word-row" style="margin-top:34px">
       <button class="word-btn quiet" id="howOpening">see the opening again</button>
@@ -317,6 +317,6 @@
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
 <script src="vendor/argon2/argon2.umd.min.js" integrity="sha384-tP0Wy54CKmng7i9EoTlPySD0hBx6Octj0VS6MfwlnUu111MPa+JLm0CCbep6XJ1W"></script>
-<script type="module" src="js/app.js?v=rf79"></script>
+<script type="module" src="js/app.js?v=rf80"></script>
 </body>
 </html>

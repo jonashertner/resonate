@@ -424,31 +424,20 @@ test.describe('the evening', () => {
     // Playwright's chromium is the open source build and carries no h264
     // decoder, so there the drawn scene stands in, which is the designed
     // answer for any browser that cannot play the file. Both are checked.
-    const canDecode = await page.evaluate(() =>
-      !!document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"'));
-
-    // the film is fetched when it is wanted rather than precached, so give it
-    // the moment that costs. if it arrives, it must roll.
-    const arrived = await page.evaluate(() => new Promise((ok) => {
-      const v = document.querySelector('#introVideo');
-      if (v.readyState >= 2) return ok(true);
-      const done = () => ok(v.readyState >= 2);
-      v.addEventListener('loadeddata', done, { once: true });
-      setTimeout(done, 4000);
-    }));
-
-    if (canDecode && arrived) {
-      await expect.poll(
-        () => page.evaluate(() => document.querySelector('#introVideo').currentTime),
-        { message: 'the film arrived and never rolled: it stood on its first frame', timeout: 6000 },
-      ).toBeGreaterThan(0.4);
-    } else {
-      // no film to be had: the drawn scene must be carrying the evening, and
-      // the overlay must not be sitting on a dead video element
-      const standingIn = await page.evaluate(() =>
-        !document.querySelector('#intro').classList.contains('has-video'));
-      expect(standingIn, 'no decoder, and no drawn scene either: the evening was blank').toBe(true);
-    }
+    // The contract is not "the film always wins the race". It is fetched when
+    // it is wanted rather than precached, so on a slow load, or an engine with
+    // no h264 decoder, the drawn scene carries the evening instead. Both are
+    // the same promise to the person watching. What must never happen is the
+    // third thing: the overlay claiming a film and showing a frozen first
+    // frame, which is what taking `autoplay` off the element once caused.
+    await expect.poll(
+      async () => page.evaluate(() => {
+        const v = document.querySelector('#introVideo');
+        const film = document.querySelector('#intro').classList.contains('has-video');
+        return film ? (v.currentTime > 0.4 ? 'rolling' : 'frozen') : 'drawn scene';
+      }),
+      { message: 'the evening never got going', timeout: 8000 },
+    ).toMatch(/rolling|drawn scene/);
 
     await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
   });

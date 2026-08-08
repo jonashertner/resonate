@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf79';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf79';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf79';
-import * as mapView from './map.js?v=rf79';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf79';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf79';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf79';
-import { exifGPS } from './exif.js?v=rf79';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf79';
-import * as photoStore from './photos.js?v=rf79';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf79';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf80';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf80';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf80';
+import * as mapView from './map.js?v=rf80';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf80';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf80';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf80';
+import { exifGPS } from './exif.js?v=rf80';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf80';
+import * as photoStore from './photos.js?v=rf80';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf80';
 
 // ---------- helpers ----------
 
@@ -1042,7 +1042,7 @@ function renderChips() {
   const on = state.filters.tags.size;
   const word = $('#filterWord');
   if (word) {
-    word.textContent = on ? `domains · ${on}` : 'domains';
+    word.textContent = on ? `tags · ${on}` : 'tags';
     word.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   wrap.innerHTML = allTags().map(t => {
@@ -3380,7 +3380,7 @@ function renderSettings() {
   $('#dropSample')?.addEventListener('click', async () => { await dropSample(); renderSettings(); });
   $('#eraseAll').addEventListener('click', async () => {
     if (!await ask('Erase every place and tag in this atlas? Export first if you want a keepsake.', { yes: 'go on', no: 'not yet' })) return;
-    if (!await ask('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?', { yes: 'erase everything', no: 'stop' })) return;
+    if (!await ask('Gone means gone here. It cannot reach links you sent, files you exported, or your backup at the club. Your club key is kept, so a paid backup can still come home. Really erase?', { yes: 'erase everything', no: 'stop' })) return;
     store.clearAll();
     await photoStore.clear();
     // the share inbox is a database of its own, and was surviving an erase:
@@ -3501,7 +3501,7 @@ function renderClub() {
     body.innerHTML = `
       <div class="set-sec">
         <p class="ce-law">The door is not open yet.</p>
-        <div class="set-row-sub" style="max-width:52ch">When it opens, membership will keep a sealed backup of your whole atlas, photographs included, and carry it to your other devices. Sealed here, with a phrase only you know. The club will never be able to read what it keeps.</div>
+        <div class="set-row-sub" style="max-width:52ch">When it opens, membership will keep a backup of your whole atlas, photographs included, and carry it to your other devices. It is locked on this device, with a phrase only you know. The club can never read what it keeps.</div>
       </div>`;
     return;
   }
@@ -3548,21 +3548,21 @@ function renderClub() {
       <div class="set-row-sub" style="margin-top:6px">This is the key. Write it somewhere that is not this browser: it is how another device, or this one after an erase, reaches the vault.</div>
     </div>
     <div class="set-sec">
-      <div class="sec-head">the envelope</div>
+      <div class="sec-head">your backup</div>
       <div class="set-row">
         <input class="text-input" type="password" id="clubPhrase" style="max-width:320px" placeholder="the sealing phrase. yours alone, never stored" autocomplete="off" aria-label="Sealing phrase">
       </div>
       <div class="word-row" style="margin-top:14px">
         <button class="word-btn" id="clubSync">back it up now</button>
-        <button class="word-btn quiet" id="clubPrev">the envelope before</button>
+        <button class="word-btn quiet" id="clubPrev">the backup before this one</button>
       </div>
       <div class="set-row-sub" id="clubMeta" style="margin-top:10px"></div>
-      <div class="set-row-sub" style="margin-top:10px">This is a backup, not a sync, and the word matters. It brings home what the envelope holds and this atlas lacks, then seals everything back. It never changes a record this device already has, and it never carries a deletion: remove a place here and the envelope still holds it until this device seals again. Two devices are not kept in step; each one adds to the envelope and neither overwrites the other. Lose the phrase and the envelope is lost with it; nobody can open it for you.</div>
+      <div class="set-row-sub" style="margin-top:10px">This is a backup, not a sync, and the word matters. It brings home what the backup holds and this atlas lacks, then saves everything again. It never changes a record this device already has, and never carries a deletion: remove a place here and the backup still holds it until this device saves again. Two devices are not kept in step; each adds, neither overwrites. Lose the phrase and the backup is lost with it. Nobody can unlock it for you.</div>
     </div>
     <div class="set-sec">
       <div class="sec-head">leaving</div>
       <div class="word-row">
-        <button class="word-btn quiet" id="clubBurn">the envelopes, gone</button>
+        <button class="word-btn quiet" id="clubBurn">delete both backups</button>
         <button class="word-btn quiet" id="clubForget">forget the key on this device</button>
       </div>
     </div>`;
@@ -3573,55 +3573,55 @@ function renderClub() {
       const until = m.until ? new Date(m.until * 1000).toISOString().slice(0, 10) : '';
       $('#clubStanding').textContent =
         m.standing === 'good' ? `in good standing${until ? ` until ${until}` : ''}${m.leaving ? '. leaving at the period’s end' : ''}`
-        : m.standing === 'lapsed' ? 'lapsed. the envelope stays yours; renewing lets you seal again'
-        : m.standing === 'left' ? 'the membership has ended. the envelope stays yours'
+        : m.standing === 'lapsed' ? 'ended. your backup stays yours; renewing lets you save again'
+        : m.standing === 'left' ? 'the membership has ended. your backup stays yours'
         : 'the club does not know this key';
       const got = await clubClient().getVault().catch(() => null);
-      $('#clubMeta').textContent = got?.at ? `last sealed ${got.at.slice(0, 10)}, ${got.bytes.length.toLocaleString()} bytes` : 'nothing sealed yet';
+      $('#clubMeta').textContent = got?.at ? `last saved ${got.at.slice(0, 10)}, ${got.bytes.length.toLocaleString()} bytes` : 'no backup yet';
     } catch { $('#clubStanding').textContent = 'the club did not answer'; }
   })();
 
   $('#clubSync').addEventListener('click', clubSync);
   $('#clubPrev').addEventListener('click', async () => {
     const phrase = $('#clubPhrase').value;
-    if (phrase.length < 8) return toast('a sealing phrase of at least eight characters');
+    if (phrase.length < 8) return toast('a phrase of at least eight characters');
     const btn = $('#clubPrev');
     btn.disabled = true;
     try {
       const got = await clubClient().getVault(true);
-      if (!got) return toast('the club keeps no envelope before this one');
+      if (!got) return toast('the club has no earlier backup');
       let text;
       try { text = await unseal(got.bytes, phrase, { bind: store.settings.clubKey }); }
       catch (e) {
-        return toast(e.message === 'wrong-phrase' ? 'that phrase does not open this envelope'
-          : e.message === 'sealed-for-another-key' ? 'this envelope was sealed under a different key'
-          : e.message === 'this-device-cannot-open-it' ? 'the envelope is fine; this device cannot open it. a newer browser, or another device, can'
-          : 'what the club holds is not an envelope');
+        return toast(e.message === 'wrong-phrase' ? 'that phrase does not unlock this backup'
+          : e.message === 'sealed-for-another-key' ? 'this backup was locked with a different key'
+          : e.message === 'this-device-cannot-open-it' ? 'the backup is fine; this device cannot unlock it. a newer browser, or another device, can'
+          : 'what the club holds is not a resonate backup');
       }
       let wrapper;
-      try { wrapper = JSON.parse(text); } catch { return toast('the envelope opened but its content is unreadable'); }
+      try { wrapper = JSON.parse(text); } catch { return toast('the backup unlocked, but what is inside cannot be read'); }
       const atlas = wrapper.atlas ?? wrapper;
       const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
       const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
-      if (!await ask(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you back up again.`, { yes: 'bring it home', no: 'leave it' })) return;
+      if (!await ask(`The backup before this one was saved ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it has and this atlas lacks? Nothing here is deleted, and nothing is saved until you back up again.`, { yes: 'bring it home', no: 'leave it' })) return;
       const r = await bringHome(atlas);
       if (!r.ok) {
         if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
         return toast('this device refused the write, so nothing changed');
       }
       if (r.added) renderAll();
-      toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
+      toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from the backup before this one` : 'this atlas already holds everything that backup does');
     } catch { toast('the vault did not answer'); }
     finally { btn.disabled = false; }
   });
   $('#clubBurn').addEventListener('click', async () => {
-    if (!await ask('Burn both envelopes at the club? Your atlas here is untouched, and the key stays so you can seal again. If an envelope would not open on this device, burning still destroys it everywhere.', { yes: 'burn them', no: 'keep them' })) return;
+    if (!await ask('Delete both backups at the club? Your atlas here is untouched, and the key stays so you can back up again. A backup this device can no longer unlock is deleted too.', { yes: 'burn them', no: 'keep them' })) return;
     try {
       await clubClient().delVault();
       // an emptied vault must be sealable again: the count starts over
       Object.assign(store.settings, burnPatch());
       store.saveSettings();
-      toast('the envelopes are gone'); renderClub();
+      toast('both backups are gone'); renderClub();
     }
     catch { toast('the vault did not answer'); }
   });
@@ -3635,10 +3635,10 @@ function renderClub() {
 
 async function clubSync() {
   const phrase = $('#clubPhrase').value;
-  if (phrase.length < 8) return toast('a sealing phrase of at least eight characters');
+  if (phrase.length < 8) return toast('a phrase of at least eight characters');
   const btn = $('#clubSync');
   if (btn.disabled) return;
-  btn.disabled = true; btn.textContent = 'sealing…';
+  btn.disabled = true; btn.textContent = 'saving…';
   // The vault refuses a seal written over a revision this device did not read.
   // That refusal is the whole point: two devices used to be able to read the
   // same envelope and then overwrite one another, and the loser's records went
@@ -3648,10 +3648,10 @@ async function clubSync() {
   try {
     let done = await sealOnce(phrase);
     if (done === 'stale') done = await sealOnce(phrase);
-    if (done === 'stale') toast('another device sealed while this one was reading. nothing written; try once more', 6000);
+    if (done === 'stale') toast('another device saved while this one was reading. nothing written; try once more', 6000);
   } catch (e) {
-    toast(e.message === 'lapsed' ? 'the membership has lapsed. renewing lets you seal again'
-      : e.message === 'too-large' ? 'the atlas is too large for one envelope'
+    toast(e.message === 'lapsed' ? 'the membership has ended. renewing lets you back up again'
+      : e.message === 'too-large' ? 'this atlas is too large for one backup'
       : 'the club did not answer');
   } finally {
     btn.disabled = false; btn.textContent = 'back it up now';
@@ -3670,7 +3670,7 @@ async function sealOnce(phrase) {
     // trusted: it is a stale edge or a hollowed club, and pushing over it
     // would demote the real envelope. nothing is written on a doubt.
     if (syncGuard(!!got, lastSeq) === 'refuse-empty') {
-      toast('the club answered empty, but something was sealed before. nothing written; try again shortly');
+      toast('the club answered empty, but something was saved before. nothing written; try again shortly');
       return;
     }
 
@@ -3680,23 +3680,23 @@ async function sealOnce(phrase) {
       let text;
       try { text = await unseal(got.bytes, phrase, { bind: store.settings.clubKey }); }
       catch (e) {
-        toast(e.message === 'wrong-phrase' ? 'that phrase does not open this envelope'
-          : e.message === 'sealed-for-another-key' ? 'this envelope was sealed under a different key'
-          : e.message === 'this-device-cannot-open-it' ? 'the envelope is fine; this device cannot open it. a newer browser, or another device, can'
-          : 'what the club holds is not an envelope');
+        toast(e.message === 'wrong-phrase' ? 'that phrase does not unlock this backup'
+          : e.message === 'sealed-for-another-key' ? 'this backup was locked with a different key'
+          : e.message === 'this-device-cannot-open-it' ? 'the backup is fine; this device cannot unlock it. a newer browser, or another device, can'
+          : 'what the club holds is not a resonate backup');
         return;
       }
       // the envelope carries its own count. an older envelope than this
       // device has already seen is never sealed over.
       let wrapper;
       try { wrapper = JSON.parse(text); } catch {
-        toast('the envelope opened but its content is unreadable. nothing written');
+        toast('the backup unlocked, but what is inside cannot be read. nothing written');
         return;
       }
       remoteSeq = Number(wrapper.seq) || 0;
       const atlas = wrapper.atlas ?? wrapper;
       if (remoteSeq < lastSeq) {
-        toast('the club returned an older envelope than this device has seen. nothing written; try again shortly');
+        toast('the club returned an older backup than this device has seen. nothing written; try again shortly');
         return;
       }
       const home = await bringHome(atlas);
@@ -3707,9 +3707,9 @@ async function sealOnce(phrase) {
         // that promise is either kept or quietly broken.
         if (home.why === 'lossy') {
           await sayWhatWasLost(home.lost, { verb: 'come home' });
-          toast('nothing was sealed over the envelope', 6000);
+          toast('your backup was left as it was', 6000);
         } else {
-          toast('this device refused the write, so nothing was sealed over the envelope', 6000);
+          toast('this device refused the write, so your backup was left as it was', 6000);
         }
         return;
       }
@@ -3721,7 +3721,7 @@ async function sealOnce(phrase) {
     const { json, misses } = await fullExport();
     if (misses) {
       // an envelope short of photographs must never replace one that has them
-      toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read from this device, so nothing was sealed`, 7000);
+      toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read from this device, so nothing was saved`, 7000);
       return;
     }
     const sealed = await seal(JSON.stringify({
@@ -3733,10 +3733,10 @@ async function sealOnce(phrase) {
     store.settings.clubSeq = seq;
     store.settings.clubSealedAt = meta.at;
     store.saveSettings();
-    $('#clubMeta').textContent = `last sealed ${meta.at.slice(0, 10)}, ${meta.bytes.toLocaleString()} bytes, ${sealed[5] === 2 ? 'argon2id' : 'pbkdf2'}`;
+    $('#clubMeta').textContent = `last saved ${meta.at.slice(0, 10)}, ${meta.bytes.toLocaleString()} bytes`;
     toast(brought
-      ? `${brought} place${brought === 1 ? '' : 's'} came home. everything sealed and kept`
-      : 'sealed and kept');
+      ? `${brought} place${brought === 1 ? '' : 's'} came home. everything is backed up`
+      : 'backed up');
   }
 }
 
@@ -4214,14 +4214,22 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
     const started = video.play();
     // if the browser refuses to roll the film, the drawn scene stays rather
     // than leaving a frozen frame on screen
+    const backToTheScene = () => {
+      if (finished || !filmUp) return;
+      filmUp = false;
+      el.classList.remove('has-video');
+      startScene();
+    };
     if (started && started.catch) {
-      started.catch(() => {
-        if (video.currentTime > 0) return;
-        filmUp = false;
-        el.classList.remove('has-video');
-        startScene();
-      });
+      started.catch(() => { if (video.currentTime === 0) backToTheScene(); });
     }
+    // A refusal is not the only way to get a still picture. loadeddata fires
+    // as soon as there is one frame, so on a slow connection the overlay can
+    // swap to the video and then sit there while the rest arrives: a
+    // photograph with a skip button under it. If it has not moved shortly
+    // after being asked to, the evening goes back to the drawn scene, which
+    // is at least in motion.
+    setTimeout(() => { if (video.currentTime < 0.05) backToTheScene(); }, 800);
     // the field arrives while the table is still alive: the dissolve begins
     // partway through, so the film never ends on screen
     clearTimeout(cutoff);
