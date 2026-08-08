@@ -652,7 +652,16 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 /* tone and theme are one pair: they take the right-hand end of the line
    together, and when the line breaks they go over together */
 .line-end { margin-left: auto; display: flex; gap: 24px; }
+/* on a narrow screen the row wraps and the pair lands on a line of its own,
+   where pushing it right leaves two words stranded at the edge. it reads as
+   part of the same sentence when it stays with the others. */
+@media (max-width: 760px) { .index-tools .line-end { margin-left: 0; } }
 @media (min-width: 761px) { .index-tools .line-end { margin-right: var(--close-notch, 110px); } }
+/* the two words that stand for a row each: they read as controls rather than
+   as filters already applied, so they carry no underline until they do */
+#filterWord[aria-pressed="true"] { color: var(--ink); box-shadow: 0 2px 0 var(--ink); }
+.index-keys .index-look { margin-left: auto; display: flex; gap: 18px; }
+.index-keys { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
 .index-line button sup { font-family: var(--mono); font-size: 8px; letter-spacing: 0; margin-left: 3px; vertical-align: 0.5em; }
 .ix-sorts button[aria-pressed="true"] { box-shadow: none; font-variation-settings: 'wght' 750; }
 
@@ -1185,6 +1194,21 @@ a.word-btn { text-decoration: none; display: inline-block; }
 }
 
 .how-body p { max-width: 58ch; font-size: 15px; line-height: 1.6; color: var(--ink); margin-bottom: 14px; }
+/* some of what this page says is a list of facts, and reads far shorter set
+   as one than as a paragraph carrying the same words */
+.how-body .how-list {
+  max-width: 58ch; margin: 0 0 16px; padding: 0; list-style: none;
+  font-size: 15px; line-height: 1.55; color: var(--ink);
+}
+.how-body .how-list li {
+  padding: 6px 0 6px 16px; position: relative;
+  border-top: 1px solid color-mix(in oklab, var(--edge) 40%, transparent);
+}
+.how-body .how-list li:first-child { border-top: 0; }
+.how-body .how-list li::before {
+  content: ''; position: absolute; left: 0; top: 1.05em;
+  width: 6px; height: 1px; background: var(--ink-3);
+}
 
 .theme-word { color: var(--ink-2) !important; }
 .theme-word:hover { color: var(--ink) !important; }

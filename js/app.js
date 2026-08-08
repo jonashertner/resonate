@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf78';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf78';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf78';
-import * as mapView from './map.js?v=rf78';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf78';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf78';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf78';
-import { exifGPS } from './exif.js?v=rf78';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf78';
-import * as photoStore from './photos.js?v=rf78';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf78';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf79';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf79';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf79';
+import * as mapView from './map.js?v=rf79';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf79';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf79';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf79';
+import { exifGPS } from './exif.js?v=rf79';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf79';
+import * as photoStore from './photos.js?v=rf79';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf79';
 
 // ---------- helpers ----------
 
@@ -1030,8 +1030,21 @@ function renderCount() {
   if (ways) { ways.textContent = rest.join(' · '); ways.hidden = !rest.length; }
 }
 
+// The index is for finding a place again. It opened with three rows of
+// controls above the first record: every domain you own, wrapped over three
+// lines, and four ways to sort, and the field's colour and the time of day.
+// On a phone the records began below the fold. The controls a person changes
+// once a month are behind a word now; the words they change often are not,
+// and any domain actually filtering stays in sight so nothing is hidden while
+// it is doing something.
 function renderChips() {
   const wrap = $('#filterChips');
+  const on = state.filters.tags.size;
+  const word = $('#filterWord');
+  if (word) {
+    word.textContent = on ? `domains · ${on}` : 'domains';
+    word.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   wrap.innerHTML = allTags().map(t => {
     const n = allPlaces().reduce((k, p) => k + (p.tags.includes(t.id) ? 1 : 0), 0);
     const on = state.filters.tags.has(t.id);
@@ -1047,6 +1060,22 @@ function renderChips() {
     state.filters.tags.has(id) ? state.filters.tags.delete(id) : state.filters.tags.add(id);
     renderChips(); renderList(); syncMarkers(); applyWorldState();
   }));
+  // a domain that is filtering stays visible whether the row is open or not:
+  // a filter nobody can see is a list that looks wrong for no reason
+  wrap.hidden = !wrap.dataset.open && !state.filters.tags.size;
+}
+
+// a word that shows the row it names, and says so to a screen reader
+function revealRow(wordId, rowId) {
+  const word = $(wordId);
+  const row = $(rowId);
+  if (!word || !row) return;
+  word.addEventListener('click', () => {
+    const open = row.dataset.open === '1';
+    if (open) { delete row.dataset.open; } else { row.dataset.open = '1'; }
+    row.hidden = open && !(rowId === '#filterChips' && state.filters.tags.size);
+    word.setAttribute('aria-expanded', String(!open));
+  });
 }
 
 function renderList() {
@@ -4565,8 +4594,15 @@ function init() {
     if (!b) return;
     state.sort = b.dataset.sort;
     $$('#sortLine button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    // the word carries the arrangement, so the row can go back down
+    $('#sortWord').textContent = b.textContent;
+    $('#sortLine').hidden = true;
+    delete $('#sortLine').dataset.open;
+    $('#sortWord').setAttribute('aria-expanded', 'false');
     renderList();
   });
+  revealRow('#filterWord', '#filterChips');
+  revealRow('#sortWord', '#sortLine');
 
   // posters close
   $$('.poster [data-close]').forEach(b => b.addEventListener('click', () => {

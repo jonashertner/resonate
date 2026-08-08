@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf78';
+import { decodePath } from './route.js?v=rf79';
 
 export const SCHEMA_VERSION = 4;
 

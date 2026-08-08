@@ -1,8 +1,8 @@
 // store.js — persistence, models, demo data
 
-import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf78';
-import { measure } from './route.js?v=rf78';
-import { buildDisclosure } from './share.js?v=rf78';
+import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf79';
+import { measure } from './route.js?v=rf79';
+import { buildDisclosure } from './share.js?v=rf79';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';

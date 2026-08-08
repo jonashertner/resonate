@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf78">
+<link rel="stylesheet" href="css/style.css?v=rf79">
 </head>
 <body class="boot">
 
@@ -82,10 +82,13 @@
       <button data-status="all" aria-pressed="true">all</button>
       <button data-status="visited" aria-pressed="false">been</button>
       <button data-status="wishlist" aria-pressed="false">want to go</button>
-      <span class="line-end"><button id="fieldWord" class="tone-word">plum</button><button id="themeWord" class="theme-word">night</button></span>
+      <span class="line-end">
+        <button id="filterWord" aria-expanded="false" aria-controls="filterChips">domains</button>
+        <button id="sortWord" aria-expanded="false" aria-controls="sortLine">newest</button>
+      </span>
     </div>
-    <div class="index-line" id="filterChips" role="group" aria-label="Filter by tag"></div>
-    <div class="index-line ix-sorts" id="sortLine" role="group" aria-label="Arrange">
+    <div class="index-line" id="filterChips" role="group" aria-label="Filter by domain" hidden></div>
+    <div class="index-line ix-sorts" id="sortLine" role="group" aria-label="Arrange" hidden>
       <button data-sort="recent" aria-pressed="true">newest</button>
       <button data-sort="name" aria-pressed="false">a–z</button>
       <button data-sort="distance" aria-pressed="false">nearest</button>
@@ -95,6 +98,7 @@
   <div class="index-list" id="listView" aria-label="Your places"></div>
   <footer class="index-keys">
     <button id="indexKeys">keys. the keyboard speaks. press ? anywhere.</button>
+    <span class="index-look"><button id="fieldWord" class="tone-word">plum</button><button id="themeWord" class="theme-word">night</button></span>
   </footer>
 </section>
 
@@ -140,63 +144,70 @@
   <p class="poster-sub">what this is, what it keeps, what it shares.</p>
   <div class="poster-body how-body">
     <div class="sec-head">what this is</div>
-    <p>An atlas of places that matter to you. It lives in your browser, on this device. There is no account. The free atlas asks nothing of any server of ours. Close the tab and the atlas waits.</p>
-    <p>What you write here is yours to read and nobody else's. Every place, note, tag, path and photograph is stored on this device only. It is not uploaded, not synchronised, not backed up anywhere by default, and not visible to us: we have no copy to look at and no account to look you up by. Nothing leaves until you hand it over, and then only the thing you handed and only to the person you handed it to.</p>
-    <p>Joining the club does not change that. It adds one thing: a copy of your atlas, sealed on this device with a phrase only you know, kept where this browser cannot lose it. The club holds bytes it cannot read. Members and non members alike keep their atlas on their own device; the club is a spare copy, not a home for it.</p>
-    <p>The other side of that: nothing on a device is forever. Clear this browser's data, lose the machine, or let a browser tidy away a site it thinks you have forgotten, and the atlas goes with it. Export a file from <b>yours</b> and keep it somewhere. That is the whole backup story for a free atlas, and it is a real one.</p>
+    <p>An atlas of places that matter to you. It lives in your browser, on this device. There is no account, and the free atlas asks nothing of any server of ours. Close the tab and it waits.</p>
+    <p>What you write is yours to read and nobody else's. Places, notes, tags, paths and photographs are stored on this device only: not uploaded, not synchronised, not visible to us. We have no copy, and no account to look you up by. Nothing leaves until you hand it over, and then only the thing you handed, to the person you handed it to. Joining the club adds a sealed spare copy and changes none of that.</p>
+    <p>The other side of it: nothing on a device is forever. Clear this browser, lose the machine, or let a browser tidy away a site it thinks you have forgotten, and the atlas goes too. Export a file from <b>yours</b> and keep it somewhere. For a free atlas that is the whole backup story, and it is a real one.</p>
 
     <div class="sec-head">what it keeps</div>
-    <p>Your places, tags, notes, photos. All of it stays on your device, in this browser, under this address. The records sit in the browser's simple store and the photographs in its database beside them, where there is room. Photos never travel in a link. If you join the club they travel only inside the sealed envelope, unreadable without your phrase. The free atlas sends us nothing; there is no analytics of any kind on this page.</p>
-    <p>A photograph here is the thing that reminds you, not the thing that convinces someone else. It can begin a place, if the picture knows where it was taken, and it sits on that place's own page for you to find again. It travels nowhere: not in a link, not in a file you hand over, not on the newsstand. A note is written a word at a time and says what you meant; a photograph is caught whole, and takes in whoever was at the next table and the number on the door. Those are not the same thing to hand a stranger, so only one of them is handed over. The single exception is printing: print a folio or the whole atlas and the photographs are typeset with it, because a sheet is handed to one person, deliberately, by someone standing there. Save it as a pdf instead and that reasoning stops holding: a pdf is a file, and a file can be copied, forwarded and searched like any other. So the app counts what a print will carry and shows you the count before the dialog opens, and the photographs are yours to leave out.</p>
-    <p>If something on this device will not read, you are told before anything else happens, and nothing is written over it. A damaged store used to come back as an empty list, so the atlas looked empty and the next keystroke saved that emptiness over the damaged bytes. Now the bytes stay exactly where they are, a copy is set aside beside them under a name that says what it is, and that part of the atlas refuses every write until you choose: export what still reads, or start that part fresh. Until you choose, that part is read only, on purpose. Starting fresh deletes nothing; it means the app stops waiting and begins writing again, and the copy set aside stays on this device.</p>
+    <p>Records in the browser's simple store, photographs in its database beside them. No analytics of any kind, on any page.</p>
+    <p>A photograph is the thing that reminds you, not the thing that convinces someone else. It can begin a place, if the picture knows where it was taken, and it stays on that place's own page. It travels nowhere: not in a link, not in a file, not on the newsstand. Printing is the exception, because a sheet is handed to one person by someone standing there. Save that as a pdf and the reasoning stops holding, so the app counts what a print will carry and shows you the count first. The photographs are yours to leave out.</p>
+    <p>If something on this device will not read, you are told before anything else happens, and nothing is written over it. The bytes stay where they are, a copy is set aside, and that part of the atlas refuses every write until you choose: export what still reads, or start that part fresh. Starting fresh deletes nothing.</p>
 
     <div class="sec-head">how a place arrives</div>
-    <p>Type it into the command line, mark the middle of the field with <b>&gt;mark</b> and name it yourself, drop a photograph with a location on the field, press long on the map, or paste a link from google maps, apple maps or openstreetmap and the app reads the point out of it. Install the app and it appears in your phone's own share sheet, so a place found anywhere can be sent straight here. Nothing is asked of you at that moment but one press: the note, the tags and the rest can wait, or never come.</p>
-    <p>A place the map's own index has never heard of is still a place. Mark it, and if nothing is found there the mark asks what it is: a trailhead, a spring, a bench, a door with no sign. It is kept under your name for it, at the exact point you chose.</p>
-    <p>A link that carries no point is not invented into one. The app asks the world once, by name, and if the world does not answer it says so plainly.</p>
+    <p>Type it into the command line, press long on the map, mark the middle of the field with <b>&gt;mark</b>, drop a photograph that knows where it was taken, or paste a link from google, apple or openstreetmap maps and the app reads the point out of it. Install the app and it joins your phone's share sheet. One press is all that is asked; the note and the tags can wait, or never come.</p>
+    <p>A place the map's own index has never heard of is still a place: mark it, and if nothing is found there it asks what it is. A trailhead, a spring, a bench, a door with no sign. It is kept under your name for it, at the point you chose. A link carrying no point is not invented into one: the app asks the world once, by name, and says so plainly if the world does not answer.</p>
 
     <div class="sec-head">paths</div>
-    <p>A walk is not a point. Drop a gpx from any walking app on the field and it becomes a path: the line, its distance, its climb, the hour it asks of you, and the ground drawn as a section you can run a finger along. Paths are kept, handed over and printed like everything else.</p>
-    <p>A path usually starts at a door, so a path can be asked to hide where it starts and ends. It then travels without its first and last quarter kilometre, and the distance, the climb and the hours beside it are worked out again from the shorter line, so no number describes ground the recipient was not given. A path too short to lose both ends is not handed over at all: it stays behind and is named, rather than travelling whole under a sentence promising otherwise.</p>
+    <p>A walk is not a point. Drop a gpx from any walking app and it becomes a path: the line, its distance, its climb, the hour it asks of you, and the ground drawn as a section you can run a finger along.</p>
+    <p>A path usually starts at a door, so it can be asked to hide where it begins and ends. It then travels without its first and last quarter kilometre, with the distance, climb and hours worked out again from the shorter line, so no number describes ground the recipient was not given. A path too short to lose both ends stays behind and is named, rather than travelling whole under a sentence promising otherwise.</p>
 
     <div class="sec-head">who else answers</div>
-    <p>Every request this page makes, and who answers it. The page itself, its code and its typefaces come from GitHub Pages, which serves resonate.select and sees your address and each file it hands you, as any host does. The map tiles come from CARTO, so it sees roughly where you are looking. Place search goes to OpenStreetMap's Nominatim only when you press for it, never as you type, and it sees what you searched. The newsstand list comes from a separate GitHub address, only when you open the stand. The club, if you join, is a Cloudflare worker of ours. None of them receives your atlas; the club receives an envelope it cannot open.</p>
-    <p>The page's security policy bounds every address it may speak to; view the source and read it. One entry is wide for now: the club's future address at Cloudflare narrows to a single name the day the door opens.</p>
-    <p>This app lives on its own address, resonate.select, and a browser keeps storage per address. Nothing published anywhere else can read this atlas. The newsstand lives on a separate address for the same reason.</p>
+    <p>Every request this page makes, and what the answerer sees.</p>
+    <ul class="how-list">
+      <li><b>GitHub Pages</b> serves this page, its code and its typefaces, and sees your address and each file it hands you, as any host does.</li>
+      <li><b>CARTO</b> serves the map tiles, so it sees roughly where you are looking.</li>
+      <li><b>Nominatim</b>, at OpenStreetMap, answers place search only when you press for it, never as you type, and sees what you searched.</li>
+      <li><b>A separate GitHub address</b> holds the newsstand list, fetched only when you open the stand.</li>
+      <li><b>A Cloudflare worker of ours</b> is the club, if you join, and it receives an envelope it cannot open.</li>
+    </ul>
+    <p>None of them receives your atlas. The page's security policy bounds every address it may speak to; view the source and read it. Browsers keep storage per address, so nothing published elsewhere can read this atlas.</p>
 
     <div class="sec-head">what it shares</div>
-    <p>Nothing, until you hand someone a link. A link carries a copy of what you enclosed at that moment: the places of a folio, or your atlas without photos, under your byline if you set one. An ask carries one question and your byline. A copy cannot be recalled: erasing here does not reach a link already sent, a file already exported, or a folio already on the stand.</p>
-    <p>The same thing can go as a file instead, and a file is not a wider door. One object decides what leaves; the link encodes it and the file writes it, field for field, and the panel you read beforehand counts that same object. There is exactly one difference between the two, and it is geometry: a link has to fit in an address bar, so a path in a link carries a coarser shape than the same path in a file. Nothing else differs, and the panel says which you are about to hand over.</p>
+    <p>Nothing, until you hand someone a link. A link carries a copy of what you enclosed at that moment: the places of a folio, or your atlas without photographs, under your byline if you set one. An ask carries one question and your byline. A copy cannot be recalled: erasing here does not reach a link already sent, a file already exported, or a folio already on the stand.</p>
+    <p>The same thing can go as a file, and a file is not a wider door. One object decides what leaves; the link encodes it, the file writes it, and the panel you read beforehand counts that same object. There is exactly one difference, and it is geometry: a link must fit in an address bar, so a path in a link carries a coarser shape than the same path in a file. The panel says which you are about to hand over.</p>
 
     <div class="sec-head">your byline</div>
     <p>A byline is the name you type, nothing more. It is not an account and not a proof; anyone can type any name. It travels only where you hand something over.</p>
 
     <div class="sec-head">folios</div>
-    <p>A folio is a titled set of places, kept on your shelf for yourself. Keeping one shares nothing. It holds references rather than copies, so it follows your atlas as you improve it: rename a place and the folio says the new name. File a place into one from the place itself, or compose a folio from the whole atlas.</p>
-    <p>When you choose to, the same folio can be handed to one person as a link, offered to the newsstand, or printed. Only then does anything leave, and only what is enclosed. A link and a file carry no photographs; a printed sheet or pdf does, and says so before it is made. The link is a copy of that moment; the shelf keeps following your atlas.</p>
+    <p>A folio is a titled set of places, kept on your shelf for yourself. Keeping one shares nothing. It holds references rather than copies, so it follows your atlas as you improve it: rename a place and the folio says the new name.</p>
+    <p>When you choose to, the same folio can be handed to one person as a link, offered to the newsstand, or printed. Only then does anything leave, and only what is enclosed. A link and a file carry no photographs; a printed sheet or pdf does, and says so first. The link is a copy of that moment; the shelf keeps following your atlas.</p>
 
     <div class="sec-head">how matching works</div>
-    <p>You hand a folio to one person. A titled set of places under your byline. When someone hands you theirs, your device compares the two atlases: what you both hold, what you both love, where they know ground you do not. The verdict is a word, never a score, and it is computed here, on your device. Keeping a place is already the recommendation, so the atlas asks for no rating beside it. Nothing about it leaves.</p>
+    <p>When someone hands you their folio, your device compares the two atlases: what you both hold, what you both love, where they know ground you do not. The verdict is a word, never a score, and it is worked out here. Keeping a place is already the recommendation, so nothing asks you to rate it. Nothing about the comparison leaves.</p>
     <p>Keep a person as a voice and their marks stay on your field, open rings you may adopt. An adopted place says after their name, forever.</p>
 
     <div class="sec-head">the newsstand</div>
-    <p>The newsstand is a shelf, not a feed. Folios that people have published sit on a separate address as a plain list. Your device fetches that list and ranks it against your own atlas, here, from three things this page can name: cities you both hold, domains you share, and how recently a folio went up. Nothing about that ranking, what you hold, what you open, or who you are goes back. There is no account to read it.</p>
-    <p>Publishing runs the other way, and it is not automatic. A folio you offer is read by a person before it goes up, and only the folio goes: its title, your byline, and the places it encloses. Never your atlas, never your photographs. That reading happens on GitHub today, so offering a folio asks for an account there. Reading the stand asks for nothing. A folio comes down the way it went up: you ask, a person removes it. What belongs on the stand, and what does not, is written at <a href="COMMONS.md">/COMMONS.md</a>.</p>
+    <p>A shelf, not a feed. Published folios sit on a separate address as a plain list. Your device fetches that list when you open the stand and ranks it against your own atlas, here, from three things: cities you both hold, domains you share, and how recently a folio went up. Nothing about that ranking, or what you hold or open, goes back. There is no account to read it.</p>
+    <p>Publishing runs the other way and is not automatic. A folio you offer is read by a person before it goes up, and only the folio goes: its title, your byline, and the places enclosed. Never your atlas, never your photographs. That reading happens on GitHub today, so offering asks for an account there; reading the stand asks for nothing. A folio comes down the way it went up: you ask, a person removes it. What belongs there is written at <a href="COMMONS.md">/COMMONS.md</a>.</p>
 
     <div class="sec-head">erasing</div>
-    <p>Erase everything, under yours, and this browser forgets the atlas: places, paths, folios, tags, voices, photographs, the byline. What an erase cannot reach: links already sent, files already exported, a folio on the stand. What it keeps on purpose: your club key, so a paid backup can still come home after an accident. The club room holds the separate words that burn the envelopes and forget the key. The offline copy of this app's own code stays cached; it holds none of your data.</p>
+    <p>Erase everything, under <b>yours</b>, and this browser forgets the atlas: places, paths, folios, tags, voices, photographs, the byline.</p>
+    <ul class="how-list">
+      <li>It cannot reach a link already sent, a file already exported, or a folio on the stand.</li>
+      <li>It keeps your club key on purpose, so a paid backup can still come home after an accident. The club room holds the separate words that burn the envelopes and forget the key.</li>
+    </ul>
 
     <div class="sec-head">yours</div>
-    <p>Export everything as a file, whenever: it carries the photographs back inside itself, so one file is the whole atlas. Print a folio, or the whole atlas, as a typeset page or a pdf. Trust is a person, not a platform.</p>
-    <p>Bringing a file in is two operations, and it asks which you mean before it does anything. <b>Bring in what is missing</b> adds the records this atlas does not have and changes nothing it already holds. <b>Make this atlas the file</b> replaces: what is here goes, and what the file holds stands in its place, which is how a backup actually comes home. You are shown the counts of both, side by side, before either word is pressed, because replacing is not something the app can undo for you. A snapshot of the atlas as it stands is taken first either way, and it stays on this device where you can bring it back.</p>
-    <p>A file that could not be read back exactly is not brought in at all, by either word. Nothing of your own is shortened to fit: the app names the record and the field it could not keep, and hands the file back to you whole.</p>
-    <p>Under yours and under census, this browser says what it is holding: how many places and paths, how much room they take, whether the browser has promised to keep them, and when you last took a copy away. This device also keeps its three most recent snapshots of the records, taken quietly, and any of them can come home.</p>
+    <p>Export everything as a file whenever you like: the photographs travel back inside it, so one file is the whole atlas. If a photograph cannot be read, no backup is made and you are told, rather than handed a file that looks complete.</p>
+    <p>Bringing a file in is two operations and it asks which you mean. <b>Bring in what is missing</b> adds records this atlas lacks and changes nothing it holds. <b>Make this atlas the file</b> replaces, which is how a backup actually comes home. You see the counts of both first, and a snapshot is taken either way. A file that cannot be read back exactly is not brought in at all: nothing of yours is shortened to fit, and the app names the record and the field it could not keep.</p>
+    <p>Under <b>yours</b> and <b>census</b>, this browser says what it holds: how many places and paths, how much room they take, whether the browser has promised to keep them, and when you last took a copy away. Its three most recent snapshots are kept here too, and any of them can come home.</p>
 
     <div class="sec-head">the travellers club</div>
-    <p>The app is free and stays free. The club is for what needs a keeper: an encrypted backup of your whole atlas, photographs included, off this device. Before anything travels it is sealed on your device with a phrase only you know. The club keeps bytes it cannot read. What it knows about you, in full: a key, a paid-until date, whether you have given notice, when the envelope was last sealed and how large it is, the envelope before the last, and the subscription id behind the payment. Your name and card live at Stripe, which processes the payment; the club never receives them, though the subscription id could connect the two if Stripe were made to answer.</p>
-    <p>It is a backup, and it is not a synchronisation between devices. The word matters, so the app uses the true one. Backing up brings home what the envelope holds and this atlas lacks, then seals everything back. It only ever adds: it does not change a record this device already has, and it carries no deletions. Remove a place here and the envelope still holds it, and it comes home the next time you back up, until this device seals again. Another device with the key and the phrase brings home what the envelope holds, which is how an atlas reaches a second device; it is still an addition, never a mirror, and two devices are not kept in step. The only deletions that are true deletions are burning the envelopes and erasing each device.</p>
-    <p>The plain cost of that privacy: lose the phrase and the envelope is lost with it. Nobody can open it for you, and that is the point.</p>
-    <p>None of this asks to be believed. The envelope's exact bytes are specified at <a href="SPEC.md">/SPEC.md</a>, sixteen adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is written out at <a href="METHOD.md">/METHOD.md</a>, all on this address.</p>
+    <p>The app is free and stays free. The club is for what needs a keeper: an encrypted backup of your whole atlas, photographs included, sealed here with a phrase only you know before anything travels.</p>
+    <p>What the club knows about you, in full: a key, a paid-until date, whether you have given notice, when the envelope was last sealed and how large it is, the envelope before the last, and the subscription id behind the payment. Your name and card live at Stripe; the club never receives them, though that subscription id could connect the two if Stripe were made to answer.</p>
+    <p>It is a backup and not a synchronisation, so the app uses the true word. It only adds: it changes no record this device already has, and carries no deletions, so a place you removed comes home again until this device seals. A second device with the key and the phrase gets what the envelope holds, which is how an atlas travels, but it is an addition rather than a mirror. Lose the phrase and the envelope is lost with it; nobody can open it for you, and that is the point.</p>
+    <p>None of this asks to be believed. The envelope's exact bytes are at <a href="SPEC.md">/SPEC.md</a>, sixteen adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is at <a href="METHOD.md">/METHOD.md</a>.</p>
 
     <div class="word-row" style="margin-top:34px">
       <button class="word-btn quiet" id="howOpening">see the opening again</button>
@@ -306,6 +317,6 @@
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
 <script src="vendor/argon2/argon2.umd.min.js" integrity="sha384-tP0Wy54CKmng7i9EoTlPySD0hBx6Octj0VS6MfwlnUu111MPa+JLm0CCbep6XJ1W"></script>
-<script type="module" src="js/app.js?v=rf78"></script>
+<script type="module" src="js/app.js?v=rf79"></script>
 </body>
 </html>
