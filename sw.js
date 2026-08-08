@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first, because the field should never be stale when a network exists.
 
-const V = 'v=rf75';
+const V = 'v=rf76';
 const CACHE = `resonate-shell-${V}`;
 
 // everything the first paint needs, at the exact URLs the page asks for
@@ -35,7 +35,9 @@ const SHELL = [
   './fonts/fragment-latin.woff2',
   './fonts/fragment-latin-ext.woff2',
   './fonts/fragment-cyrillic-ext.woff2',
-  './assets/intro.mp4',
+  // the film is not precached: it is a first-visit welcome, and installing
+  // it costs a quarter of a megabyte to every device including the ones that
+  // have asked for less movement and will never see it
 ];
 
 self.addEventListener('install', (e) => {

@@ -1,8 +1,8 @@
 // store.js — persistence, models, demo data
 
-import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf75';
-import { measure } from './route.js?v=rf75';
-import { buildDisclosure } from './share.js?v=rf75';
+import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf76';
+import { measure } from './route.js?v=rf76';
+import { buildDisclosure } from './share.js?v=rf76';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -63,7 +63,7 @@ export function uid() {
 const sealed = new Map(); // key -> { at, bytes }
 
 export function unreadableKeys() {
-  return [...sealed.entries()].map(([key, v]) => ({ key, at: v.at, bytes: v.bytes }));
+  return [...sealed.entries()].map(([key, v]) => ({ key, at: v.at, bytes: v.bytes, why: v.why }));
 }
 
 // a person who has been told, and has decided, may release a key. the set
@@ -71,22 +71,62 @@ export function unreadableKeys() {
 // decision to destroy.
 export function releaseUnreadable(key) { return sealed.delete(key); }
 
-function read(key, fallback) {
+function seal(key, raw, why) {
+  sealed.set(key, { at: new Date().toISOString(), bytes: raw.length, why });
+  // keep the original where a person or a support session can still reach
+  // it, and never over a copy already set aside by an earlier load
+  try {
+    const keep = `${key}.unreadable`;
+    if (localStorage.getItem(keep) === null) localStorage.setItem(keep, raw);
+  } catch { /* no room to set it aside; the original is still untouched */ }
+}
+
+// Bytes that will not parse, and bytes that parse into the wrong thing.
+//
+// Only the first was caught before. `{}` stored under the tags key is
+// perfectly good JSON, so it sailed through and the next line to touch it
+// threw: the app stopped where it stood, on every load, with no explanation.
+// And a collection holding one record the schema rejects was worse than a
+// crash, because it did not crash: the readable records became the whole
+// collection, and the healing write below saved that shorter list over the
+// longer one. A record was destroyed by being read.
+//
+// So shape is checked here too, and `want` says what the key is meant to be.
+// Anything that disagrees is sealed whole, exactly like unparseable bytes.
+function read(key, fallback, want = null) {
   let raw = null;
   try { raw = localStorage.getItem(key); } catch { return fallback; }
   if (raw === null || raw === undefined || raw === '') return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    sealed.set(key, { at: new Date().toISOString(), bytes: raw.length });
-    // keep the original where a person or a support session can still reach
-    // it, and never over a copy already set aside by an earlier load
-    try {
-      const keep = `${key}.unreadable`;
-      if (localStorage.getItem(keep) === null) localStorage.setItem(keep, raw);
-    } catch { /* no room to set it aside; the original is still untouched */ }
+  let value;
+  try { value = JSON.parse(raw); }
+  catch { seal(key, raw, 'these bytes are not readable'); return fallback; }
+  if (want === 'array' && !Array.isArray(value)) {
+    seal(key, raw, 'this should be a list of records and is not');
     return fallback;
   }
+  if (want === 'object' && (value === null || typeof value !== 'object' || Array.isArray(value))) {
+    seal(key, raw, 'this should be a set of settings and is not');
+    return fallback;
+  }
+  return value;
+}
+
+// A collection is all of its records or none of them.
+//
+// `fn` is the reader that decides what a record is. If it turns any of them
+// down, the key is sealed rather than quietly loaded short: a person's atlas
+// may not shrink because one line of it confused this build, and nothing may
+// be written back over the longer original.
+function readAll(key, kind, fn) {
+  const raw = localStorage.getItem(key);
+  const given = read(key, [], 'array');
+  if (sealed.has(key)) return [];
+  const kept = fn(given);
+  if (kept.length < given.length && raw) {
+    seal(key, raw, `${given.length - kept.length} of ${given.length} ${kind} could not be read`);
+    return [];
+  }
+  return kept;
 }
 
 // a refused write must be heard: the app sets onWriteFailed to say so out loud
@@ -213,6 +253,20 @@ export function newTag(partial = {}) {
   return t;
 }
 
+// What may be handed to someone else.
+//
+// Two words hold a record back. `private` is the person's own instruction and
+// always has been. `sample` is the demonstration atlas, and it used to hold
+// nothing back at all: eighteen places nobody had been to travelled in every
+// link, file, folio and printed sheet as the sender's own, and the disclosure
+// builder does not carry the flag, so the recipient had no way to tell. A
+// loan is not a recommendation. It stays here until it is edited or adopted,
+// which is what clears the flag.
+//
+// A person's own device and their own backup still hold everything: losing a
+// record there in the name of tidiness would be the worse mistake.
+export const mayLeave = r => !r.private && !r.sample;
+
 // ---------- hiding the ends of a way ----------
 //
 // A quarter of a kilometre from each end, which is enough to lose a door.
@@ -323,17 +377,20 @@ export const store = {
     const sane = (v) => !!v && !Number.isNaN(new Date(v).getTime());
     const dated = (r) => (sane(r.createdAt) ? r
       : { ...r, createdAt: sane(r.updatedAt) ? r.updatedAt : new Date().toISOString() });
-    this.places = readLocal(read(K_PLACES, []), 'places').map(dated);
-    this.routes = readLocal(read(K_ROUTES, []), 'routes').map(dated);
-    this.folios = readLocal(read(K_FOLIOS, []), 'folios');
-    this.tags = read(K_TAGS, []);
-    this.correspondents = read(K_CORR, []);
-    this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
+    this.places = readAll(K_PLACES, 'places', a => readLocal(a, 'places')).map(dated);
+    this.routes = readAll(K_ROUTES, 'paths', a => readLocal(a, 'routes')).map(dated);
+    this.folios = readAll(K_FOLIOS, 'folios', a => readLocal(a, 'folios'));
+    this.tags = readAll(K_TAGS, 'domains', a => readLocal(a, 'tags'));
+    this.correspondents = readAll(K_CORR, 'voices', a => readLocal(a, 'correspondents'));
+    this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}, 'object') };
     // whatever was healed above is written down, so it heals only once
     if (this.places.some(p => p.createdAt) || this.routes.some(r => r.createdAt)) {
-      const needsWrite = read(K_PLACES, []).some(p => !sane(p.createdAt))
-        || read(K_ROUTES, []).some(r => !sane(r.createdAt));
-      if (needsWrite) { this.savePlaces(); this.saveRoutes(); }
+      const needsWrite = read(K_PLACES, [], 'array').some(p => !sane(p.createdAt))
+        || read(K_ROUTES, [], 'array').some(r => !sane(r.createdAt));
+      // write() refuses a sealed key on its own, but not asking is clearer
+      if (needsWrite && !sealed.has(K_PLACES) && !sealed.has(K_ROUTES)) {
+        this.savePlaces(); this.saveRoutes();
+      }
     }
     // migrate hex-era tags onto the hue wheel
     let migrated = false;
@@ -751,9 +808,9 @@ export const store = {
   // any field a later release happened to add. It is the same object as the
   // link now. Only the carrier differs.
   outward() {
-    const places = this.places.filter(p => !p.private);
+    const places = this.places.filter(mayLeave);
     // a way whose ends cannot be hidden is not handed over at all
-    const routes = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean);
+    const routes = this.routes.filter(mayLeave).map(trimWay).filter(Boolean);
     const used = new Set([...places, ...routes].flatMap(x => x.tags || []));
     const tags = this.tags.filter(t => used.has(t.id));
     return buildDisclosure({ places, routes, tags, author: this.settings.authorName || '' });
@@ -808,12 +865,12 @@ export const store = {
   exportKML() {
     const esc = t => String(t ?? '').replace(/[<>&'"]/g, c => (
       { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
-    const marks = this.places.filter(p => !p.private).map(p => `    <Placemark>
+    const marks = this.places.filter(mayLeave).map(p => `    <Placemark>
       <name>${esc(p.name)}</name>
       <description>${esc([p.note, [p.address, p.city, p.country].filter(Boolean).join(', ')].filter(Boolean).join('\n\n'))}</description>
       <Point><coordinates>${p.lng},${p.lat},0</coordinates></Point>
     </Placemark>`).join('\n');
-    const lines = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean).map(r => `    <Placemark>
+    const lines = this.routes.filter(mayLeave).map(trimWay).filter(Boolean).map(r => `    <Placemark>
       <name>${esc(r.name)}</name>
       <LineString><tessellate>1</tessellate><coordinates>${r.path.map(pt => `${pt.lng},${pt.lat},${pt.ele ?? 0}`).join(' ')}</coordinates></LineString>
     </Placemark>`).join('\n');
@@ -833,7 +890,7 @@ ${[marks, lines].filter(Boolean).join('\n')}
       return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
     };
     const head = ['name', 'latitude', 'longitude', 'address', 'city', 'country', 'tags', 'been', 'note', 'link'];
-    const rows = this.places.filter(p => !p.private).map(p => [
+    const rows = this.places.filter(mayLeave).map(p => [
       p.name, p.lat, p.lng, p.address, p.city, p.country,
       p.tags.map(id => this.tagById(id)?.name).filter(Boolean).join('; '),
       p.status === 'visited' ? 'yes' : 'no',
@@ -845,12 +902,12 @@ ${[marks, lines].filter(Boolean).join('\n')}
   // markdown, so an atlas outlives every program that can read the rest
   exportMarkdown() {
     const byCity = new Map();
-    this.places.filter(p => !p.private).forEach(p => {
+    this.places.filter(mayLeave).forEach(p => {
       const key = p.city || p.country || 'elsewhere';
       if (!byCity.has(key)) byCity.set(key, []);
       byCity.get(key).push(p);
     });
-    const out = ['# An atlas', '', `${this.places.filter(p => !p.private).length} places, kept in a browser and written out on ${new Date().toISOString().slice(0, 10)}.`, ''];
+    const out = ['# An atlas', '', `${this.places.filter(mayLeave).length} places, kept in a browser and written out on ${new Date().toISOString().slice(0, 10)}.`, ''];
     [...byCity.keys()].sort().forEach(city => {
       out.push(`## ${city}`, '');
       byCity.get(city).sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
@@ -870,7 +927,7 @@ ${[marks, lines].filter(Boolean).join('\n')}
         }
       });
     });
-    const ways = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean);
+    const ways = this.routes.filter(mayLeave).map(trimWay).filter(Boolean);
     if (ways.length) {
       out.push('## Ways', '');
       ways.forEach(r => {
@@ -885,7 +942,7 @@ ${[marks, lines].filter(Boolean).join('\n')}
   exportGeoJSON() {
     return JSON.stringify({
       type: 'FeatureCollection',
-      features: this.places.filter(p => !p.private).map(p => ({
+      features: this.places.filter(mayLeave).map(p => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         properties: {

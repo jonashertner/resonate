@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf75';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf75';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf75';
-import * as mapView from './map.js?v=rf75';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf75';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf75';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf75';
-import { exifGPS } from './exif.js?v=rf75';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf75';
-import * as photoStore from './photos.js?v=rf75';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf75';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf76';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf76';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf76';
+import * as mapView from './map.js?v=rf76';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf76';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf76';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf76';
+import { exifGPS } from './exif.js?v=rf76';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf76';
+import * as photoStore from './photos.js?v=rf76';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf76';
 
 // ---------- helpers ----------
 
@@ -29,6 +29,43 @@ function esc(s) {
 function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// ---------- writing that survives the tab closing ----------
+//
+// A note used to be saved on a 400ms debounce and nothing else. Type a
+// sentence and close the tab inside that breath and the sentence was gone:
+// the timer never fired, and nothing on screen had suggested the words were
+// not yet kept. A debounce is a courtesy to the disk, and it must never be
+// the only thing standing between a person and their own writing.
+//
+// So a pending write is held here rather than in a closure, and anything that
+// means "this moment is over" flushes it first: leaving the field, closing
+// the plate, hiding the tab, or the page going away. pagehide and
+// visibilitychange are the last events a browser reliably gives, and on a
+// phone they are often the only ones.
+const pending = new Map();
+
+function later(key, fn, ms = 400) {
+  const held = pending.get(key);
+  if (held) clearTimeout(held.timer);
+  const timer = setTimeout(() => { pending.delete(key); fn(); }, ms);
+  pending.set(key, { timer, fn });
+}
+
+function flushWrites() {
+  for (const [key, { timer, fn }] of [...pending]) {
+    clearTimeout(timer);
+    pending.delete(key);
+    try { fn(); } catch { /* the next flush is not this one's to lose */ }
+  }
+}
+
+// a field that writes on a delay, and gives the words up the moment the
+// person looks away from it
+function writesLater(el, key, fn, ms = 400) {
+  el.addEventListener('input', () => later(key, () => fn(el.value), ms));
+  el.addEventListener('blur', () => flushWrites());
 }
 
 function safeUrl(u) {
@@ -111,7 +148,7 @@ const state = {
 
 function allPlaces() { return store.places; }
 // the pool anything may be handed from: a place that never leaves is not in it
-function sharablePlaces() { return store.places.filter(p => !p.private); }
+function sharablePlaces() { return store.places.filter(mayLeave); }
 // A way whose ends cannot be hidden is not handed over.
 //
 // Trimming used to give up on any path with fewer than eight points and hand
@@ -124,7 +161,7 @@ function sharableWays() {
   const ways = [];
   const tooShort = [];
   for (const r of store.routes) {
-    if (r.private) continue;
+    if (!mayLeave(r)) continue;
     const out = store.trimWay(r);
     if (out) ways.push(out); else tooShort.push(r);
   }
@@ -313,7 +350,11 @@ const KEY_NAMES = {
 };
 
 async function tellAboutDamage(damaged) {
-  const named = damaged.map(d => KEY_NAMES[d.key] || d.key).join(', ');
+  // say which part, and what is wrong with it: "your places" alone leaves a
+  // person guessing whether the file is gone or merely refused
+  const named = damaged
+    .map(d => `${KEY_NAMES[d.key] || d.key}${d.why ? ` (${d.why})` : ''}`)
+    .join('\n');
   const go = await ask(
     `Something on this device will not read: ${named}.\n\n`
     + 'It has not been thrown away and it has not been written over. A copy of the exact bytes is set aside on this device, and nothing will be saved into this part of your atlas until you choose.\n\n'
@@ -875,6 +916,8 @@ function restoreFocus(id) {
 }
 
 function popSurface() {
+  // a surface closing is a moment ending: anything half written goes down now
+  flushWrites();
   const id = surfaces.pop();
   if (!id) return false;
   surfaceEl(id).hidden = true;
@@ -886,6 +929,7 @@ function popSurface() {
 }
 
 function closeSurface(id) {
+  flushWrites();
   const i = surfaces.indexOf(id);
   if (i === -1) return;
   surfaces.splice(i, 1);
@@ -1235,7 +1279,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     }
   });
 
-  $('#pNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
+  writesLater($('#pNote'), `note:${place.id}`, (v) => save({ note: v }));
   $('#pUrl').addEventListener('change', (e) => { save({ url: e.target.value.trim() }); renderPlate(place); });
 
 
@@ -1672,7 +1716,7 @@ function renderRoutePlate(route) {
     const tags = route.tags.includes(id) ? route.tags.filter(t => t !== id) : [...route.tags, id];
     if (save({ tags })) renderRoutePlate(routeById(route.id));
   }));
-  $('#pRouteNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
+  writesLater($('#pRouteNote'), `note:${route.id}`, (v) => save({ note: v }));
   $('#pRouteGpx').addEventListener('click', () => downloadGPX(route));
   $('#pRoutePrivate').addEventListener('click', () => {
     const now = !route.private;
@@ -2347,8 +2391,8 @@ function openFolioShelf() {
 
 function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [], cap = 0 } = {}) {
   const kept = folioId ? store.folioById(folioId) : null;
-  const pool = (kept || fresh ? allPlaces() : (places || filteredPlaces())).filter(p => !p.private);
-  const wayPool = allRoutes().filter(r => !r.private);
+  const pool = (kept || fresh ? allPlaces() : (places || filteredPlaces())).filter(mayLeave);
+  const wayPool = allRoutes().filter(mayLeave);
   const chosen = new Set(
     kept ? kept.placeIds.filter(id => placeById(id))
       : fresh ? preselect.filter(id => placeById(id))
@@ -2679,10 +2723,41 @@ async function sheetPictures(places) {
   return out;
 }
 
+// Printing is the one way out of here that carries photographs, and it was
+// the one with nothing to read first. Every other exit states what it is
+// about to hand over; this went from a button straight to the system dialog.
+// A sheet is given to one person by hand, which is the reasoning that lets
+// photographs onto it at all, but the same button says "or save as pdf", and
+// a pdf is a file like any other. So the count is shown, and the pictures are
+// a choice rather than an assumption.
 async function printSheet(opts) {
   if (!opts.places.length && !(opts.routes || []).length) return toast('nothing to print yet');
   const pictures = await sheetPictures(opts.places);
-  buildSheet({ ...opts, pictures });
+
+  const nPics = [...pictures.values()].length;
+  const notes = opts.places.filter(p => p.note).length + (opts.routes || []).filter(r => r.note).length;
+  const lines = [
+    `${opts.places.length} place${opts.places.length === 1 ? '' : 's'}`,
+    (opts.routes || []).length ? `${opts.routes.length} path${opts.routes.length === 1 ? '' : 's'}` : '',
+    notes ? `${notes} note${notes === 1 ? '' : 's'}, in full` : '',
+    'exact coordinates',
+    opts.author ? `the byline ${opts.author}` : '',
+  ].filter(Boolean).join(' · ');
+
+  let withPictures = false;
+  if (nPics) {
+    const word = await ask(
+      `This sheet carries ${lines}.\n\n`
+      + `${nPics} photograph${nPics === 1 ? '' : 's'} can go on it too. A sheet is handed to one person by someone standing there, which is why they are allowed on paper at all. Saved as a pdf it is a file like any other, and a file can be copied, forwarded and searched. Resonate cannot recall either one.`,
+      { yes: 'print with the photographs', also: 'print without them', no: 'not now' });
+    if (!word) return;
+    withPictures = word === true;
+  } else {
+    if (!await ask(`This sheet carries ${lines}. It can be copied, scanned or forwarded, and Resonate cannot recall it.`,
+      { yes: 'print it', no: 'not now' })) return;
+  }
+
+  buildSheet({ ...opts, pictures: withPictures ? pictures : null });
   // print() does not wait for an image, so the page waits here instead. a
   // picture that will not decode is dropped rather than printed as a hole.
   await Promise.all([...$$('#sheet img')].map(img => img.decode().catch(() => {
@@ -3781,6 +3856,15 @@ function renderPaletteResults(q) {
 }
 
 
+// Did this visit begin with something in hand? A link someone sent, a place
+// shared in from a phone, or the walk back from the club door. All of those
+// are errands, and an errand is not the moment for a welcome.
+function arrivedHolding() {
+  if (location.hash.startsWith('#m=')) return true;
+  const q = new URLSearchParams(location.search);
+  return q.has('shared') || q.has('title') || q.has('text') || q.has('url') || q.has('club');
+}
+
 // ---------- the name walks to its corner ----------
 //
 // It used to get there by transitioning left, top, font-size and letter
@@ -3857,13 +3941,17 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
   // exactly what they mean. `skip` stays for callers that have their own
   // reason; nothing passes it today.
   if (skip || RM) {
-    // the element carries autoplay, and firefox and webkit honour it whether
-    // or not the overlay was ever raised. a person who asked for stillness
-    // should not be paying to decode a film they will not see, so the source
-    // goes and the download with it.
-    try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* it was never going to play */ }
+    // nothing to undo: the element was given no source, so no film has been
+    // asked for and none will be
     store.settings.introSeen = true; store.saveSettings(); onDone(); return;
   }
+  // the film is wanted, so now it may be fetched. autoplay is set here rather
+  // than in the markup for the same reason the source is: a programmatic
+  // play() with no gesture behind it is refused often enough to leave a
+  // frozen frame, and the attribute is what makes a muted film reliable.
+  video.autoplay = true;
+  video.preload = 'auto';
+  if (!video.getAttribute('src')) { video.setAttribute('src', 'assets/intro.mp4'); video.load(); }
   el.classList.toggle('brief', brief);
   el.hidden = false;
   let raf = 0;
@@ -3942,7 +4030,12 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
   // the film is the evening; the drawn scene only stands in until it arrives,
   // or for good if it never does
   let filmUp = false;
-  cutoff = setTimeout(finish, brief ? 1600 : 6200);
+  // The same patience either way. `brief` shortens the dissolve, and it used
+  // to shorten this too, which was harmless while the film was precached and
+  // is not now that it is fetched when wanted: a returning visitor on a cold
+  // cache would have had the drawn scene cut in over a film that was merely
+  // still arriving. armCutoff replaces this the moment the film is ready.
+  cutoff = setTimeout(finish, 6200);
 
   // Enter, Escape and Space belong to the film while it is running, and are
   // handed back the moment it is not
@@ -4143,52 +4236,21 @@ function init() {
     setTimeout(() => document.body.classList.remove('greet'), 5600);
   };
 
-  // read the link first: a visitor who was handed something is answering a
-  // person, not starting an atlas, and must never be offered a first-run
-  // choice over the top of it. an atlas that already exists has answered
-  // that question too.
-  const payload = parseShareHash();
-  if (payload) openReport(payload);
-
-  // The evening opens every visit.
-  //
-  // It is short, it is the same each time, and it is the first thing this app
-  // is: an hour at a long table, dissolving into a map. The only person who
-  // does not get it is the one whose device has asked for less movement, and
-  // that is their instruction rather than our guess. A returning visitor gets
-  // the shorter fade at the end, which is the whole of what "brief" means.
-  runIntro(() => {
-    if (store.settings.chosen || store.places.length || payload) {
-      if (!payload) startWelcome();
-      return;
-    }
-    openThreshold();
-  }, { brief: !!store.settings.introSeen });
-
-  setHeroExit(() => {
-    if (!document.body.classList.contains('hero')) return;
-    walkNameHome();
-  });
-  if (!location.hash.startsWith('#m=')) {
-    document.body.classList.add('hero');
-    const exit = () => {
-      if (!$('#intro').hidden || modalUp()) {
-        ['keydown', 'wheel'].forEach(ev =>
-          document.addEventListener(ev, exit, { once: true, passive: true }));
-        return;
-      }
-      leaveHero();
-    };
-    mapView.onFirstUse(exit);
-    ['keydown', 'wheel'].forEach(ev =>
-      document.addEventListener(ev, exit, { once: true, passive: true }));
-    $('#fmCommand').addEventListener('click', exit, { once: true });
-    $('#fmIndex').addEventListener('click', exit, { once: true });
-  }
-
   // plain words, then a choice: nothing is seeded and nobody is named until
   // the visitor has said which start they want
   let thresholdWired = false;
+
+  // The first-run door is wired before the film, not after it.
+  //
+  // runIntro calls its callback synchronously when it decides not to play,
+  // which it does for anyone whose device asks for less movement. The
+  // callback's openThreshold() therefore used to resolve to the module level
+  // no-op above, and a brand new visitor on such a device met an empty field
+  // with a wordmark on it and no way in but a question mark in the corner.
+  // Nothing threw. `chosen` stayed false, so it happened again every visit.
+  //
+  // Order is the whole fix: nothing that opens a surface may be handed to
+  // something that might call it back before this function has finished.
   setThresholdOpener(function openThreshold() {
     const th = $('#threshold');
     if (thresholdWired) return raiseDialog(th, 'What Resonate is');
@@ -4259,6 +4321,54 @@ function init() {
     });
     raiseDialog(th, 'What Resonate is');
   });
+
+  // read the link first: a visitor who was handed something is answering a
+  // person, not starting an atlas, and must never be offered a first-run
+  // choice over the top of it. an atlas that already exists has answered
+  // that question too.
+  const payload = parseShareHash();
+  if (payload) openReport(payload);
+
+  // The evening opens every visit.
+  //
+  // It is short, it is the same each time, and it is the first thing this app
+  // is: an hour at a long table, dissolving into a map. The only person who
+  // does not get it is the one whose device has asked for less movement, and
+  // that is their instruction rather than our guess. A returning visitor gets
+  // the shorter fade at the end, which is the whole of what "brief" means.
+  runIntro(() => {
+    if (store.settings.chosen || store.places.length || payload) {
+      if (!payload) startWelcome();
+      return;
+    }
+    openThreshold();
+    // Someone who arrived holding something did not come for a title
+    // sequence. A folio, an ask, an atlas, a place shared in from a phone, or
+    // a return from the club door: the thing they came for is already
+    // rendered underneath, and the film would be sitting on top of it. The
+    // evening is for arriving at Resonate, not for arriving at a person.
+  }, { brief: !!store.settings.introSeen, skip: arrivedHolding() });
+
+  setHeroExit(() => {
+    if (!document.body.classList.contains('hero')) return;
+    walkNameHome();
+  });
+  if (!location.hash.startsWith('#m=')) {
+    document.body.classList.add('hero');
+    const exit = () => {
+      if (!$('#intro').hidden || modalUp()) {
+        ['keydown', 'wheel'].forEach(ev =>
+          document.addEventListener(ev, exit, { once: true, passive: true }));
+        return;
+      }
+      leaveHero();
+    };
+    mapView.onFirstUse(exit);
+    ['keydown', 'wheel'].forEach(ev =>
+      document.addEventListener(ev, exit, { once: true, passive: true }));
+    $('#fmCommand').addEventListener('click', exit, { once: true });
+    $('#fmIndex').addEventListener('click', exit, { once: true });
+  }
 
   setTimeout(() => document.body.classList.remove('boot'), 700);
 
@@ -4407,6 +4517,13 @@ function init() {
     $('#paletteOverlay').style.paddingBottom = `${Math.max(0, innerHeight - visualViewport.height) + 20}px`;
   });
 
+  // The last events a browser reliably gives before a page goes away, and on
+  // a phone often the only ones: a tab switched, an app backgrounded, a
+  // window closed. Whatever is still on its way to disk goes now.
+  addEventListener('pagehide', flushWrites);
+  addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWrites(); });
+  addEventListener('beforeunload', flushWrites);
+
   window.addEventListener('resize', debounce(() => mapView.invalidate(), 150));
 
   // another tab wrote the atlas: take its truth rather than overwriting it
@@ -4477,8 +4594,13 @@ function init() {
     }
   });
 
-  fetch(`${COMMONS}/index.json`, { cache: 'no-cache' })
-    .then(r => r.json()).then(ix => { newsIndex = normIndex(ix); }).catch(() => {});
+  // The commons is not asked for at boot.
+  //
+  // The how page tells a reader the newsstand list comes from a separate
+  // address "only when you open the stand", and this line made that untrue:
+  // every cold load of a private atlas reached out to github before the
+  // person had asked for anything public. A small request and a large
+  // contradiction. The newsstand fetches it for itself when it opens.
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

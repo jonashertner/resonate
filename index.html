@@ -12,17 +12,19 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf75">
+<link rel="stylesheet" href="css/style.css?v=rf76">
 </head>
 <body class="boot">
 
 <!-- first visit: an evening at a long table, dissolving into the map -->
 <div id="intro" hidden>
-  <!-- autoplay stays: a programmatic play() with no gesture behind it is
-       refused often enough to leave a frozen frame where the film should be.
-       a device asking for less movement is answered in runIntro, which takes
-       the source away before anything is decoded. -->
-  <video id="introVideo" autoplay muted playsinline preload="auto" src="assets/intro.mp4"></video>
+  <!-- No src here. The parser would begin fetching it before any script had
+       read the motion preference, so a person who asked for stillness paid a
+       quarter of a megabyte for a film they never saw: taking the attribute
+       away afterwards cancelled nothing, the request had already gone.
+       runIntro attaches the source, and autoplay with it, only once it knows
+       the film is wanted. -->
+  <video id="introVideo" muted playsinline></video>
   <canvas id="introCanvas"></canvas>
   <div class="intro-grain"></div>
   <span class="intro-mark"><span class="intro-mark-word">Resonate</span></span>
@@ -142,7 +144,7 @@
 
     <div class="sec-head">what it keeps</div>
     <p>Your places, tags, notes, photos. All of it stays on your device, in this browser, under this address. The records sit in the browser's simple store and the photographs in its database beside them, where there is room. Photos never travel in a link. If you join the club they travel only inside the sealed envelope, unreadable without your phrase. The free atlas sends us nothing; there is no analytics of any kind on this page.</p>
-    <p>A photograph here is the thing that reminds you, not the thing that convinces someone else. It can begin a place, if the picture knows where it was taken, and it sits on that place's own page for you to find again. It travels nowhere: not in a link, not in a file you hand over, not on the newsstand. A note is written a word at a time and says what you meant; a photograph is caught whole, and takes in whoever was at the next table and the number on the door. Those are not the same thing to hand a stranger, so only one of them is handed over. The single exception is paper: print a folio or the whole atlas and the photographs are typeset with it, because a printed page is given to one person, by hand, and cannot be forwarded, indexed, or asked for back.</p>
+    <p>A photograph here is the thing that reminds you, not the thing that convinces someone else. It can begin a place, if the picture knows where it was taken, and it sits on that place's own page for you to find again. It travels nowhere: not in a link, not in a file you hand over, not on the newsstand. A note is written a word at a time and says what you meant; a photograph is caught whole, and takes in whoever was at the next table and the number on the door. Those are not the same thing to hand a stranger, so only one of them is handed over. The single exception is printing: print a folio or the whole atlas and the photographs are typeset with it, because a sheet is handed to one person, deliberately, by someone standing there. Save it as a pdf instead and that reasoning stops holding: a pdf is a file, and a file can be copied, forwarded and searched like any other. So the app counts what a print will carry and shows you the count before the dialog opens, and the photographs are yours to leave out.</p>
     <p>If something on this device will not read, you are told before anything else happens, and nothing is written over it. A damaged store used to come back as an empty list, so the atlas looked empty and the next keystroke saved that emptiness over the damaged bytes. Now the bytes stay exactly where they are, a copy is set aside beside them under a name that says what it is, and that part of the atlas refuses every write until you choose: export what still reads, or start that part fresh. Until you choose, that part is read only, on purpose. Starting fresh deletes nothing; it means the app stops waiting and begins writing again, and the copy set aside stays on this device.</p>
 
     <div class="sec-head">how a place arrives</div>
@@ -168,7 +170,7 @@
 
     <div class="sec-head">folios</div>
     <p>A folio is a titled set of places, kept on your shelf for yourself. Keeping one shares nothing. It holds references rather than copies, so it follows your atlas as you improve it: rename a place and the folio says the new name. File a place into one from the place itself, or compose a folio from the whole atlas.</p>
-    <p>When you choose to, the same folio can be handed to one person as a link, offered to the newsstand, or printed. Only then does anything leave, and only what is enclosed, without photographs. The link is a copy of that moment; the shelf keeps following your atlas.</p>
+    <p>When you choose to, the same folio can be handed to one person as a link, offered to the newsstand, or printed. Only then does anything leave, and only what is enclosed. A link and a file carry no photographs; a printed sheet or pdf does, and says so before it is made. The link is a copy of that moment; the shelf keeps following your atlas.</p>
 
     <div class="sec-head">how matching works</div>
     <p>You hand a folio to one person. A titled set of places under your byline. When someone hands you theirs, your device compares the two atlases: what you both hold, what you both love, where they know ground you do not. The verdict is a word, never a score, and it is computed here, on your device. Keeping a place is already the recommendation, so the atlas asks for no rating beside it. Nothing about it leaves.</p>
@@ -301,6 +303,6 @@
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
 <script src="vendor/argon2/argon2.umd.min.js" integrity="sha384-tP0Wy54CKmng7i9EoTlPySD0hBx6Octj0VS6MfwlnUu111MPa+JLm0CCbep6XJ1W"></script>
-<script type="module" src="js/app.js?v=rf75"></script>
+<script type="module" src="js/app.js?v=rf76"></script>
 </body>
 </html>

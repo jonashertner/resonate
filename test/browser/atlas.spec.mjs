@@ -340,10 +340,19 @@ test('a photograph is typeset on the printed page, and nowhere a link can reach'
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await new Promise(r => setTimeout(r, 300));
     document.querySelector('.cmd-row')?.click();
+
+    // printing now names what the sheet will carry before the dialog opens,
+    // because it is the one exit that carries photographs and a pdf is a file
+    // like any other. say yes to them.
+    await new Promise(r => setTimeout(r, 500));
+    const asked = document.querySelector('#askWhat')?.textContent || '';
+    document.querySelector('#askGo')?.click();
+
     await new Promise(r => setTimeout(r, 2000));
     window.print = real;
 
     return {
+      asked,
       figuresAtPrint: atPrint ? atPrint.length : 0,
       allDecodedAtPrint: atPrint ? atPrint.every(Boolean) : false,
       // and the same picture must appear in nothing a stranger is handed
@@ -355,6 +364,7 @@ test('a photograph is typeset on the printed page, and nowhere a link can reach'
     };
   });
 
+  expect(out.asked, 'nothing named the photographs before the dialog opened').toMatch(/photograph/);
   expect(out.figuresAtPrint, 'the picture never reached the page').toBeGreaterThan(0);
   expect(out.allDecodedAtPrint, 'print was called over an image that had not arrived').toBe(true);
   for (const where of ['inShare', 'inKml', 'inMarkdown', 'inGeoJSON', 'inCsv']) {
@@ -417,10 +427,20 @@ test.describe('the evening', () => {
     const canDecode = await page.evaluate(() =>
       !!document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"'));
 
-    if (canDecode) {
+    // the film is fetched when it is wanted rather than precached, so give it
+    // the moment that costs. if it arrives, it must roll.
+    const arrived = await page.evaluate(() => new Promise((ok) => {
+      const v = document.querySelector('#introVideo');
+      if (v.readyState >= 2) return ok(true);
+      const done = () => ok(v.readyState >= 2);
+      v.addEventListener('loadeddata', done, { once: true });
+      setTimeout(done, 4000);
+    }));
+
+    if (canDecode && arrived) {
       await expect.poll(
         () => page.evaluate(() => document.querySelector('#introVideo').currentTime),
-        { message: 'the film never rolled: it stood on its first frame', timeout: 6000 },
+        { message: 'the film arrived and never rolled: it stood on its first frame', timeout: 6000 },
       ).toBeGreaterThan(0.4);
     } else {
       // no film to be had: the drawn scene must be carrying the evening, and
@@ -432,4 +452,74 @@ test.describe('the evening', () => {
 
     await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
   });
+});
+
+// ---------- what only a browser can be asked ----------
+
+// A brand new visitor whose device asks for less movement used to meet an
+// empty field with a wordmark on it and no way in. runIntro calls back
+// synchronously when it decides not to play, and the threshold opener was
+// still an empty function at that moment: nothing threw, nothing opened, and
+// because `chosen` never became true it happened again on every visit. The
+// suite could not see it because every reduced-motion test seeded an atlas.
+test('a first visit under reduced motion still opens the door', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const pattern of OFF) await page.route(pattern, r => r.abort());
+  await page.goto('/');            // nothing seeded: this is someone's first minute
+  await expect(page.locator('#threshold')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#thSample')).toBeVisible();
+  await expect(page.locator('#thEmpty')).toBeVisible();
+});
+
+test('a first visit that can see the film opens the same door after it', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  for (const pattern of OFF) await page.route(pattern, r => r.abort());
+  await page.goto('/');
+  await expect(page.locator('#threshold')).toBeVisible({ timeout: 15000 });
+});
+
+// The film used to be fetched by the parser before any script had read the
+// motion preference, so a person who asked for stillness paid for a film they
+// never saw. Taking the source away afterwards cancelled nothing.
+test('a device asking for less movement never asks for the film', async ({ page }) => {
+  const asked = [];
+  page.on('request', r => { if (r.url().includes('intro.mp4')) asked.push(r.url()); });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const pattern of OFF) await page.route(pattern, r => r.abort());
+  await page.goto('/');
+  await page.waitForTimeout(1500);
+  expect(asked, `the film was requested: ${asked.join(', ')}`).toHaveLength(0);
+});
+
+// The how page says the newsstand list is fetched only when the stand is
+// opened. Boot used to fetch it anyway, so every cold load of a private atlas
+// reached a github address before the person had asked for anything public.
+test('a private atlas reaches no commons until something public is asked for', async ({ page }) => {
+  const reached = [];
+  page.on('request', r => { if (r.url().includes('resonate-commons')) reached.push(r.url()); });
+  await open(page);
+  await page.waitForTimeout(2000);
+  expect(reached, `the commons was contacted unasked: ${reached.join(', ')}`).toHaveLength(0);
+});
+
+// A person arriving on a link came for the sender. The film was playing over
+// the top of the folio they had been handed.
+test('an arriving folio is not covered by the evening', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  for (const pattern of OFF) await page.route(pattern, r => r.abort());
+  await open(page);
+  const url = await page.evaluate(async () => {
+    const v = new URL(document.querySelector('script[type=module]').src).search;
+    const { store } = await import(`/js/store.js${v}`);
+    const { makeShareUrl } = await import(`/js/share.js${v}`);
+    store.load();
+    return makeShareUrl([], store.places.slice(0, 2), 'ada', []);
+  });
+  // a hash-only navigation does not run boot again, and boot is what reads
+  // the link. this is the arrival a recipient actually makes.
+  await page.goto(url);
+  await page.reload();
+  // the sender's folio is what this visit is for, and it is not behind a film
+  await expect(page.locator('#reportOverlay')).toBeVisible({ timeout: 8000 });
+  expect(await page.locator('#intro').isHidden(), 'the film was laid over the sender').toBe(true);
 });

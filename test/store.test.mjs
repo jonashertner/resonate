@@ -908,3 +908,79 @@ test('a photograph is the same photograph whether the file inlines it or this de
   assert.equal(seen.differ, 0, 'only the carrier differs, and a carrier is not a change');
   assert.equal(seen.identical, 1);
 });
+
+// ---------- valid json of the wrong shape is corruption too ----------
+
+test('a collection stored as the wrong kind of thing is sealed, not crashed into', () => {
+  fresh();
+  // perfectly good json, and not a list of records. this used to sail through
+  // read() and throw on the next line that touched it, on every load
+  localStorage.setItem('resonate.tags.v1', '{}');
+  store.load();
+  assert.deepEqual(store.tags, [], 'nothing half formed is left where the app will use it');
+  const sealed = unreadableKeys().map(k => k.key);
+  assert.ok(sealed.includes('resonate.tags.v1'), `the key was not sealed: ${sealed.join(', ')}`);
+  assert.equal(localStorage.getItem('resonate.tags.v1'), '{}', 'and the bytes are exactly where they were');
+  releaseUnreadable('resonate.tags.v1');
+});
+
+test('one record the reader turns down holds back the whole collection', () => {
+  fresh();
+  // two places, one without coordinates. the reader keeps one; keeping one and
+  // then healing dates over the top used to write the shorter list back and
+  // destroy the other
+  const both = JSON.stringify([
+    { id: 'ok', name: 'Kept', lat: 46, lng: 8, tags: [] },
+    { id: 'bad', name: 'No coordinates', tags: [] },
+  ]);
+  localStorage.setItem('resonate.places.v1', both);
+  store.load();
+  assert.equal(store.places.length, 0, 'a collection is all of its records or none');
+  assert.equal(localStorage.getItem('resonate.places.v1'), both, 'and the original is byte for byte where it was');
+  const why = unreadableKeys().find(k => k.key === 'resonate.places.v1')?.why || '';
+  assert.match(why, /1 of 2/, `the person is told how much: ${why}`);
+  releaseUnreadable('resonate.places.v1');
+});
+
+test('settings stored as a list do not become the settings', () => {
+  fresh();
+  localStorage.setItem('resonate.settings.v1', '["not", "settings"]');
+  store.load();
+  assert.equal(store.settings.theme, 'auto', 'the defaults stand');
+  assert.ok(unreadableKeys().some(k => k.key === 'resonate.settings.v1'));
+  releaseUnreadable('resonate.settings.v1');
+});
+
+test('a collection that reads whole is loaded whole, and still heals its dates', () => {
+  fresh();
+  localStorage.setItem('resonate.places.v1', JSON.stringify([
+    { id: 'd1', name: 'One', lat: 46, lng: 8, tags: [], createdAt: '' },
+    { id: 'd2', name: 'Two', lat: 47, lng: 9, tags: [], createdAt: '2024-05-12T09:00:00Z' },
+  ]));
+  store.load();
+  assert.equal(store.places.length, 2, 'nothing is sealed when nothing is wrong');
+  assert.deepEqual(unreadableKeys(), []);
+  assert.ok(store.placeById('d1').createdAt, 'and the empty date was still healed');
+});
+
+// ---------- a loan is not a recommendation ----------
+
+test('a sample record is in nothing a stranger is handed', async () => {
+  fresh();
+  store.addPlace(newPlace({ id: 'mine', name: 'My Own Place', lat: 46, lng: 8 }));
+  store.addPlace(newPlace({ id: 'lent', name: 'A Demonstration', lat: 47, lng: 9, sample: true }));
+  store.addRoute(newRoute({ id: 'lentway', name: 'A Demonstration Path', sample: true,
+    path: Array.from({ length: 20 }, (_, i) => ({ lat: 46 + i * 0.01, lng: 8 })) }));
+
+  const outward = [store.exportShareJSON(), store.exportKML(), store.exportCSV(),
+    store.exportMarkdown(), store.exportGeoJSON()];
+  for (const text of outward) {
+    assert.equal(text.includes('A Demonstration'), false, 'a place on loan travelled as the sender’s own');
+    assert.ok(text.includes('My Own Place'), 'and the real record still travels');
+  }
+
+  // the person's own device and their own backup keep everything
+  const full = JSON.parse(await store.exportJSON());
+  assert.equal(full.places.length, 2, 'a backup is not the place to tidy up');
+  assert.ok(JSON.parse(store.recordsJSON()).places.some(p => p.sample), 'and neither is a snapshot');
+});
