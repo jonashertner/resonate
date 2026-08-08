@@ -103,7 +103,7 @@ lives on its own address, resonate.select, and the commons stays where it was.
 ## Known limits
 
 **Structured records are still in `localStorage`.** Photographs moved to
-IndexedDB, which is where the room is, but places, ways, folios, domains,
+IndexedDB, which is where the room is, but places, paths, folios, domains,
 voices and settings have not. That is a real limit and rf67 did not lift it.
 Each collection is one JSON string, so changing one place rewrites the whole
 collection, and the cost of a write grows with the size of the atlas. The API
@@ -157,11 +157,11 @@ count shown on the panel before you hand anything over are all built from one
 object. Before this the file was assembled separately by spreading whole
 records, so it disclosed fields the panel never mentioned, including when each
 record was created and last changed, and every domain in the atlas rather than
-only the domains those records use. A way whose ends you asked to be trimmed is
+only the domains those records use. A path whose ends you asked to be trimmed is
 now trimmed by distance, a quarter kilometre from each end with an interpolated
 endpoint, and the distance, ascent, descent and hours beside it are recomputed
-from the trimmed shape. A way too short to lose both ends is refused rather
-than handed over whole. Before this, a way of fewer than eight points was
+from the trimmed shape. A path too short to lose both ends is refused rather
+than handed over whole. Before this, a path of fewer than eight points was
 handed over entire, which meant a two point straight line of any length left
 with both its ends.
 

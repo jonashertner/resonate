@@ -200,3 +200,17 @@ test('a point that really is at sea level keeps its reading', () => {
   });
   assert.equal(read.value.routes[0].path[0].ele, 0, 'zero written on purpose is still zero');
 });
+
+test('the loss report names a record by the word a person sees', () => {
+  // the kind strings in losses() are read out loud in the app, so they are
+  // copy: they were "way" and the app now says "path" everywhere else
+  const read = readArchive({
+    version: 4, tags: [],
+    places: [{ id: 'good', name: 'Kept', lat: 46, lng: 8, tags: [] }, { id: 'bad', name: 'No coordinates' }],
+    routes: [{ id: 'stub', name: 'One point', path: [{ lat: 46, lng: 8 }] }],
+  });
+  const kinds = losses(read).map(l => l.kind);
+  assert.ok(kinds.includes('place'), 'a place is called a place');
+  assert.ok(kinds.includes('path'), `a path is called a path, not: ${kinds.join(', ')}`);
+  assert.equal(kinds.includes('way'), false, 'and never the old word');
+});

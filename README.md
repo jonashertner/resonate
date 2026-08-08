@@ -67,7 +67,7 @@ atlas here. Nothing about what you hold or open goes back. Offering a folio
 runs the other way and is read by a person first, today through GitHub.
 
 **Take it away.** Export the whole atlas as a JSON archive carrying its
-photographs, or as GeoJSON, KML, CSV or Markdown typeset by city, or a way as
+photographs, or as GeoJSON, KML, CSV or Markdown typeset by city, or a path as
 GPX. Print it or save it as a PDF. Erase everything, whenever.
 
 **Bring a file back in.** Two operations, named, because they were never one.
@@ -77,7 +77,7 @@ what is here that the file does not hold. Then one of two words:
 
 - *Bring in what is missing* adds the records this atlas lacks and changes
   nothing it already holds. This is what a merge is, and it cannot bring back
-  an older note, a photograph that was removed, or an earlier shape of a way.
+  an older note, a photograph that was removed, or an earlier shape of a path.
 - *Make this atlas the file* replaces. The records here are gone and the
   file's stand in their place. The app cannot undo it afterwards, so the count
   of what will be lost is shown before the word is pressed.
@@ -112,8 +112,8 @@ js/kinship.js   what two atlases have to say to each other
 js/geocode.js   nominatim search and reverse, coordinate formatting
 js/share.js     atlas, folio and ask links, and the one object behind them
 js/photos.js    the picture store and the local snapshots
-js/route.js     a way measured: distance, ascent, descent, hours
-js/capture.js   a way recorded from this device's own position
+js/route.js     a path measured: distance, ascent, descent, hours
+js/capture.js   a path recorded from this device's own position
 js/club.js      the seal, the phrase, and the client that speaks to the vault
 js/exif.js      the GPS fix a camera wrote into a photo
 sw.js           the shell, network first, and the share target

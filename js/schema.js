@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf70';
+import { decodePath } from './route.js?v=rf71';
 
 export const SCHEMA_VERSION = 4;
 
@@ -230,7 +230,7 @@ export function normRoute(raw, i = 0, decode = null, caps = LIMITS, w = null) {
   } else if (typeof r.p === 'string' && decode) {
     path = decode(r.p);
   }
-  path = cutArr(w, 'way', rid, 'points', Array.isArray(path) ? path : [], caps.routePoints)
+  path = cutArr(w, 'path', rid, 'points', Array.isArray(path) ? path : [], caps.routePoints)
     .map(pt => {
       if (!isObj(pt)) return null;
       const lat = Number(pt.lat), lng = Number(pt.lng);
@@ -259,13 +259,13 @@ export function normRoute(raw, i = 0, decode = null, caps = LIMITS, w = null) {
   };
 
   const out = {
-    id: id(r.id, `r${i}`, w, 'way', caps.id ?? LIMITS.id),
+    id: id(r.id, `r${i}`, w, 'path', caps.id ?? LIMITS.id),
     kind: 'route',
-    name: cutStr(w, 'way', rid, 'name', r.name, caps.name) || 'Untitled way',
+    name: cutStr(w, 'path', rid, 'name', r.name, caps.name) || 'Untitled way',
     path,
-    city: cutStr(w, 'way', rid, 'city', r.city, caps.city ?? LIMITS.city),
-    country: cutStr(w, 'way', rid, 'country', r.country, caps.country ?? LIMITS.country),
-    tags: cutArr(w, 'way', rid, 'tags',
+    city: cutStr(w, 'path', rid, 'city', r.city, caps.city ?? LIMITS.city),
+    country: cutStr(w, 'path', rid, 'country', r.country, caps.country ?? LIMITS.country),
+    tags: cutArr(w, 'path', rid, 'tags',
       Array.isArray(r.tags) ? r.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)) : [],
       caps.tagsPerPlace),
     status: r.status === 'walked' ? 'walked' : 'wishlist',
@@ -274,8 +274,8 @@ export function normRoute(raw, i = 0, decode = null, caps = LIMITS, w = null) {
     private: r.private === true,
     trimEnds: r.trimEnds === true,
     rating: Math.max(0, Math.min(5, Math.floor(Number(r.rating) || 0))),
-    note: cutStr(w, 'way', rid, 'note', r.note, caps.note),
-    url: /^https?:\/\//i.test(String(r.url ?? '')) ? cutStr(w, 'way', rid, 'url', r.url, caps.url) : '',
+    note: cutStr(w, 'path', rid, 'note', r.note, caps.note),
+    url: /^https?:\/\//i.test(String(r.url ?? '')) ? cutStr(w, 'path', rid, 'url', r.url, caps.url) : '',
     km: nn(r.km, 100000),
     ascent: nn(r.ascent, 30000),
     descent: nn(r.descent, 30000),
@@ -290,15 +290,15 @@ export function normRoute(raw, i = 0, decode = null, caps = LIMITS, w = null) {
   };
   if (isObj(r.provenance)) {
     out.provenance = {
-      chain: cutTail(w, 'way', rid, 'earlier bylines',
+      chain: cutTail(w, 'path', rid, 'earlier bylines',
         Array.isArray(r.provenance.chain)
           ? r.provenance.chain
             .filter(isObj)
-            .map(h => ({ name: cutStr(w, 'way', rid, 'a byline', h.name, caps.author ?? LIMITS.author), at: str(h.at, 40) }))
+            .map(h => ({ name: cutStr(w, 'path', rid, 'a byline', h.name, caps.author ?? LIMITS.author), at: str(h.at, 40) }))
             .filter(h => h.name)
           : [],
         caps.chain ?? LIMITS.chain),
-      name: cutStr(w, 'way', rid, 'byline', r.provenance.name, caps.author ?? LIMITS.author),
+      name: cutStr(w, 'path', rid, 'byline', r.provenance.name, caps.author ?? LIMITS.author),
       sig: Number(r.provenance.sig) || 0,
       adoptedAt: str(r.provenance.adoptedAt, 40),
     };
@@ -504,7 +504,7 @@ function gather(arr, fn, cap, decode, caps, w) {
   return { kept, given: arr.length, rejected, cut: Math.max(0, arr.length - cap) };
 }
 
-const KINDS = { tags: 'domain', places: 'place', routes: 'way', folios: 'folio', correspondents: 'voice' };
+const KINDS = { tags: 'domain', places: 'place', routes: 'path', folios: 'folio', correspondents: 'voice' };
 
 // { value, cut, rejected, clipped }
 //

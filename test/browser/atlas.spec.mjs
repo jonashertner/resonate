@@ -253,7 +253,7 @@ test('a place marked as never leaving is in no file a stranger is given', async 
 // the same word, on the other kind of record. it shipped honoured on places
 // and ignored on ways in two of the five formats, which is the worst version
 // of a promise: kept where it is looked for and broken where it is not
-test('a way marked as never leaving is in no file a stranger is given', async ({ page }) => {
+test('a path marked as never leaving is in no file a stranger is given', async ({ page }) => {
   await open(page);
   const found = await page.evaluate(async () => {
     const { store, newRoute } = await import('/js/store.js');

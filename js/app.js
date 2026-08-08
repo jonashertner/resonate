@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf70';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf70';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf70';
-import * as mapView from './map.js?v=rf70';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf70';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf70';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf70';
-import { exifGPS } from './exif.js?v=rf70';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf70';
-import * as photoStore from './photos.js?v=rf70';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf70';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf71';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf71';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf71';
+import * as mapView from './map.js?v=rf71';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf71';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf71';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf71';
+import { exifGPS } from './exif.js?v=rf71';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf71';
+import * as photoStore from './photos.js?v=rf71';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf71';
 
 // ---------- helpers ----------
 
@@ -305,7 +305,7 @@ async function bringHome(parsed, { replace = false } = {}) {
 // a copy is set aside, and the person chooses what happens next.
 const KEY_NAMES = {
   'resonate.places.v1': 'your places',
-  'resonate.routes.v1': 'your ways',
+  'resonate.routes.v1': 'your paths',
   'resonate.tags.v1': 'your domains',
   'resonate.folios.v1': 'your folios',
   'resonate.correspondents.v1': 'your voices',
@@ -393,7 +393,7 @@ async function openArchive(parsed) {
   renderSettings(); renderAll();
   if (store.places.length) mapView.fitAll(store.places);
   if (word === 'also') {
-    toast(`this atlas is the file now. ${r.now.places} place${r.now.places === 1 ? '' : 's'}, ${r.now.routes} way${r.now.routes === 1 ? '' : 's'}`, 5000);
+    toast(`this atlas is the file now. ${r.now.places} place${r.now.places === 1 ? '' : 's'}, ${r.now.routes} path${r.now.routes === 1 ? '' : 's'}`, 5000);
   } else {
     toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came in` : 'nothing in that file this atlas lacks');
   }
@@ -909,7 +909,7 @@ function renderCount() {
   if (small) small.textContent = 'places';
   // what else the tally says, in the order a person would say it
   const rest = [];
-  if (w) rest.push(`${w} way${w === 1 ? '' : 's'}`);
+  if (w) rest.push(`${w} path${w === 1 ? '' : 's'}`);
   if (who) rest.push(who);
   const ways = $('#ixWays');
   if (ways) { ways.textContent = rest.join(' · '); ways.hidden = !rest.length; }
@@ -978,7 +978,7 @@ function renderList() {
   // ways stand after the marks: same list, plainly told apart
   const ways = filteredRoutes();
   if (ways.length) {
-    wrap.insertAdjacentHTML('beforeend', `<div class="ix-band mono">ways · ${ways.length}</div>` + ways.map((r, i) => {
+    wrap.insertAdjacentHTML('beforeend', `<div class="ix-band mono">paths · ${ways.length}</div>` + ways.map((r, i) => {
       const tag = tagById(r.tags[0]);
       const locale = [r.city, r.country].filter(Boolean).join(' · ');
       return `<button class="ix way ${r.status === 'wishlist' ? 'wish' : ''} ${r.id === state.selectedRouteId ? 'selected' : ''}"
@@ -1589,16 +1589,16 @@ function renderRoutePlate(route) {
 
   wrap.innerHTML = `
     <div class="plate-eyebrow mono">
-      <span>${route.loop ? 'a loop' : 'a way'}${route.sample ? '' : ''}</span>
+      <span>${route.loop ? 'a loop' : 'a path'}${route.sample ? '' : ''}</span>
       <span>${esc(effort(m))}</span>
       <button id="pClose">close</button>
     </div>
     <h1 class="plate-name" id="pRouteName" contenteditable="plaintext-only" spellcheck="false"
-        role="textbox" aria-label="The name of this way">${esc(route.name)}</h1>
+        role="textbox" aria-label="The name of this path">${esc(route.name)}</h1>
     ${route.sample ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([route.city, route.country].filter(Boolean).join(' · '))}</div>
     ${route.provenance ? `<div class="plate-prov prov">after <b>${esc(route.provenance.name)}</b></div>` : ''}
-    ${route.private ? '<div class="plate-prov held-back">this way never leaves the device</div>' : ''}
+    ${route.private ? '<div class="plate-prov held-back">this path never leaves the device</div>' : ''}
     ${!route.private && route.trimEnds ? '<div class="plate-prov held-back">handed over without its first and last quarter kilometre</div>' : ''}
 
     <dl class="way-measure mono">
@@ -1613,7 +1613,7 @@ function renderRoutePlate(route) {
     <div class="plate-sec">
       <div class="plate-sec-head"><span>the ground</span><span class="pf-read mono" id="pfRead"></span></div>
       <div class="pf-wrap" id="pfWrap" role="img"
-        aria-label="Elevation along the way: ${Math.round(m.low)} to ${Math.round(m.high)} metres over ${esc(fmtKm(m.km))}">
+        aria-label="Elevation along the path: ${Math.round(m.low)} to ${Math.round(m.high)} metres over ${esc(fmtKm(m.km))}">
         ${profileSVG(pf)}
       </div>
       <div class="pf-axis mono"><span>0</span><span>${esc(fmtKm(m.km))}</span></div>
@@ -1631,7 +1631,7 @@ function renderRoutePlate(route) {
 
     <div class="plate-sec">
       <div class="plate-sec-head"><span>notes</span></div>
-      <textarea class="note-input" id="pRouteNote" aria-label="Your note on this way"
+      <textarea class="note-input" id="pRouteNote" aria-label="Your note on this path"
         placeholder="When to walk it, where to start, what it asks of you…">${esc(route.note)}</textarea>
     </div>
 
@@ -1671,7 +1671,7 @@ function renderRoutePlate(route) {
   $('#pRoutePrivate').addEventListener('click', () => {
     const now = !route.private;
     if (save({ private: now })) renderRoutePlate(routeById(route.id));
-    toast(now ? 'kept off every link, folio and publish' : 'this way may travel again');
+    toast(now ? 'kept off every link, folio and publish' : 'this path may travel again');
   });
   $('#pRouteTrim')?.addEventListener('click', () => {
     const now = !route.trimEnds;
@@ -1685,7 +1685,7 @@ function renderRoutePlate(route) {
     state.selectedRouteId = null;
     popSurface();
     renderAll();
-    toast('the way is gone');
+    toast('the path is gone');
   });
 
   if (pf) bindProfile(pf);
@@ -1732,7 +1732,7 @@ async function addFromGPX(file) {
   const path = simplify(parsed.points, 0.012);
   const mid = path[Math.floor(path.length / 2)];
   const route = newRoute({
-    name: parsed.name || file.name.replace(/\.gpx$/i, '') || 'Untitled way',
+    name: parsed.name || file.name.replace(/\.gpx$/i, '') || 'Untitled path',
     path,
     km: m.km, ascent: m.ascent, descent: m.descent,
     high: m.high, low: m.low, hours: m.hours, loop: m.loop,
@@ -1765,7 +1765,7 @@ function downloadGPX(route) {
 ${pts}
   </trkseg></trk>
 </gpx>`;
-  const safe = route.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) || 'way';
+  const safe = route.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) || 'path';
   download(`${safe}.gpx`, gpx, 'application/gpx+xml');
 }
 
@@ -2001,7 +2001,7 @@ function openFolioReport(payload) {
     ${payload.dedication ? `<p class="rp-ded">“${esc(payload.dedication)}”</p>` : ''}
     <ul class="rp-evidence mono">
       <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'} enclosed</li>
-      ${ways.length ? `<li><b>${ways.length}</b> way${ways.length === 1 ? '' : 's'} to walk</li>` : ''}
+      ${ways.length ? `<li><b>${ways.length}</b> path${ways.length === 1 ? '' : 's'} to walk</li>` : ''}
       ${held.length ? `<li><b>${held.length}</b> you already hold, you can trust the rest</li>` : ''}
       ${fresh.length ? `<li><b>${fresh.length}</b> new to your field</li>` : ''}
     </ul>
@@ -2053,7 +2053,7 @@ function openFolioReport(payload) {
     if (!r) return;
     if (adoptWay(r)) {
       b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
-      toast(`the way is yours, after ${author}`);
+      toast(`the path is yours, after ${author}`);
     }
   }));
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
@@ -2192,7 +2192,7 @@ function openAtlasReport(payload) {
         </div>`).join('')}
     </div>` : ''}
     ${theirWays.length ? `<div class="rp-case">
-      <div class="sec-head">the ways they walk</div>
+      <div class="sec-head">the paths they walk</div>
       ${theirWays.map((r, i) => `
         <div class="rp-pick">
           <span class="no" aria-label="${r.loop ? 'a loop' : 'there and back'}">${r.loop ? '◯' : '⟋'}</span>
@@ -2222,7 +2222,7 @@ function openAtlasReport(payload) {
     if (!made) return toast('this browser refused to keep it');
     renderAll();
     b.replaceWith(Object.assign(document.createElement('span'), { className: 'held', textContent: 'yours' }));
-    toast(`the way is yours, after ${name}`);
+    toast(`the path is yours, after ${name}`);
   }));
   $$('[data-adopt]', el).forEach(b => b.addEventListener('click', () => {
     const pk = picks[parseInt(b.dataset.adopt, 10)];
@@ -2323,7 +2323,7 @@ function openFolioShelf() {
       const n = r.places.length + r.routes.length;
       return `<button class="fol-shelf-row" data-open="${esc(f.id)}">
         <span class="fs-title">${esc(f.title)}</span>
-        <span class="fs-meta mono">${n} enclosed${r.routes.length ? ` · ${r.routes.length} way${r.routes.length > 1 ? 's' : ''}` : ''}${fmtDate(f.updatedAt) ? ` · ${fmtDate(f.updatedAt)}` : ''}</span>
+        <span class="fs-meta mono">${n} enclosed${r.routes.length ? ` · ${r.routes.length} path${r.routes.length > 1 ? 's' : ''}` : ''}${fmtDate(f.updatedAt) ? ` · ${fmtDate(f.updatedAt)}` : ''}</span>
         ${names ? `<span class="fs-names">${esc(names)}${r.places.length > 3 ? ' …' : ''}</span>` : ''}
         ${f.dedication ? `<span class="fs-ded">${esc(f.dedication)}</span>` : ''}
       </button>`;
@@ -2447,7 +2447,7 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       const refused = picked.length - ways.length;
       if (refused) {
         const go = await ask(
-          `${refused} enclosed way${refused === 1 ? ' asks' : 's ask'} to hide ${refused === 1 ? 'its ends' : 'their ends'} and ${refused === 1 ? 'is' : 'are'} too short to lose half a kilometre. `
+          `${refused} enclosed path${refused === 1 ? ' asks' : 's ask'} to hide ${refused === 1 ? 'its ends' : 'their ends'} and ${refused === 1 ? 'is' : 'are'} too short to lose half a kilometre. `
           + `${refused === 1 ? 'It stays' : 'They stay'} out of this folio rather than travelling whole.`,
           { yes: 'hand over the rest', no: 'go back' });
         if (!go) return;
@@ -2589,7 +2589,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     author ? `kept by ${author}` : '',
     fmtDate(new Date().toISOString()).toLowerCase(),
     places.length ? `${places.length} place${places.length === 1 ? '' : 's'}` : '',
-    nWays ? `${nWays} way${nWays === 1 ? '' : 's'}` : '',
+    nWays ? `${nWays} path${nWays === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(' · ');
 
   let no = 0;
@@ -2634,7 +2634,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     ${[...groups.entries()].map(([city, list]) =>
       `${groups.size > 1 || city !== 'off the map' ? `<h2 class="sh-city mono">${esc(city.toLowerCase())}</h2>` : ''}
        ${list.map(entry).join('')}`).join('')}
-    ${ways ? `<h2 class="sh-city mono">ways</h2>${ways}` : ''}
+    ${ways ? `<h2 class="sh-city mono">paths</h2>${ways}` : ''}
     <footer class="sh-colophon mono">resonate · resonate.select</footer>`;
 }
 
@@ -2940,9 +2940,9 @@ async function shareMap() {
       <div class="sec-head">what travels</div>
       <ul class="sh-list">
         ${count.places ? `<li><b>${count.places}</b> place${count.places === 1 ? '' : 's'}: names and coordinates</li>` : ''}
-        ${count.routes ? `<li><b>${count.routes}</b> way${count.routes === 1 ? '' : 's'}: a shape, its distance and its climb${routes.some(r => r.trimEnds) ? ', without the ends you hid' : ''}</li>` : ''}
+        ${count.routes ? `<li><b>${count.routes}</b> path${count.routes === 1 ? '' : 's'}: a shape, its distance and its climb${routes.some(r => r.trimEnds) ? ', without the ends you hid' : ''}</li>` : ''}
         <li>addresses, cities, countries, tags, been or want to go</li>
-        ${count.notes ? `<li><b>${count.notes}</b> note${count.notes === 1 ? '' : 's'}, in full, on places and ways alike</li>` : ''}
+        ${count.notes ? `<li><b>${count.notes}</b> note${count.notes === 1 ? '' : 's'}, in full, on places and paths alike</li>` : ''}
         ${count.links ? `<li><b>${count.links}</b> link${count.links === 1 ? '' : 's'} you saved</li>` : ''}
         ${count.bylines ? `<li><b>${count.bylines}</b> earlier byline${count.bylines === 1 ? '' : 's'}: the road these places travelled to reach you</li>` : ''}
         <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
@@ -2954,8 +2954,8 @@ async function shareMap() {
       </ul>
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
       a link cannot be recalled once it is sent.</p>
-      ${kept ? `<p class="sh-warn">${kept} record${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place or way that way from its own plate.</p>` : ''}
-      ${tooShort.length ? `<p class="sh-warn">${tooShort.length} way${tooShort.length === 1 ? '' : 's'} asked to hide ${tooShort.length === 1 ? 'its ends' : 'their ends'} but ${tooShort.length === 1 ? 'is' : 'are'} too short to lose half a kilometre. ${tooShort.length === 1 ? 'It stays' : 'They stay'} behind rather than travelling whole: ${tooTitles(tooShort)}.</p>` : ''}
+      ${kept ? `<p class="sh-warn">${kept} record${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place or path that way from its own plate.</p>` : ''}
+      ${tooShort.length ? `<p class="sh-warn">${tooShort.length} path${tooShort.length === 1 ? '' : 's'} asked to hide ${tooShort.length === 1 ? 'its ends' : 'their ends'} but ${tooShort.length === 1 ? 'is' : 'are'} too short to lose half a kilometre. ${tooShort.length === 1 ? 'It stays' : 'They stay'} behind rather than travelling whole: ${tooTitles(tooShort)}.</p>` : ''}
       <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}${routes.length ? ' · a link carries a coarser shape than the file' : ''}</p>
     </div>
     <div class="word-row">
@@ -2983,7 +2983,7 @@ async function shareMap() {
     download('resonate-atlas.json',
       JSON.stringify({ app: 'resonate', exportedAt: new Date().toISOString(), ...file }, null, 2),
       'application/json');
-    toast('a file of the same places, with the ways drawn in full. your photographs stayed here', 4500);
+    toast('a file of the same places, with the paths drawn in full. your photographs stayed here', 4500);
   });
   openSurface('shareOverlay');
 }
@@ -3035,7 +3035,7 @@ async function keptWhere() {
   const last = store.settings.lastExportAt;
   return [
     `${store.places.length} place${store.places.length === 1 ? '' : 's'}`,
-    store.routes.length ? `${store.routes.length} way${store.routes.length === 1 ? '' : 's'}` : '',
+    store.routes.length ? `${store.routes.length} path${store.routes.length === 1 ? '' : 's'}` : '',
     store.folios.length ? `${store.folios.length} folio${store.folios.length === 1 ? '' : 's'}` : '',
     store.correspondents.length ? `${store.correspondents.length} voice${store.correspondents.length === 1 ? '' : 's'}` : '',
     mb === null ? '' : `${mb} mb here`,
@@ -3236,7 +3236,7 @@ function renderKeys() {
     ['+ · −', 'zoom'], ['0', 'frame everything'], ['t', 'day / night'],
     ['g', 'find me'], ['s', 'share this atlas'], ['1–9', 'toggle tag worlds'],
     ['right-click', 'propose a place'], ['drop a photo', 'file it by its own fix'],
-    ['drop a gpx', 'a walk becomes a way'],
+    ['drop a gpx', 'a walk becomes a path'],
   ];
   $('#keysBody').innerHTML = `<div class="keys-grid">
     ${rows.map(([k, d]) => `<div class="key-row"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
@@ -3531,9 +3531,11 @@ const VERBS = {
   dark: { run: () => setTheme('dark'), hint: 'night field' },
   light: { run: () => setTheme('light'), hint: 'day field' },
   photo: { run: () => $('#shootFile').click(), hint: 'a photo becomes a place' },
-  hike: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
-  route: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
-  walk: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a way' },
+  hike: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
+  route: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
+  walk: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
+  path: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
+  paths: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
   export: { run: async () => {
     const { json, misses } = await fullExport();
     download('resonate-atlas.json', json, 'application/json');
