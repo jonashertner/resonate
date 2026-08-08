@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf71';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf71';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf71';
-import * as mapView from './map.js?v=rf71';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf71';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf71';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf71';
-import { exifGPS } from './exif.js?v=rf71';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf71';
-import * as photoStore from './photos.js?v=rf71';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf71';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf72';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf72';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf72';
+import * as mapView from './map.js?v=rf72';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf72';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf72';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf72';
+import { exifGPS } from './exif.js?v=rf72';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf72';
+import * as photoStore from './photos.js?v=rf72';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf72';
 
 // ---------- helpers ----------
 
@@ -904,13 +904,19 @@ function renderCount() {
   const w = allRoutes().length;
   $('#placeCount').textContent = n || '';
   $('#ixN').textContent = n;
-  const who = store.settings.authorName;
   const small = $('.index-count small');
   if (small) small.textContent = 'places';
-  // what else the tally says, in the order a person would say it
+  // The tally counts. It used to end with the byline, bare and uppercase with
+  // nothing in front of it, which read as a word nobody could place: it sat
+  // there unlabelled long enough that the person who wrote it had to ask what
+  // it meant. Naming it ("kept by ada") only moved the problem, since the
+  // words are wide enough at this letterspacing to wrap and orphan the name
+  // on a narrow screen. The truth is it was never earning the room. This is
+  // your index, showing your atlas; you know whose it is. A byline is for
+  // what leaves, and it is on all of that already: the plate, the hand-over
+  // panel, the printed sheet, and every link and file you give away.
   const rest = [];
   if (w) rest.push(`${w} path${w === 1 ? '' : 's'}`);
-  if (who) rest.push(who);
   const ways = $('#ixWays');
   if (ways) { ways.textContent = rest.join(' · '); ways.hidden = !rest.length; }
 }
