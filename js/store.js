@@ -1,7 +1,8 @@
 // store.js — persistence, models, demo data
 
-import { normImport, readArchive, readLocal, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf66';
-import { measure, simplify } from './route.js?v=rf66';
+import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf67';
+import { measure } from './route.js?v=rf67';
+import { buildDisclosure } from './share.js?v=rf67';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -45,11 +46,45 @@ export function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9));
 }
 
+// ---------- unreadable keys ----------
+//
+// A key that will not parse is not an empty key.
+//
+// This used to catch the error and hand back an empty array. The app then
+// drew an empty atlas, and the very next edit called savePlaces(), which
+// wrote that empty array over the damaged bytes. One corrupt byte became a
+// blank life, permanently, on the next keystroke, and nobody was told.
+//
+// Now the damaged bytes are left exactly where they are. A copy is set aside
+// under a name that says what it is, the key is sealed against writing, and
+// the app is expected to say so out loud. An atlas that cannot be read is a
+// bad day. An atlas that cannot be read and is then overwritten is the end of
+// the thing this app is for.
+const sealed = new Map(); // key -> { at, bytes }
+
+export function unreadableKeys() {
+  return [...sealed.entries()].map(([key, v]) => ({ key, at: v.at, bytes: v.bytes }));
+}
+
+// a person who has been told, and has decided, may release a key. the set
+// aside copy stays where it is: releasing is a decision to move on, not a
+// decision to destroy.
+export function releaseUnreadable(key) { return sealed.delete(key); }
+
 function read(key, fallback) {
+  let raw = null;
+  try { raw = localStorage.getItem(key); } catch { return fallback; }
+  if (raw === null || raw === undefined || raw === '') return fallback;
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    return JSON.parse(raw);
   } catch {
+    sealed.set(key, { at: new Date().toISOString(), bytes: raw.length });
+    // keep the original where a person or a support session can still reach
+    // it, and never over a copy already set aside by an earlier load
+    try {
+      const keep = `${key}.unreadable`;
+      if (localStorage.getItem(keep) === null) localStorage.setItem(keep, raw);
+    } catch { /* no room to set it aside; the original is still untouched */ }
     return fallback;
   }
 }
@@ -59,6 +94,12 @@ export let onWriteFailed = null;
 export function setWriteFailedHandler(fn) { onWriteFailed = fn; }
 
 function write(key, value) {
+  if (sealed.has(key)) {
+    // the damaged bytes stay. this is a refusal, not a failure, and it is
+    // reported through the same channel so the app already knows how to speak
+    onWriteFailed?.(key, new Error('this key could not be read, and will not be written over'));
+    return false;
+  }
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
@@ -104,9 +145,20 @@ export function newPlace(partial = {}) {
   };
 }
 
+// A way is stored with the shape it was given.
+//
+// This used to run simplify() over every path that passed through, which
+// looked harmless and was not: simplify is not idempotent on a path carrying
+// elevation, so a way lost a few percent of itself every time it came home
+// from an archive, and again the next time, and again. A record that changes
+// by being read is not a record.
+//
+// Thinning belongs where a shape is first captured (the gpx importer does it
+// before it calls here) and where a shape has to fit in a link (packRoutes
+// does it on the way out). Never in between.
 export function newRoute(partial = {}) {
   const now = new Date().toISOString();
-  const path = simplify(Array.isArray(partial.path) ? partial.path : [], 0.012);
+  const path = Array.isArray(partial.path) ? partial.path : [];
   const m = measure(path);
   return {
     id: uid(),
@@ -161,22 +213,95 @@ export function newTag(partial = {}) {
   return t;
 }
 
-// a quarter of a kilometre from each end, which is enough to lose a door
+// ---------- hiding the ends of a way ----------
+//
+// A quarter of a kilometre from each end, which is enough to lose a door.
+//
+// This used to give up when a path held fewer than eight points and hand the
+// way over whole. A straight thirteen kilometre walk simplifies to two points,
+// so the one case where a person most wants their door hidden was the case
+// where both ends went out untouched, under a sentence promising otherwise.
+// Point count says nothing about ground. Distance is the only measure here,
+// and a new end is interpolated inside the segment that crosses the mark, so
+// two points are enough to trim.
+//
+// It fails closed. A way too short to lose both ends is not handed over half
+// redacted and not handed over whole: trimWay returns null and the surface
+// says why.
 const TRIM_KM = 0.25;
-function trimWay(r) {
-  if (!r.trimEnds || !Array.isArray(r.path) || r.path.length < 8) return r;
-  const R = 6371, rad = Math.PI / 180;
-  const step = (a, b) => {
-    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-    const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(s));
+const R_KM = 6371, RAD = Math.PI / 180;
+
+function step(a, b) {
+  const dLat = (b.lat - a.lat) * RAD, dLng = (b.lng - a.lng) * RAD;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.sin(dLng / 2) ** 2;
+  return 2 * R_KM * Math.asin(Math.sqrt(s));
+}
+
+// the point f of the way along a segment, elevation carried with it.
+// the longitudes are brought within half a turn of each other first, or a
+// segment stepping over the antimeridian would interpolate the long way round
+// and put the new end in the middle of the Pacific.
+function between(a, b, f) {
+  let dLng = b.lng - a.lng;
+  if (dLng > 180) dLng -= 360;
+  if (dLng < -180) dLng += 360;
+  let lng = a.lng + dLng * f;
+  if (lng > 180) lng -= 360;
+  if (lng < -180) lng += 360;
+  const pt = { lat: a.lat + (b.lat - a.lat) * f, lng };
+  if (Number.isFinite(a.ele) && Number.isFinite(b.ele)) pt.ele = a.ele + (b.ele - a.ele) * f;
+  else if (Number.isFinite(a.ele)) pt.ele = a.ele;
+  return pt;
+}
+
+// Walk in from the start until you are TRIM_KM from the door, and return the
+// path from exactly there.
+//
+// Two measures have to agree here, and only one of them is the point. Walking
+// TRIM_KM of recorded line says nothing about how far you have got: a track
+// that circles the block, or wanders the garden, or simply jitters while the
+// receiver settles, can spend a quarter kilometre of line and still be
+// standing at the front door. So the line is walked, and the new head is
+// pushed on until it is also TRIM_KM away from where the track began. What is
+// being hidden is a place, not a length.
+function fromHead(path, km) {
+  const origin = path[0];
+  let run = 0;
+  for (let i = 1; i < path.length; i++) {
+    const d = step(path[i - 1], path[i]);
+    if (run + d >= km) {
+      const f = d > 0 ? (km - run) / d : 1;
+      const head = between(path[i - 1], path[i], f);
+      // far enough along the line; now far enough from the door as well
+      if (step(origin, head) >= km) return [head, ...path.slice(i)];
+      for (let j = i; j < path.length; j++) {
+        if (step(origin, path[j]) >= km) return path.slice(j);
+      }
+      return null; // the whole track stays within the stretch to hide
+    }
+    run += d;
+  }
+  return null; // the whole way is shorter than the stretch to hide
+}
+
+const reversed = a => [...a].reverse();
+
+export function trimWay(r) {
+  if (!r?.trimEnds || !Array.isArray(r.path) || r.path.length < 2) return r;
+  const head = fromHead(r.path, TRIM_KM);
+  if (!head || head.length < 2) return null;
+  const both = fromHead(reversed(head), TRIM_KM);
+  if (!both || both.length < 2) return null;
+  const path = reversed(both);
+  // the shape handed over is shorter than the one walked, so the numbers
+  // beside it are the shorter shape's. a distance that describes a stretch
+  // the recipient was not given is a quiet way of giving it to them.
+  const m = measure(path);
+  return {
+    ...r, path,
+    km: m.km, ascent: m.ascent, descent: m.descent,
+    high: m.high, low: m.low, hours: m.hours, loop: m.loop,
   };
-  let head = 0, run = 0;
-  for (let i = 1; i < r.path.length && run < TRIM_KM; i++) { run += step(r.path[i - 1], r.path[i]); head = i; }
-  let tail = r.path.length - 1; run = 0;
-  for (let i = r.path.length - 2; i > head && run < TRIM_KM; i--) { run += step(r.path[i + 1], r.path[i]); tail = i; }
-  const path = r.path.slice(head, tail + 1);
-  return path.length >= 2 ? { ...r, path } : r;
 }
 
 const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '', clubKey: '', clubUrl: '', clubSeq: 0, clubSealedAt: '' };
@@ -188,9 +313,9 @@ export const store = {
   tags: [],
   correspondents: [],
   settings: { ...DEFAULT_SETTINGS },
-  // set by the last merge of a person's own archive: how much of the file
-  // could not be read. zero after any other kind of merge
-  lastDropped: 0,
+  // set by the last reading of a person's own archive: everything in the file
+  // that could not be kept exactly, named. empty after any other kind of merge
+  lastLost: [],
 
   load() {
     // records adopted before this carry an empty date, which read back as
@@ -389,17 +514,26 @@ export const store = {
     this.saveSettings();
   },
 
+  // Read a person's own archive and refuse it if anything at all was lost in
+  // the reading. Returns { value, lost: [...] }; `lost` is the whole list, so
+  // a caller can name the record and the field rather than say "some".
+  readOwn(raw) {
+    const read = readArchive(raw);
+    if (!read) return { value: null, lost: [] };
+    return { value: read.value, lost: losses(read) };
+  },
+
   // merge imported data, deduping by id; imported fields that reach markup are normalized
-  // `own` marks a person's own archive coming home: read through the generous
-  // door, never the stranger's. Returns null when the device refused the
-  // write, a count of everything that arrived otherwise.
+  // `own` marks a person's own archive coming home: read through the door
+  // that shortens nothing. Returns null when the archive lost something in
+  // the reading or the device refused the write, a count otherwise.
   merge(raw, { own = false } = {}) {
-    const read = own ? readArchive(raw) : null;
-    // records the file carried that could not be read at all. a truncation is
-    // refused outright below; this is the softer loss, and it is still a loss,
-    // so the number is kept where the caller can say it out loud
-    this.lastDropped = own ? (read?.dropped ?? 0) : 0;
-    if (own && read?.cut?.length) return null; // an archive is never truncated
+    const read = own ? this.readOwn(raw) : null;
+    // everything the file carried that could not be kept exactly. an archive
+    // that lost anything is not merged at all: the caller is handed the list
+    // and the person is told what and where.
+    this.lastLost = own ? (read?.lost ?? []) : [];
+    if (own && this.lastLost.length) return null;
     const data = own ? read?.value : normImport(raw);
     if (!data) return 0;
     // held so the whole import can be undone if any part of it is refused
@@ -461,11 +595,21 @@ export const store = {
         added++;
       }
     });
+    // a merge adds; it does not repaint an atlas that already has a look.
+    // only what this device has not decided for itself is taken.
     if (!this.settings.authorName && data.settings.authorName) {
       this.settings.authorName = data.settings.authorName;
     }
-    if (data.settings.theme) this.settings.theme = data.settings.theme;
-    if (Number.isFinite(Number(data.settings.hue))) this.settings.hue = Number(data.settings.hue);
+    // the look is a decision this device made and a merge is not the place to
+    // overturn it. only an atlas that has never been dressed takes the file's
+    // colour; restore, which is the operation that means "be this file", sets
+    // the whole of it.
+    const undressed = !this.settings.chosen && !this.places.length;
+    if (undressed) {
+      if (data.settings.theme) this.settings.theme = data.settings.theme;
+      if (Number.isFinite(Number(data.settings.hue))) this.settings.hue = Number(data.settings.hue);
+      if (Number.isFinite(Number(data.settings.split))) this.settings.split = Number(data.settings.split);
+    }
     // an import is one act: if any part of it cannot be written, none of it
     // is kept, and the caller is told nothing came in
     const ok = this.savePlaces() && this.saveTags() && this.saveRoutes()
@@ -484,6 +628,113 @@ export const store = {
     return added;
   },
 
+  // ---------- restore ----------
+  //
+  // Merge and restore are not the same operation, and pretending they were is
+  // why "import backup" could not bring back an older note, a damaged place,
+  // a photograph that had been removed, or an earlier shape of a way. A merge
+  // adds what is missing and touches nothing that already exists. A restore
+  // says: this file is the atlas now.
+  //
+  // Restore replaces. It refuses an archive that lost anything in the reading,
+  // it refuses to write half of one, and it puts everything back exactly as it
+  // was if any part of the write is refused. What it cannot do is undo itself
+  // afterwards: the caller takes a snapshot first, and the surface says so.
+  //
+  // Returns { ok, lost, was, now } — `was` and `now` are counts, so a person
+  // can be shown what this will cost before they agree to it.
+  restore(raw) {
+    const read = this.readOwn(raw);
+    this.lastLost = read.lost;
+    if (!read.value) return { ok: false, lost: read.lost, reason: 'unreadable' };
+    if (read.lost.length) return { ok: false, lost: read.lost, reason: 'lossy' };
+    const d = read.value;
+
+    const before = {
+      places: [...this.places], tags: [...this.tags], routes: [...this.routes],
+      folios: [...this.folios], correspondents: [...this.correspondents],
+      settings: { ...this.settings },
+    };
+    const was = {
+      places: before.places.length, routes: before.routes.length,
+      tags: before.tags.length, folios: before.folios.length,
+      correspondents: before.correspondents.length,
+    };
+
+    this.places = d.places.map(p => newPlace({ ...p }));
+    this.routes = d.routes.map(r => newRoute({ ...r }));
+    this.tags = d.tags.map(t => newTag(t));
+    this.folios = d.folios.map(f => newFolio(f));
+    this.correspondents = d.correspondents.map(c => ({
+      ...c, tags: (c.tags || []).map(t => newTag(t)),
+    }));
+    // the club key is this device's own credential and belongs to the device,
+    // not to the file; the rest of the look and the byline come from the file
+    const { clubKey, clubUrl, clubSeq, clubSealedAt } = this.settings;
+    this.settings = {
+      ...DEFAULT_SETTINGS, ...d.settings,
+      seeded: true, chosen: true,
+      clubKey, clubUrl, clubSeq, clubSealedAt,
+    };
+
+    const ok = this.savePlaces() && this.saveTags() && this.saveRoutes()
+      && this.saveFolios() && this.saveCorrespondents() && this.saveSettings();
+    if (!ok) {
+      this.places = before.places;
+      this.tags = before.tags;
+      this.routes = before.routes;
+      this.folios = before.folios;
+      this.correspondents = before.correspondents;
+      this.settings = before.settings;
+      this.savePlaces(); this.saveTags(); this.saveRoutes();
+      this.saveFolios(); this.saveCorrespondents(); this.saveSettings();
+      return { ok: false, lost: [], reason: 'refused', was, now: was };
+    }
+    return {
+      ok: true, lost: [], was,
+      now: {
+        places: this.places.length, routes: this.routes.length,
+        tags: this.tags.length, folios: this.folios.length,
+        correspondents: this.correspondents.length,
+      },
+    };
+  },
+
+  // What a merge would change, without changing anything. A person deciding
+  // between adding and replacing deserves to see the difference first.
+  compare(raw) {
+    const read = this.readOwn(raw);
+    if (!read.value) return null;
+    const d = read.value;
+    const mine = new Map(this.places.map(p => [p.id, p]));
+    const mineWays = new Map(this.routes.map(r => [r.id, r]));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    // a photograph is the same photograph whether the file inlines it or this
+    // device holds it under an id. counting that as a difference would tell a
+    // person their atlas had changed when only its carrier had.
+    const carrier = p => ({ ...p, sample: false, photos: (p.photos || []).length });
+    let fresh = 0, differ = 0, identical = 0;
+    for (const p of d.places) {
+      const held = mine.get(p.id);
+      if (!held) fresh += 1;
+      else if (same(carrier(held), carrier({ ...newPlace({ ...p }), id: held.id }))) identical += 1;
+      else differ += 1;
+    }
+    for (const r of d.routes) {
+      const held = mineWays.get(r.id);
+      if (!held) fresh += 1; else if (same(held.path, r.path)) identical += 1; else differ += 1;
+    }
+    // restore replaces folios, voices and domains too, so a warning that
+    // counted only places and ways was telling a person less than it destroys
+    const theirs = new Set([
+      ...d.places.map(p => p.id), ...d.routes.map(r => r.id),
+      ...d.folios.map(f => f.id), ...d.correspondents.map(c => c.id), ...d.tags.map(t => t.id),
+    ]);
+    const onlyHere = [...this.places, ...this.routes, ...this.folios, ...this.correspondents, ...this.tags]
+      .filter(x => !theirs.has(x.id)).length;
+    return { fresh, differ, identical, onlyHere, lost: read.lost };
+  },
+
   // what may be handed to someone else: the atlas without the private layer.
   // the share surface promises photographs never leave the device, and a file
   // offered in place of a link has to keep that promise.
@@ -491,16 +742,31 @@ export const store = {
   // the shape handed over begins and ends a quarter kilometre in
   trimWay(r) { return trimWay(r); },
 
-  // what a stranger may be given: never a place marked as never leaving
+  // What a stranger may be given, in a file.
+  //
+  // This used to spread whole records and hand over every domain in the
+  // atlas, while the link beside it was an explicit field list. Same panel,
+  // same promise, two different disclosures: the file quietly added the dates
+  // every record was made and touched, domains the person had never used, and
+  // any field a later release happened to add. It is the same object as the
+  // link now. Only the carrier differs.
+  outward() {
+    const places = this.places.filter(p => !p.private);
+    // a way whose ends cannot be hidden is not handed over at all
+    const routes = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean);
+    const used = new Set([...places, ...routes].flatMap(x => x.tags || []));
+    const tags = this.tags.filter(t => used.has(t.id));
+    return buildDisclosure({ places, routes, tags, author: this.settings.authorName || '' });
+  },
+
   exportShareJSON() {
+    // `kind` is the payload's kind, the one normPayload reads. the file used
+    // to say 'share' here, which nothing read and which normPayload treated
+    // as an atlas anyway; saying 'atlas' is the same behaviour, said plainly.
     return JSON.stringify({
       app: 'resonate',
-      kind: 'share',
-      version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      tags: this.tags,
-      places: this.places.filter(p => !p.private).map(({ photos, ...rest }) => rest),
-      routes: this.routes.filter(r => !r.private).map(({ walkedAt, ...rest }) => trimWay(rest)),
+      ...this.outward(),
     }, null, 2);
   },
 
@@ -547,7 +813,7 @@ export const store = {
       <description>${esc([p.note, [p.address, p.city, p.country].filter(Boolean).join(', ')].filter(Boolean).join('\n\n'))}</description>
       <Point><coordinates>${p.lng},${p.lat},0</coordinates></Point>
     </Placemark>`).join('\n');
-    const lines = this.routes.filter(r => !r.private).map(trimWay).map(r => `    <Placemark>
+    const lines = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean).map(r => `    <Placemark>
       <name>${esc(r.name)}</name>
       <LineString><tessellate>1</tessellate><coordinates>${r.path.map(pt => `${pt.lng},${pt.lat},${pt.ele ?? 0}`).join(' ')}</coordinates></LineString>
     </Placemark>`).join('\n');
@@ -604,7 +870,7 @@ ${[marks, lines].filter(Boolean).join('\n')}
         }
       });
     });
-    const ways = this.routes.filter(r => !r.private);
+    const ways = this.routes.filter(r => !r.private).map(trimWay).filter(Boolean);
     if (ways.length) {
       out.push('## Ways', '');
       ways.forEach(r => {

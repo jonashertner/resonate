@@ -40,6 +40,12 @@ export function isSessionId(v) {
     && /^cs_[A-Za-z0-9_]+$/.test(v);
 }
 
+// a claim is the sha-256 of a secret the club never sees, in lowercase hex.
+// fixed length, one alphabet: there is nothing here for a stranger to shape.
+export function isClaimHash(v) {
+  return typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+}
+
 // standing: a membership answers for its paid period plus three days of
 // grace, so a card that stumbles does not eat a backup
 export const GRACE_S = 3 * 24 * 3600;

@@ -165,6 +165,40 @@ export function syncGuard(gotExists, lastSeq) {
   return !gotExists && lastSeq > 0 ? 'refuse-empty' : 'proceed';
 }
 
+// ---- the claim ----
+
+// The door hands over a key once, and once used to mean once even when the
+// answer never arrived: a dropped connection on the way back from Stripe left
+// a paid membership with nobody holding its key. So a secret is minted here
+// and kept here, and only its hash travels. Presenting the same secret again
+// gets the same key back, for a day. A stranger holding the checkout session
+// id holds no secret, and the door stays shut to them.
+//
+// The hash covers the session as well as the secret, so one device joining
+// twice files two claims rather than writing over its own.
+const CLAIM_STORE = 'resonate.club.claim.v1';
+let claimHeld = '';
+
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+
+export function claimSecret() {
+  if (claimHeld) return claimHeld;
+  let s = '';
+  try { s = globalThis.localStorage?.getItem(CLAIM_STORE) || ''; } catch { s = ''; }
+  if (!/^[0-9a-f]{32}$/.test(s)) {
+    s = hex(crypto.getRandomValues(new Uint8Array(16)));
+    // a device that refuses storage still opens the door. it loses only the
+    // second chance, which is exactly what every device had before this
+    try { globalThis.localStorage?.setItem(CLAIM_STORE, s); } catch { /* private mode */ }
+  }
+  claimHeld = s;
+  return s;
+}
+
+export async function claimHash(secret, session) {
+  return hex(await sha256(te.encode(`tc-claim:${secret}:${session}`)));
+}
+
 // ---- speaking to the club ----
 
 export function makeClient(base, keyGetter) {
@@ -175,13 +209,21 @@ export function makeClient(base, keyGetter) {
     const r = await fetch(base.replace(/\/$/, '') + path, { ...opts, headers });
     return r;
   };
+
+  // the revision this client last saw in the vault. '' is not ignorance but a
+  // fact: an empty vault. a client that has read nothing yet is treated as
+  // having seen emptiness, so its first seal can only create, never replace.
+  let seen = '';
+
   return {
-    // a checkout session becomes a key: the door speaks once
+    // a checkout session becomes a key: the door speaks once, and again to
+    // whoever can show the secret behind the claim
     async door(session) {
+      const claim = await claimHash(claimSecret(), session);
       const r = await call('/door', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ session }),
+        body: JSON.stringify({ session, claim }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || 'the door did not answer');
       return r.json();
@@ -192,24 +234,44 @@ export function makeClient(base, keyGetter) {
       if (!r.ok) throw new Error('the club did not answer');
       return r.json();
     },
-    async putVault(bytes) {
-      const r = await call('/vault', { method: 'PUT', body: bytes });
+    // seals over the envelope this client last read, and nothing else. pass a
+    // revision to say so explicitly. throws 'stale' when the vault has moved
+    // on: the caller reads again, merges, and seals over what it has now seen.
+    // it does not retry here, because retrying without merging is the clobber
+    // this exists to prevent.
+    async putVault(bytes, rev) {
+      const expect = rev === undefined ? seen : rev;
+      const headers = expect ? { 'if-match': expect } : { 'if-none-match': '*' };
+      const r = await call('/vault', { method: 'PUT', body: bytes, headers });
       if (r.status === 402) throw new Error('lapsed');
       if (r.status === 413) throw new Error('too-large');
+      if (r.status === 412 || r.status === 428) throw new Error('stale');
       if (!r.ok) throw new Error('the vault did not answer');
-      return r.json();
+      const meta = await r.json();
+      // the etag is the revision; the body carries it too, so a client whose
+      // browser was not shown the header still knows what it just wrote
+      seen = r.headers.get('etag') || (meta.rev ? `"${meta.rev}"` : '');
+      return { ...meta, rev: seen };
     },
-    // returns { bytes, at } or null when the vault is empty
+    // returns { bytes, at, rev } or null when the vault is empty
     async getVault(prev = false) {
       const r = await call(prev ? '/vault?prev=1' : '/vault');
-      if (r.status === 404) return null;
+      if (r.status === 404) {
+        if (!prev) seen = '';
+        return null;
+      }
       if (!r.ok) throw new Error('the vault did not answer');
-      return { bytes: new Uint8Array(await r.arrayBuffer()), at: r.headers.get('x-sealed-at') || '' };
+      const rev = r.headers.get('etag') || '';
+      if (!prev) seen = rev; // the slot before is read, never written
+      return { bytes: new Uint8Array(await r.arrayBuffer()), at: r.headers.get('x-sealed-at') || '', rev };
     },
     async delVault() {
       const r = await call('/vault', { method: 'DELETE' });
       if (!r.ok) throw new Error('the vault did not answer');
+      seen = ''; // an emptied vault is created into, not replaced
       return r.json();
     },
+    // what this client last saw, for a caller that keeps its own bookkeeping
+    revSeen() { return seen; },
   };
 }

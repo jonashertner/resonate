@@ -13,10 +13,13 @@ the digest before the site can deploy.
 
 A **member** holds a **key** (`tc_` and twenty-some crockford characters),
 minted by the door from a paid Stripe checkout session, exactly once per
-subscription. A **phrase** is the member's sealing passphrase; it never leaves
-a device. An **envelope** is the sealed atlas. The **vault** is the club's
-storage for one member: the current envelope and the **one before** it.
-**seq** is a monotonic count inside the envelope.
+subscription. A **claim** is the hash of a secret the joining device keeps, and
+is what lets that device, and only that device, be told its key a second time.
+A **phrase** is the member's sealing passphrase; it never leaves a device. An
+**envelope** is the sealed atlas. The **vault** is the club's storage for one
+member: the current envelope and the **one before** it. **seq** is a monotonic
+count inside the envelope. A **revision** is the club's opaque name for the
+envelope it currently holds, and is what a seal must name to replace it.
 
 ## 2. Envelope byte layout
 
@@ -90,6 +93,25 @@ another device opens it) ·
 ciphertext, or header, and any rsnt1 buffer of 49 bytes or more that is
 nonetheless truncated).
 
+Those four are the reader's. The wire has its own, and every one of them is a
+status code with a sentence beside it:
+
+```
+400  unreadable json; a session id that is not one; a claim that is not
+     sixty-four lowercase hex characters; if-none-match with anything but a
+     bare star; an envelope under 24 bytes
+401  no key, or a key the club does not know
+402  a lapsed membership sealing a new envelope
+403  a checkout session that is unpaid, or is not a subscription
+404  an empty vault, either slot; any other path
+409  a subscription already claimed, presented without the claim that
+     claimed it, or with it after its window has closed (section 9)
+412  a seal naming a revision the vault no longer holds, or a creating seal
+     into a vault that is not empty (section 10)
+413  an envelope over 16000000 bytes
+428  a seal naming no revision at all
+```
+
 ## 6. The wrapper and seq
 
 The plaintext is JSON: `{ v: 2, seq, sealedAt, atlas }`. Readers tolerate a
@@ -109,6 +131,11 @@ The sync refuses to write in exactly three cases, verbatim from the client:
 Otherwise the client merges additively, seals `max(remoteSeq, lastSeq) + 1`,
 and records the new seq only after the server acknowledges the write.
 
+Those three are the client's own, decided before anything is sent. A fourth is
+the club's, decided at the moment of writing: a seal that names an envelope the
+vault no longer holds is refused with 412, and the client reads again, merges
+again, and seals over what it has now seen (section 10).
+
 ## 7. Burn
 
 `DELETE /vault` removes the current envelope, the one before, and the
@@ -119,12 +146,88 @@ key survives a burn; only "forget the key on this device" removes it locally.
 ## 8. The envelope before
 
 Every successful seal demotes the previous current envelope to the `prev`
-slot; the slot holds exactly one. `GET /vault?prev=1` returns it. Restoring
-from it merges additively into the device and never deletes; nothing is sealed
-until the member syncs again. This is the deliberate, member-initiated form of
-rollback; the seq guard exists to refuse the involuntary form.
+slot; the slot holds exactly one. `GET /vault?prev=1` returns it, and carries
+no ETag: the slot before is read and never written, so a revision naming it
+would name a thing no PUT accepts. Restoring from it merges additively into
+the device and never deletes; nothing is sealed until the member syncs again.
+This is the deliberate, member-initiated form of rollback; the seq guard exists
+to refuse the involuntary form.
 
-## 9. Limits and standing
+## 9. The claim, and the answer that got lost
+
+The door mints a key once per subscription. Once used to mean once even when
+the answer never arrived: a dropped connection on the way back from Stripe left
+a paid membership with nobody holding its key, every retry answered 409, and
+there was no way back. The claim is the way back, and it is the joining
+device's alone.
+
+Before the door is knocked on, the device mints a **claim secret**: sixteen
+random bytes in lowercase hex, kept in local storage under
+`resonate.club.claim.v1` and never sent anywhere. What travels is
+
+```
+claim = lowercase hex of SHA-256( UTF-8( "tc-claim:" + secret + ":" + session ) )
+```
+
+sixty-four characters. The session is inside the hash, so one device joining
+twice files two claims rather than writing over its own, and a stranger holding
+the checkout session id computes nothing without the secret.
+
+```
+POST /door   { "session": "cs_…", "claim": "<64 hex>" }
+     200     { "key": "tc_…", "until": <unix seconds> }
+     200     { "key": "tc_…", "until": …, "again": true }   a second telling
+```
+
+The worker keeps `claim:<hash>` holding the minted key, the subscription id,
+the paid-until, and the moment the window closes. The window is 24 hours,
+enforced twice: the moment sits inside the record, and the record is written
+with a 24 hour expiry so the store forgets it as well. Presenting the same
+claim for the same subscription inside the window returns the same key as often
+as it is asked. Presenting any other claim, or the right one after the window,
+returns 409 and no key: from there the key itself is the only way in.
+
+The three writes happen in one order, and the order is the whole recovery: the
+membership first, then the claim that can recover it, then the `sub:` pointer
+that marks the subscription claimed. A worker that dies between any two of them
+leaves a door that opens again.
+
+## 10. The revision, and two devices
+
+`PUT /vault` used to overwrite whatever was there. Two devices could read the
+same envelope, merge into their own atlas, and seal in turn; the second seal
+erased the first, and the loser's records left no trace anywhere. The vault now
+answers compare-and-swap.
+
+Every seal mints a **revision**: sixteen random bytes in lowercase hex, stored
+in `vaultmeta:<key>` and served as a strong ETag.
+
+```
+GET /vault        200, ETag: "<32 hex>", Cache-Control: no-store
+PUT /vault        If-None-Match: *      the vault must be empty (the first seal)
+                  If-Match: "<32 hex>"  the revision must be the current one
+```
+
+The envelope is served `no-store`, because an envelope read from a cache is an
+envelope a device would then seal over with a revision that has already moved.
+Exactly one of the two headers is required; If-Match is read first when both
+are present. Neither present is 428. The condition failing is 412, and the
+answer carries the current ETag when there is one, so the client knows there is
+something to read. A successful PUT answers `{ bytes, at, rev }` and the new
+ETag.
+
+If-Match is compared as an exact string against `"<rev>"`. Two forms therefore
+match nothing, on purpose: `W/"<rev>"`, because a weak comparison is no
+comparison, and `If-Match: *`, because a star means "whatever is there", which
+is a licence to overwrite, which is the thing the guard exists to refuse.
+
+The revision is minted, not derived. An ETag computed from the envelope would
+answer "is this still the envelope I hold a copy of" to anyone who asked;
+random bytes answer nothing at all, and the club still never reads inside the
+ciphertext to produce one. `DELETE /vault` takes the metadata with the
+envelopes, so a burned vault has no revision and the next seal creates.
+
+## 11. Limits and standing
 
 The vault accepts envelopes up to 16000000 bytes and refuses smaller than 24.
 Membership standing is `good` until the paid-until date plus three days of
@@ -132,11 +235,13 @@ grace, then `lapsed`: a lapsed member still reads and deletes, but does not
 seal. `left` follows a completed cancellation. Keys are minted from 16 random
 bytes into crockford base32 and never re-minted for the same subscription.
 
-## 10. What the server stores
+## 12. What the server stores
 
-Five KV shapes, nothing else: `member:<key>` (subscription id, paid-until,
+Six KV shapes, nothing else: `member:<key>` (subscription id, paid-until,
 standing, notice-of-cancellation flag), `sub:<subscriptionId>` (the reverse
-pointer), `vault:<key>`, `vault:<key>:prev`, `vaultmeta:<key>` (byte size,
-sealed-at time). The worker keeps no request logs; Cloudflare's edge sees
+pointer), `claim:<hash>` (the minted key, the subscription id, the paid-until,
+and when the window closes; gone after 24 hours), `vault:<key>`,
+`vault:<key>:prev`, `vaultmeta:<key>` (byte size, sealed-at time, the
+revision). The worker keeps no request logs; Cloudflare's edge sees
 requests as any host does. The full adversarial accounting lives in
 THREATS.md at the repository root, published on the site.

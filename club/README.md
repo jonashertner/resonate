@@ -17,14 +17,21 @@ browser; only the backup goes quiet.
 POST /door         a paid Stripe checkout session becomes a key, exactly once
 POST /stripe       Stripe's webhook: renewals arrive, lapses arrive
 GET  /membership   good | lapsed | left, and until when
-PUT  /vault        the sealed envelope. the one before is kept
-GET  /vault        the envelope back. ?prev=1 for the one before
+PUT  /vault        the sealed envelope, if-match the revision held
+GET  /vault        the envelope back, and its revision. ?prev=1 for the one before
 DELETE /vault      both envelopes, gone
 ```
 
 A lapsed member still reads and deletes; only sealing anew asks for good
 standing. Three days of grace follow every period, so a stumbling card does
 not eat a backup.
+
+The door takes a claim beside the session: the hash of a secret the joining
+device keeps. An answer lost on a mobile network can be asked for again for a
+day, and is answered with the same key; a stranger holding only the session id
+still meets 409. The vault answers compare-and-swap: it names the envelope it
+holds with an ETag, and a seal must say which envelope it is replacing, or it
+is refused rather than obeyed. Both are specified byte for byte in SPEC.md.
 
 ## Opening the club (owner's steps, in order)
 
@@ -56,8 +63,10 @@ node club/mock.mjs        # the pretended club, port 5179
 
 In the app, set `settings.clubUrl` to `http://localhost:5179`, then paste
 `cs_mock1` into the key field on the club page: the mock door opens for any
-session that begins `cs_mock`. The mock also answers `POST /lapse` with a
-member key, a lever the real club does not have, for trying the lapsed state.
+session that begins `cs_mock`. It speaks the same protocol as the worker,
+claim and revision included, so a client that works against it works against
+the club. The mock also answers `POST /lapse` with a member key, a lever the
+real club does not have, for trying the lapsed state.
 
 ## Tests
 
@@ -67,9 +76,11 @@ node --test club/test/*.test.mjs
 
 They hold the lines: keys mint into their own alphabet, standing honours the
 period and the grace, the webhook only listens to Stripe and reads both the
-old field shapes and the basil ones, the door opens once per subscription,
-the vault keeps exactly what it was given and refuses what is unsealed, too
-small, or too large.
+old field shapes and the basil ones, the door opens once per subscription and
+tells the same key again only to the claim that opened it, the window closes
+after a day, the vault keeps exactly what it was given and refuses what is
+unsealed, too small, too large, or sealed over an envelope the writer never
+read.
 
 ## The specification
 

@@ -37,6 +37,26 @@ async function open(page, { places = 3 } = {}) {
   await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
 }
 
+// is a worker active and holding this page? a share target that the worker
+// does not control is served by the host instead, which is the whole failure.
+// the first load can finish before the worker claims it, so the page is loaded
+// again once and asked a second time. nothing here waits forever: a missing
+// worker answers false rather than hanging the run out to its timeout
+async function claimed(page) {
+  const ask = () => page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return false;
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise(r => setTimeout(() => r(null), 10000)),
+    ]);
+    return !!(reg && reg.active && navigator.serviceWorker.controller);
+  });
+  if (await ask()) return true;
+  await page.reload();
+  await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
+  return ask();
+}
+
 test('a place can be marked and kept with a keyboard alone', async ({ page }) => {
   await open(page);
   // no pointer is used past this line
@@ -90,35 +110,101 @@ test('a nameless mark is never kept under a name nobody chose', async ({ page })
   await expect(page.locator('#addConfirmStatus')).toContainText('give it a name');
 });
 
-test('what is shared into the app never reaches the network', async ({ page }) => {
-  const secret = 'Kronenhalle-Ramistrasse-Zurich';
-  const outbound = [];
-  // every attempt is recorded, including the ones the route table then cuts:
-  // an address that was built is already a leak, whether or not it connected
-  page.on('request', r => outbound.push(r.url()));
-  await open(page);
+// a test stood here that wrote a share straight into the inbox and then
+// reloaded. it proved that a secret already on the device stays there, which
+// was never the doubt. it could not have caught a worker that let the post
+// through to the host, nor one that answered and then dropped the item on the
+// floor. so the form a phone posts is posted here, by the browser, to the
+// worker, and every claim below is about that one post.
+//
+// the app forbids form-action, and rightly: nothing in the app submits a form.
+// a share sheet's post is not the app's form though. it is the browser's, made
+// before any page of ours exists, and no page policy has a say in it. this one
+// test stands where the share sheet stands, outside that rule.
+test.describe('a place shared in from the phone', () => {
+  test.use({ bypassCSP: true });
 
-  // the worker keeps a shared item here; the app takes it from this device
-  await page.evaluate(async (s) => {
-    await new Promise((resolve) => {
-      const req = indexedDB.open('resonate-share', 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains('shared')) db.createObjectStore('shared', { autoIncrement: true });
-      };
-      req.onsuccess = () => {
-        const tx = req.result.transaction('shared', 'readwrite');
-        tx.objectStore('shared').add({ title: s, text: '', url: '', at: new Date().toISOString() });
-        tx.oncomplete = resolve; tx.onerror = resolve;
-      };
-      req.onerror = resolve;
+  test('is answered by the worker, kept on the device, and never put on the wire', async ({ page, request }) => {
+    const secret = 'Kronenhalle-Ramistrasse-Zurich';
+    const share = {
+      title: secret,
+      text: `a table by the window at ${secret}`,
+      url: `https://www.google.com/maps/place/${secret}/@47.3686,8.5451,17z/data=!3d47.3686!4d8.5451`,
+    };
+    const outbound = [];
+    // every attempt is recorded, including the ones the route table then cuts:
+    // an address that was built is already a leak, whether or not it connected
+    page.on('request', r => outbound.push(r.url()));
+
+    // the host has no such door: asked directly, it says so. whatever answers
+    // the post below is therefore not the host, and the app the browser lands
+    // on is not what the host would have given back
+    const knock = await request.post('/share-target', { multipart: { title: 'knock' } });
+    expect(knock.status(), 'the host answered at the share target').toBe(404);
+
+    await open(page);
+    expect(await claimed(page), 'no service worker took control of the page').toBe(true);
+
+    // the app lifts the share out of the inbox about a second after it opens,
+    // so both the inbox and the address the browser landed on are read at
+    // document start, before the app has had the chance to touch either
+    await page.addInitScript(() => {
+      window.__landed = location.href;
+      window.__inbox = new Promise((resolve) => {
+        let req;
+        try { req = indexedDB.open('resonate-share', 1); } catch { return resolve([]); }
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('shared')) db.createObjectStore('shared', { autoIncrement: true });
+        };
+        req.onsuccess = () => {
+          try {
+            const tx = req.result.transaction('shared', 'readonly');
+            const all = tx.objectStore('shared').getAll();
+            tx.oncomplete = () => resolve(all.result || []);
+            tx.onabort = tx.onerror = () => resolve([]);
+          } catch { resolve([]); }
+        };
+        req.onerror = () => resolve([]);
+      });
     });
-  }, secret);
 
-  await page.goto('/?shared=1');
-  await page.waitForTimeout(2500);
-  const leaked = outbound.filter(u => u.includes('Kronenhalle'));
-  expect(leaked, `the shared place appeared in: ${leaked.join(', ')}`).toHaveLength(0);
+    // the share sheet's own request: a multipart post at the address the
+    // manifest names, carrying the three fields it names
+    await page.evaluate((fields) => {
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = 'share-target';
+      f.enctype = 'multipart/form-data';
+      for (const [name, value] of Object.entries(fields)) {
+        const i = document.createElement('input');
+        i.type = 'hidden'; i.name = name; i.value = value;
+        f.appendChild(i);
+      }
+      document.body.appendChild(f);
+      // submitted on the next turn, so this call returns before the page goes
+      setTimeout(() => f.submit(), 0);
+    }, share);
+
+    // the place is offered, by name. the address it opened with carried
+    // nothing to build this from, so it came off this device or not at all
+    await expect(page.locator('#plate .plate-name')).toHaveText(secret);
+
+    const landed = await page.evaluate(() => window.__landed);
+    // one digit for whether anything is waiting, and not a word of the place
+    expect(landed, 'the redirect carried something of the share').toBe(`${new URL(landed).origin}/?shared=1`);
+
+    // and the item is really there, whole, not merely acknowledged
+    const inbox = await page.evaluate(() => window.__inbox);
+    expect(inbox, 'the worker answered but kept nothing').toHaveLength(1);
+    expect(inbox[0]).toMatchObject({ ...share, shortened: false });
+
+    // a fetch the worker makes on its own behalf is the one shape the browser
+    // will not report to a test. the two claims above stand in for it: the
+    // answer was the worker's, and the place is here rather than anywhere else
+    const leaked = outbound.filter(u => u.includes('Kronenhalle'));
+    expect(leaked, `the shared place appeared in: ${leaked.join(', ')}`).toHaveLength(0);
+  });
 });
 
 test('a poster keeps its close word on the narrowest screen', async ({ page }) => {

@@ -461,6 +461,19 @@ export function flyToPlace(place, zoom) {
   else map.flyTo(map.unproject(pt, targetZoom), targetZoom, { duration: 0.65, easeLinearity: 0.25 });
 }
 
+// A point being named is the only thing on screen that matters, so the field
+// goes to it and gets close enough to recognise a corner. It is lifted clear
+// of the naming panel rather than centred: a person needs to see the spot they
+// are describing while they describe it, and the panel owns the lower third.
+export function flyToMark(lat, lng) {
+  const targetZoom = Math.max(map.getZoom(), 16);
+  const pt = map.project(L.latLng(lat, lng), targetZoom);
+  pt.y += Math.round(window.innerHeight * 0.20);
+  const to = map.unproject(pt, targetZoom);
+  if (RM.matches) map.setView(to, targetZoom);
+  else map.flyTo(to, targetZoom, { duration: 0.7, easeLinearity: 0.24 });
+}
+
 export function setView(view) {
   if (view && Number.isFinite(view.lat)) map.setView([view.lat, view.lng], view.zoom ?? 4);
 }

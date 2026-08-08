@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf66';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf66';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf66';
-import * as mapView from './map.js?v=rf66';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf66';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf66';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf66';
-import { exifGPS } from './exif.js?v=rf66';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf66';
-import * as photoStore from './photos.js?v=rf66';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf66';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf67';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf67';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf67';
+import * as mapView from './map.js?v=rf67';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf67';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf67';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf67';
+import { exifGPS } from './exif.js?v=rf67';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf67';
+import * as photoStore from './photos.js?v=rf67';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf67';
 
 // ---------- helpers ----------
 
@@ -61,11 +61,19 @@ function toast(msg, ms = 2800, act = null) {
 // damaged, and a record inside it can be unreadable while the rest is fine:
 // the rest is kept, and the loss is named rather than absorbed. Said after
 // the first sentence has been read, so the good news is not stepped on.
-function sayIfDropped() {
-  const n = store.lastDropped;
+// An archive that could not be handed over exactly is not handed over at all,
+// and the person is told which record and which part of it stopped the
+// restore. "Some of it did not fit" is not an answer a keeper of memory gives.
+async function sayWhatWasLost(lost, { verb = 'bring in' } = {}) {
+  const n = lost?.length || 0;
   if (!n) return;
-  setTimeout(() => toast(
-    `${n} record${n === 1 ? '' : 's'} in that file could not be read, and were left out`, 6500), 3200);
+  const lines = lost.slice(0, 6).map(l =>
+    `${l.kind || 'a record'}${l.id ? ` ${l.id}` : ''}: ${l.reason}`).join('\n');
+  await ask(
+    `This atlas did not ${verb}, and nothing on this device changed.\n\n${lines}`
+    + (n > 6 ? `\n\nand ${n - 6} more` : '')
+    + '\n\nThe file is untouched. Keep it, and say what you see here: an archive that cannot come home whole is a fault in this app, not in your file.',
+    { yes: 'i see', no: '' });
 }
 
 // An unparseable date does not throw: toLocaleDateString hands back the
@@ -104,7 +112,26 @@ const state = {
 function allPlaces() { return store.places; }
 // the pool anything may be handed from: a place that never leaves is not in it
 function sharablePlaces() { return store.places.filter(p => !p.private); }
-function sharableRoutes() { return store.routes.filter(r => !r.private).map(r => store.trimWay(r)); }
+// A way whose ends cannot be hidden is not handed over.
+//
+// Trimming used to give up on any path with fewer than eight points and hand
+// the way over whole, which is the worst possible answer: a straight walk
+// simplifies to two points, so the case where a person most wants their door
+// hidden was exactly the case where both ends went out untouched, under a
+// sentence promising otherwise. It fails closed now, and the ways it refuses
+// are named on the surface rather than silently missing.
+function sharableWays() {
+  const ways = [];
+  const tooShort = [];
+  for (const r of store.routes) {
+    if (r.private) continue;
+    const out = store.trimWay(r);
+    if (out) ways.push(out); else tooShort.push(r);
+  }
+  return { ways, tooShort };
+}
+function sharableRoutes() { return sharableWays().ways; }
+const tooTitles = rs => rs.slice(0, 3).map(r => esc(r.name)).join(', ') + (rs.length > 3 ? `, and ${rs.length - 3} more` : '');
 // only the domains the outgoing records actually use: an unused tag, or one
 // used solely on a place that never leaves, has no business travelling
 function tagsFor(places, routes) {
@@ -179,25 +206,197 @@ async function fullExport() {
   return { json, misses: lastInlineMisses };
 }
 
-// The way back in: an arriving atlas carries its pictures inline, and they
-// belong in the store, not in the records. Anything the store refuses stays
-// inline, exactly as it would have before any of this.
-async function absorbPhotos(atlas) {
-  if (!atlas?.places?.length || !photoStore.available()) return atlas;
+// ---------- the way back in ----------
+//
+// An import is four steps in this order: read, decide, stage, commit.
+//
+// It used to be two, in the wrong order. Every photograph in the file was
+// decoded and written into the picture store first, and whatever came out was
+// handed to the validator afterwards. Storage happened before validation,
+// which cost three things. A file that was then refused had already spent the
+// room, and nothing ever gave it back. The same file imported twice minted
+// fresh blobs, then discovered every record id was already held and kept none
+// of them, so the pictures sat there with nothing pointing at them. And a
+// file nobody had checked yet was decoded on the strength of the person
+// having selected it, which is not the same as it being safe.
+//
+// Now nothing is written until the whole archive has been read and the
+// mutation is known. Pictures are staged only for the records that will
+// actually be kept, and if the commit does not happen the staged pictures go
+// with it.
+
+// the same picture twice in one file is one picture. this is a cheap fix for
+// the common case, an archive that carries a photograph on two places; it does
+// not reach across imports, and does not pretend to.
+async function fingerprint(blob) {
+  try {
+    const buf = await blob.arrayBuffer();
+    const sum = await crypto.subtle.digest('SHA-256', buf);
+    return [...new Uint8Array(sum)].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return null; }
+}
+
+// Put the pictures of `wanted` records into the store, and hand back an atlas
+// whose records point at them. Nothing else is touched. `undo` removes every
+// blob this call minted, so a commit that does not happen leaves no trace.
+async function stagePhotos(atlas, wanted = null) {
+  const minted = [];
+  const undo = async () => {
+    for (const id of minted) { try { await photoStore.del(id); } catch { /* it may already be gone */ } }
+  };
+  if (!atlas?.places?.length || !photoStore.available()) return { atlas, minted, undo };
+  const seen = new Map(); // fingerprint -> id, within this one file
   const places = [];
   for (const p of atlas.places) {
     const inline = (p.photos || []).filter(x => typeof x === 'string' && x.startsWith('data:'));
-    if (!inline.length) { places.push(p); continue; }
+    // a record that is not going to be written needs no pictures kept for it
+    if (!inline.length || (wanted && !wanted.has(p.id))) { places.push(p); continue; }
     const photos = [];
     for (const entry of p.photos) {
       if (!(typeof entry === 'string' && entry.startsWith('data:'))) { photos.push(entry); continue; }
       const blob = photoStore.blobFromDataURL(entry);
-      const id = blob ? await photoStore.put(blob) : null;
+      if (!blob) { photos.push(entry); continue; }
+      const print = await fingerprint(blob);
+      if (print && seen.has(print)) { photos.push(seen.get(print)); continue; }
+      const id = await photoStore.put(blob);
+      if (id) { minted.push(id); if (print) seen.set(print, id); }
+      // a store that refused leaves the picture inline, which still renders
       photos.push(id || entry);
     }
     places.push({ ...p, photos });
   }
-  return { ...atlas, places };
+  return { atlas: { ...atlas, places }, minted, undo };
+}
+
+// Read, decide, stage, commit. Returns
+//   { ok, added, why, lost, was, now }
+// where `why` is one of 'unreadable' | 'lossy' | 'refused', and `lost` names
+// every record and field the file could not hand over exactly.
+async function bringHome(parsed, { replace = false } = {}) {
+  const read = store.readOwn(parsed);
+  if (!read.value) return { ok: false, why: 'unreadable', lost: [] };
+  if (read.lost.length) return { ok: false, why: 'lossy', lost: read.lost };
+
+  // a merge writes only what this atlas lacks, so only those records need
+  // their pictures kept. a restore writes everything.
+  let wanted = null;
+  if (!replace) {
+    const held = new Set(store.places.map(p => p.id));
+    wanted = new Set(read.value.places.filter(p => !held.has(p.id)).map(p => p.id));
+  }
+  const staged = await stagePhotos(read.value, wanted);
+
+  if (replace) {
+    const r = store.restore(staged.atlas);
+    if (!r.ok) { await staged.undo(); return { ok: false, why: r.reason, lost: r.lost || [] }; }
+    await sweepPhotos();
+    return { ok: true, added: r.now.places + r.now.routes, was: r.was, now: r.now, lost: [] };
+  }
+  const added = store.merge(staged.atlas, { own: true });
+  if (added === null) { await staged.undo(); return { ok: false, why: 'refused', lost: store.lastLost || [] }; }
+  // anything staged that the merge did not end up pointing at goes now, not
+  // in some later session that may never come
+  await sweepPhotos();
+  return { ok: true, added, lost: [] };
+}
+
+// Something on this device will not read, and the app is not going to pretend
+// otherwise. Nothing has been written over: the damaged bytes are still here,
+// a copy is set aside, and the person chooses what happens next.
+const KEY_NAMES = {
+  'resonate.places.v1': 'your places',
+  'resonate.routes.v1': 'your ways',
+  'resonate.tags.v1': 'your domains',
+  'resonate.folios.v1': 'your folios',
+  'resonate.correspondents.v1': 'your voices',
+  'resonate.settings.v1': 'your settings',
+};
+
+async function tellAboutDamage(damaged) {
+  const named = damaged.map(d => KEY_NAMES[d.key] || d.key).join(', ');
+  const go = await ask(
+    `Something on this device will not read: ${named}.\n\n`
+    + 'It has not been thrown away and it has not been written over. A copy of the exact bytes is set aside on this device, and nothing will be saved into this part of your atlas until you choose.\n\n'
+    + 'The rest of your atlas still works. Export what you can read before anything else, and keep that file.',
+    { yes: 'export what still reads', also: 'start this part fresh', no: 'leave it for now' });
+  if (go === true) {
+    const { json } = await fullExport();
+    download('resonate-rescued.json', json, 'application/json');
+    return toast('what could be read is in that file. keep it somewhere safe', 6000);
+  }
+  if (go === 'also') {
+    const sure = await ask(
+      'Start these parts fresh? The set aside copy stays on this device, so this is not a deletion; it means this app stops waiting and begins writing again.',
+      { yes: 'start fresh', no: 'stop' });
+    if (!sure) return;
+    damaged.forEach(d => releaseUnreadable(d.key));
+    store.savePlaces(); store.saveTags(); store.saveRoutes();
+    store.saveFolios(); store.saveCorrespondents(); store.saveSettings();
+    renderAll();
+    toast('writing again. the unreadable copy is still on this device', 5000);
+  }
+}
+
+// ---------- an archive arrives ----------
+//
+// Two operations, named, because they were never one operation.
+//
+// "Bring in what is missing" adds records this atlas does not have and
+// touches nothing it does. "Make this atlas the file" replaces. Import used
+// to be only the first, under a word that promised the second: a backup could
+// not bring back an older note, a photograph that had been removed, an
+// earlier shape of a way, or an atlas edited by mistake. It could only ever
+// add, and a person restoring a backup had no way to learn that.
+//
+// The counts are shown before either word is pressed, because replacing is
+// not undoable by the app and a person is owed the size of it first.
+async function openArchive(parsed) {
+  const seen = store.compare(parsed);
+  if (!seen) return toast('that file isn’t a resonate export');
+  if (seen.lost.length) return sayWhatWasLost(seen.lost);
+
+  const held = store.places.length + store.routes.length;
+  const lines = [
+    `${seen.fresh} record${seen.fresh === 1 ? '' : 's'} this atlas does not have`,
+    seen.differ ? `${seen.differ} it has, differently` : '',
+    seen.identical ? `${seen.identical} already the same` : '',
+    seen.onlyHere ? `${seen.onlyHere} here that the file does not have` : '',
+  ].filter(Boolean).join('\n');
+
+  const word = await ask(
+    `This file and this atlas, side by side:\n\n${lines}\n\n`
+    + 'Bring in what is missing, and nothing you already have changes. '
+    + `Make this atlas the file, and the ${held} record${held === 1 ? '' : 's'} here are replaced by the ${seen.fresh + seen.differ + seen.identical} in it. `
+    + 'A snapshot is taken first either way.',
+    { yes: 'bring in what is missing', also: 'make this atlas the file', no: 'never mind' });
+  if (!word) return;
+
+  // whichever way this goes, the atlas as it stands is written down first
+  try { await photoStore.snapshotPut(store.recordsJSON()); await photoStore.snapshotPrune(3); }
+  catch { /* a device with no room for a snapshot still gets the choice */ }
+
+  if (word === 'also') {
+    const sure = await ask(
+      `Replace ${held} record${held === 1 ? '' : 's'} with what is in this file? `
+      + `${seen.onlyHere} record${seen.onlyHere === 1 ? '' : 's'} here that the file does not have will be gone. `
+      + 'The snapshot just taken is on this device, under yours, and can be brought back.',
+      { yes: 'replace this atlas', no: 'stop' });
+    if (!sure) return;
+  }
+
+  const r = await bringHome(parsed, { replace: word === 'also' });
+  if (!r.ok) {
+    if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: word === 'also' ? 'replace this one' : 'bring in' });
+    if (r.why === 'unreadable') return toast('that file isn’t a resonate export');
+    return toast('this device refused the write, so nothing changed');
+  }
+  renderSettings(); renderAll();
+  if (store.places.length) mapView.fitAll(store.places);
+  if (word === 'also') {
+    toast(`this atlas is the file now. ${r.now.places} place${r.now.places === 1 ? '' : 's'}, ${r.now.routes} way${r.now.routes === 1 ? '' : 's'}`, 5000);
+  } else {
+    toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came in` : 'nothing in that file this atlas lacks');
+  }
 }
 
 // the pictures move out of the records once, and survive interruption: an id
@@ -231,6 +430,18 @@ async function migratePhotos() {
 async function sweepPhotos() {
   if (!photoStore.available()) return 0;
   const held = new Set(store.places.flatMap(p => p.photos || []).filter(photoStore.isId));
+  // A snapshot holds ids, not bytes, so a picture the atlas has stopped
+  // pointing at may still be the only copy a snapshot can bring back. Anything
+  // a snapshot names is spoken for; unreferenced does not mean unwanted.
+  for (const key of (await photoStore.snapshotKeys()) || []) {
+    const rec = await photoStore.snapshotGet(key);
+    if (!rec?.json) continue;
+    try {
+      for (const p of JSON.parse(rec.json).places || []) {
+        for (const ph of p.photos || []) if (photoStore.isId(ph)) held.add(ph);
+      }
+    } catch { /* an unreadable snapshot speaks for nothing */ }
+  }
   const kept = (await photoStore.keys()) || [];
   let gone = 0;
   for (const id of kept) {
@@ -263,20 +474,32 @@ function directionsURL(lat, lng, name = '') {
 // A native confirm escapes the focus trap, ignores the inert background, and
 // wears the operating system's clothes in an app that has none. These do not.
 
-function ask(question, { yes = 'yes', no = 'no' } = {}) {
+// true, false, or the third word when one is offered. A question with two
+// real answers and a way out needs three words, not a `no` doing both jobs:
+// "replace everything" must never be the button that also means "never mind".
+function ask(question, { yes = 'yes', no = 'no', also = '' } = {}) {
   const box = $('#askBox');
   $('#askWhat').textContent = question;
   $('#askInput').hidden = true;
   $('#askGo').textContent = yes;
+  // a statement a person can only acknowledge gets one word, not a refusal
   $('#askNo').textContent = no;
+  $('#askNo').hidden = !no;
+  const third = $('#askAlso');
+  third.textContent = also;
+  third.hidden = !also;
   return new Promise((resolve) => {
     const done = (v) => {
-      $('#askGo').onclick = null; $('#askNo').onclick = null; box.onkeydown = null;
+      $('#askGo').onclick = null; $('#askNo').onclick = null; third.onclick = null;
+      box.onkeydown = null;
+      third.hidden = true;
+      $('#askNo').hidden = false;
       dropDialog(box);
       resolve(v);
     };
     $('#askGo').onclick = () => done(true);
     $('#askNo').onclick = () => done(false);
+    third.onclick = () => done('also');
     box.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(false); } };
     raiseDialog(box, question);
     $('#askGo').focus();
@@ -319,26 +542,62 @@ function askText(question, { value = '', yes = 'keep', no = 'never mind', placeh
 const INBOX_KEY = 'resonate.inbox.v1';
 const SHARE_DB = 'resonate-share';
 
-// what the service worker caught and kept, taken and emptied in one act
-function takeSharedFromWorker() {
+function openShareDB() {
   return new Promise((resolve) => {
     let req;
-    try { req = indexedDB.open(SHARE_DB, 1); } catch { return resolve([]); }
+    try { req = indexedDB.open(SHARE_DB, 1); } catch { return resolve(null); }
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('shared')) db.createObjectStore('shared', { autoIncrement: true });
     };
-    req.onsuccess = () => {
-      try {
-        const tx = req.result.transaction('shared', 'readwrite');
-        const store_ = tx.objectStore('shared');
-        const all = store_.getAll();
-        all.onsuccess = () => { store_.clear(); };
-        tx.oncomplete = () => resolve(all.result || []);
-        tx.onabort = tx.onerror = () => resolve([]);
-      } catch { resolve([]); }
-    };
-    req.onerror = () => resolve([]);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+
+// What the service worker caught, one item at a time.
+//
+// This used to read everything and clear the store inside the same
+// transaction. The transaction committed, and only then did the app try to do
+// anything with what it held: a crash, a reload, or a closed tab in that gap
+// took the shares with it, and the person who had just shared a place from
+// their phone had no way to know it was gone. An item is taken only after the
+// app has said it has it.
+async function peekShared() {
+  const db = await openShareDB();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('shared', 'readonly');
+      const s = tx.objectStore('shared');
+      const keys = s.getAllKeys();
+      const vals = s.getAll();
+      tx.oncomplete = () => resolve((keys.result || []).map((k, i) => ({ key: k, item: (vals.result || [])[i] })));
+      tx.onabort = tx.onerror = () => resolve([]);
+    } catch { resolve([]); }
+  });
+}
+
+function forgetShared(key) {
+  return new Promise(async (resolve) => {
+    const db = await openShareDB();
+    if (!db) return resolve(false);
+    try {
+      const tx = db.transaction('shared', 'readwrite');
+      tx.objectStore('shared').delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onabort = tx.onerror = () => resolve(false);
+    } catch { resolve(false); }
+  });
+}
+
+// erase means erase: the inbox is a separate database and was surviving it
+function wipeShareDB() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(SHARE_DB);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve(true);
+    } catch { resolve(false); }
   });
 }
 
@@ -352,6 +611,9 @@ function inboxWrite(list) {
 async function receiveShared(raw) {
   const found = readShared(raw);
   if (!found) return toast('nothing in that to keep');
+  // the worker bounds what it keeps, and says when it had to. a shortened
+  // share is still a share; it is not silently a whole one.
+  if (raw?.shortened) toast('that share was long. the beginning of it was kept', 5000);
 
   const held = alreadyHeld(found, allPlaces());
   if (held) {
@@ -1196,19 +1458,29 @@ async function proposeAdd(lat, lng) {
   status.textContent = 'asking the world what is here';
   $('#addConfirmCoords').textContent = fmtDMS(lat, lng);
   el.hidden = false;
+  // the point is shown and gone to, so a person can see what they are naming
+  mapView.previewPin(lat, lng);
+  mapView.flyToMark(lat, lng);
   input.focus();
 
   let r = null;
   try { r = await reverseGeo(lat, lng); }
   catch { /* offline, or the world declined: the point is still good */ }
 
-  // a late answer must never touch a newer mark, or one the person has begun
+  // A late answer must never touch a newer mark.
   if (request !== markRequest || !state.pendingAdd) return;
+  // What the world knows is kept either way: the address and the city belong
+  // to the point, not to the sentence on screen.
   if (r) {
     Object.assign(state.pendingAdd, {
       address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode,
     });
   }
+  // Only the words wait. Press add with an empty name while the world is
+  // still being asked, and the sentence telling you to give it a name used to
+  // be replaced a moment later by the world's shrug, leaving no reason on
+  // screen for why nothing had happened. The app does not talk over itself.
+  if (state.pendingAdd.spoke) return;
   if (r?.name && !input.dataset.typed) {
     input.value = r.name;
     status.textContent = 'the world calls it this. change it if you like';
@@ -1233,6 +1505,8 @@ function commitAdd() {
   const typed = $('#addConfirmInput').value.trim();
   if (!typed) {
     $('#addConfirmStatus').textContent = 'give it a name, and it is yours';
+    // the world's answer, if it is still coming, does not get to erase this
+    p.spoke = true;
     $('#addConfirmInput').focus();
     return;
   }
@@ -1240,6 +1514,9 @@ function commitAdd() {
   markRequest += 1;
   state.pendingAdd = null;
   $('#addConfirm').hidden = true;
+  // the proposal becomes a real mark a line below; two rings on one point
+  // would read as two places
+  mapView.clearPreview?.();
   const place = store.addPlace(newPlace({
     name: p.name,
     lat: p.lat, lng: p.lng,
@@ -1264,7 +1541,38 @@ function seedDemo({ quiet = false } = {}) {
   renderAll();
   closeSurface('indexOverlay');
   mapView.fitAll(store.places);
-  if (!quiet) toast('a sample atlas. edit anything and it becomes yours');
+  if (!quiet) toast('a sample atlas. edit anything and it becomes yours, and there is a word under yours that clears the rest', 5500);
+}
+
+// A sample is a loan, and a loan can be given back.
+//
+// The demo records went into the same store as a person's own, marked with a
+// flag that drew a small chip and did nothing else. So eighteen places
+// somebody had never been to rode along in every export, every link, every
+// folio and every club envelope as theirs, and the only way to be rid of them
+// was to erase the atlas, which took their own records with it. The flag is
+// cleared the moment a record is edited, so this removes exactly what is
+// still untouched.
+function untouchedSample() {
+  return [
+    ...store.places.filter(p => p.sample),
+    ...store.routes.filter(r => r.sample),
+  ];
+}
+
+async function dropSample() {
+  const loose = untouchedSample();
+  if (!loose.length) return toast('nothing here is on loan: every record is yours');
+  const mine = (store.places.length + store.routes.length) - loose.length;
+  const go = await ask(
+    `Clear the ${loose.length} sample record${loose.length === 1 ? '' : 's'} you have not touched? `
+    + (mine ? `The ${mine} you made or edited stay.` : 'Nothing else is here, so the field will be empty.'),
+    { yes: 'clear the sample', no: 'keep it' });
+  if (!go) return;
+  for (const p of store.places.filter(x => x.sample)) store.removePlace(p.id);
+  for (const r of store.routes.filter(x => x.sample)) store.removeRoute(r.id);
+  renderAll();
+  toast(mine ? 'the sample is gone. what is left is yours' : 'the field is yours to start');
 }
 
 // ---------- ways: the plate, and the ground drawn as a section ----------
@@ -2161,7 +2469,18 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       if (!t) return;
       const author = await ensureAuthor();
       const sel = selection();
-      const ways = wraySelection().map(r => store.trimWay(r));
+      const picked = wraySelection();
+      const ways = picked.map(r => store.trimWay(r)).filter(Boolean);
+      // a way too short to lose its ends does not travel half hidden
+      const refused = picked.length - ways.length;
+      if (refused) {
+        const go = await ask(
+          `${refused} enclosed way${refused === 1 ? ' asks' : 's ask'} to hide ${refused === 1 ? 'its ends' : 'their ends'} and ${refused === 1 ? 'is' : 'are'} too short to lose half a kilometre. `
+          + `${refused === 1 ? 'It stays' : 'They stay'} out of this folio rather than travelling whole.`,
+          { yes: 'hand over the rest', no: 'go back' });
+        if (!go) return;
+        if (!sel.length && !ways.length) return toast('nothing left to enclose');
+      }
       const url = makeFolioUrl({
         title: t,
         dedication: $('#folDed').value.trim(),
@@ -2572,19 +2891,23 @@ function raiseHandBar(url, what, { title = '', text = '', copied = true } = {}) 
 
 async function shareMap() {
   const places = sharablePlaces();
-  const routesOut = sharableRoutes();
-  const kept = (allPlaces().length - places.length) + (allRoutes().length - routesOut.length);
-  if (!places.length) return toast(kept ? 'every place here is marked as never leaving' : 'nothing to hand over yet');
+  const { ways: routes, tooShort } = sharableWays();
+  // an atlas of ways and no places is still an atlas. this used to stop at
+  // the places and never look at the ways it had just finished computing, so
+  // a person who kept only walks could not hand over anything at all.
+  const kept = (allPlaces().length - places.length) + (allRoutes().length - routes.length - tooShort.length);
+  if (!places.length && !routes.length) {
+    return toast(kept || tooShort.length
+      ? 'everything here is marked as never leaving, or is too short to hide its ends'
+      : 'nothing to hand over yet');
+  }
   const author = await ensureAuthor();
-  const routes = routesOut;
-  const url = makeShareUrl(tagsFor(places, routes), places, author, routes);
+  const tags = tagsFor(places, routes);
+  // the panel and the payload read the same object, so they cannot disagree
+  const disclosure = buildDisclosure({ places, routes, tags, author, forLink: true });
+  const count = disclosureCounts(disclosure);
+  const url = packDisclosure(disclosure);
   const bytes = url.length;
-  const withNotes = places.filter(p => p.note).length;
-  // a place carries the names it passed through: say so, since they are
-  // other people's names travelling on
-  const priorNames = new Set([...places, ...routes].flatMap(r => r.provenance
-    ? [...(r.provenance.chain || []).map(h => h.name), r.provenance.name] : []).filter(Boolean));
-  const withLinks = places.filter(p => p.url).length;
   const tooLong = bytes > LINK_HARD_LIMIT;
   const long = bytes > LINK_SOFT_LIMIT;
 
@@ -2593,12 +2916,12 @@ async function shareMap() {
     <div class="sh-what">
       <div class="sec-head">what travels</div>
       <ul class="sh-list">
-        <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
-        ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: a simplified shape, its distance and its climb${routes.some(r => r.trimEnds) ? ', without the ends you hid' : ''}</li>` : ''}
+        ${count.places ? `<li><b>${count.places}</b> place${count.places === 1 ? '' : 's'}: names and coordinates</li>` : ''}
+        ${count.routes ? `<li><b>${count.routes}</b> way${count.routes === 1 ? '' : 's'}: a shape, its distance and its climb${routes.some(r => r.trimEnds) ? ', without the ends you hid' : ''}</li>` : ''}
         <li>addresses, cities, countries, tags, been or want to go</li>
-        ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
-        ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
-        ${priorNames.size ? `<li><b>${priorNames.size}</b> earlier byline${priorNames.size === 1 ? '' : 's'}: the road these places travelled to reach you</li>` : ''}
+        ${count.notes ? `<li><b>${count.notes}</b> note${count.notes === 1 ? '' : 's'}, in full, on places and ways alike</li>` : ''}
+        ${count.links ? `<li><b>${count.links}</b> link${count.links === 1 ? '' : 's'} you saved</li>` : ''}
+        ${count.bylines ? `<li><b>${count.bylines}</b> earlier byline${count.bylines === 1 ? '' : 's'}: the road these places travelled to reach you</li>` : ''}
         <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
       </ul>
       <div class="sec-head">what stays</div>
@@ -2609,7 +2932,8 @@ async function shareMap() {
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
       a link cannot be recalled once it is sent.</p>
       ${kept ? `<p class="sh-warn">${kept} record${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place or way that way from its own plate.</p>` : ''}
-      <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}</p>
+      ${tooShort.length ? `<p class="sh-warn">${tooShort.length} way${tooShort.length === 1 ? '' : 's'} asked to hide ${tooShort.length === 1 ? 'its ends' : 'their ends'} but ${tooShort.length === 1 ? 'is' : 'are'} too short to lose half a kilometre. ${tooShort.length === 1 ? 'It stays' : 'They stay'} behind rather than travelling whole: ${tooTitles(tooShort)}.</p>` : ''}
+      <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}${routes.length ? ' · a link carries a coarser shape than the file' : ''}</p>
     </div>
     <div class="word-row">
       <button class="word-btn" id="shFolio">compose a folio</button>
@@ -2628,9 +2952,15 @@ async function shareMap() {
   $('#shFolio').addEventListener('click', () => { closeSurface('shareOverlay'); openFolioComposer(); });
   $('#shFile').addEventListener('click', () => {
     closeSurface('shareOverlay');
-    // the same promise as the link: no photographs, no voices, no settings
-    download('resonate-atlas.json', store.exportShareJSON(), 'application/json');
-    toast('a file of the same places. your photos stayed here');
+    // the same object the link carries, written out rather than encoded. the
+    // file used to be built somewhere else entirely, so it disclosed more
+    // than the panel above it described: every domain in the atlas, and the
+    // dates every record was made and last touched.
+    const file = buildDisclosure({ places, routes, tags, author });
+    download('resonate-atlas.json',
+      JSON.stringify({ app: 'resonate', exportedAt: new Date().toISOString(), ...file }, null, 2),
+      'application/json');
+    toast('a file of the same places, with the ways drawn in full. your photographs stayed here', 4500);
   });
   openSurface('shareOverlay');
 }
@@ -2717,10 +3047,12 @@ function renderSettings() {
         <button class="word-btn quiet" id="expCsv">csv</button>
         <button class="word-btn quiet" id="expMd">markdown</button>
         <button class="word-btn quiet" id="expPdf">print, or save as pdf</button>
-        <button class="word-btn quiet" id="impJson">import</button>
+        <button class="word-btn quiet" id="impJson">bring a file in</button>
+        ${untouchedSample().length ? '<button class="word-btn quiet" id="dropSample">clear the sample</button>' : ''}
         <button class="word-btn quiet" id="eraseAll">erase this atlas</button>
       </div>
       <div class="set-row-sub" style="margin-top:10px">An atlas must be able to leave for anywhere: geojson for maps, kml for google earth, csv for a spreadsheet, markdown for a person to read in fifty years. None of them carries a place you marked as never leaving. Everything lives in this browser. <b>Export everything</b> is your backup: it carries your photographs, your voices and your settings, so keep it to yourself. A file handed to someone else, from <b>hand over</b>, carries none of those.</div>
+      <div class="set-row-sub" style="margin-top:10px"><b>Bring a file in</b> asks which you mean before it does anything: add what this atlas is missing, or make this atlas the file. The second replaces, and is how a backup actually comes home; a snapshot of what is here is taken first either way.${untouchedSample().length ? ` <b>Clear the sample</b> removes the ${untouchedSample().length} demonstration record${untouchedSample().length === 1 ? '' : 's'} you have not edited. Anything you touched is yours and stays.` : ''}</div>
     </div>
 
     <div class="set-sec">
@@ -2734,9 +3066,12 @@ function renderSettings() {
   paintKept('#setKept');
 
   $('#snapRestore').addEventListener('click', async () => {
-    // the undo word has long expired by now: anything unreferenced is loose
-    const swept = await sweepPhotos();
-    if (swept) console.info(`${swept} photograph${swept === 1 ? '' : 's'} no record pointed at were let go`);
+    // No sweeping here. This used to let go of every picture no current record
+    // pointed at, one breath before offering to bring back the records that
+    // pointed at them: a person who deleted a place and then reached for a
+    // snapshot got the place back with its photographs already destroyed. The
+    // snapshots hold ids, not bytes, so the pictures they name are exactly the
+    // ones an unreferenced sweep would take.
     const keys = (await photoStore.snapshotKeys()) || [];
     if (!keys.length) return toast('no snapshot has been taken on this device yet');
     const newest = keys.sort().reverse();
@@ -2746,13 +3081,16 @@ function renderSettings() {
     if (!Number.isFinite(i) || i < 0 || i >= newest.length) return;
     const rec = await photoStore.snapshotGet(newest[i]);
     if (!rec?.json) return toast('that snapshot could not be read');
-    let brought = null;
-    try { brought = store.merge(await absorbPhotos(JSON.parse(rec.json)), { own: true }); }
+    let parsed = null;
+    try { parsed = JSON.parse(rec.json); }
     catch { return toast('that snapshot could not be read'); }
-    if (brought === null) return toast('this device refused the merge; nothing changed');
-    if (brought) renderAll();
-    toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks');
-    sayIfDropped();
+    const r = await bringHome(parsed);
+    if (!r.ok) {
+      if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
+      return toast('this device refused the write, so nothing changed');
+    }
+    if (r.added) renderAll();
+    toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks');
   });
 
   $('#authorName').addEventListener('change', (e) => {
@@ -2779,26 +3117,25 @@ function renderSettings() {
       if (!f) return;
       const reader = new FileReader();
       reader.onload = async () => {
-        try {
-          const data = await absorbPhotos(JSON.parse(reader.result));
-          const added = store.merge(data, { own: true });
-          // a refusal is not an empty file, and must never be reported as one
-          if (added === null) return toast('this device refused the merge; nothing changed');
-          renderSettings(); renderAll();
-          if (store.places.length) mapView.fitAll(store.places);
-          toast(added ? `${added} place${added === 1 ? '' : 's'} imported` : 'nothing new to import');
-          sayIfDropped();
-        } catch { toast('that file isn’t a resonate export'); }
+        let parsed = null;
+        try { parsed = JSON.parse(reader.result); }
+        catch { return toast('that file isn’t a resonate export'); }
+        await openArchive(parsed);
       };
       reader.readAsText(f);
     };
     file.click();
   });
+  $('#dropSample')?.addEventListener('click', async () => { await dropSample(); renderSettings(); });
   $('#eraseAll').addEventListener('click', async () => {
     if (!await ask('Erase every place and tag in this atlas? Export first if you want a keepsake.', { yes: 'go on', no: 'not yet' })) return;
     if (!await ask('Gone means gone here. Links sent, files exported, and envelopes at the club are not reached; the club key is kept so a backup can come home. Really erase?', { yes: 'erase everything', no: 'stop' })) return;
     store.clearAll();
     await photoStore.clear();
+    // the share inbox is a database of its own, and was surviving an erase:
+    // a place shared in from a phone and not yet placed would still have been
+    // sitting there afterwards, which is not what the word means
+    await wipeShareDB();
     state.selectedId = null;
     state.foreign = null;
     state.visiting = null;
@@ -2965,11 +3302,11 @@ function renderClub() {
         <input class="text-input" type="password" id="clubPhrase" style="max-width:320px" placeholder="the sealing phrase. yours alone, never stored" autocomplete="off" aria-label="Sealing phrase">
       </div>
       <div class="word-row" style="margin-top:14px">
-        <button class="word-btn" id="clubSync">sync now</button>
+        <button class="word-btn" id="clubSync">back it up now</button>
         <button class="word-btn quiet" id="clubPrev">the envelope before</button>
       </div>
       <div class="set-row-sub" id="clubMeta" style="margin-top:10px"></div>
-      <div class="set-row-sub" style="margin-top:10px">Sync brings home what the envelope holds and this atlas lacks, then seals everything back. Nothing is deleted by sync. Lose the phrase and the envelope is lost with it; nobody can open it for you.</div>
+      <div class="set-row-sub" style="margin-top:10px">This is a backup, not a sync, and the word matters. It brings home what the envelope holds and this atlas lacks, then seals everything back. It never changes a record this device already has, and it never carries a deletion: remove a place here and the envelope still holds it until this device seals again. Two devices are not kept in step; each one adds to the envelope and neither overwrites the other. Lose the phrase and the envelope is lost with it; nobody can open it for you.</div>
     </div>
     <div class="set-sec">
       <div class="sec-head">leaving</div>
@@ -3015,12 +3352,14 @@ function renderClub() {
       const atlas = wrapper.atlas ?? wrapper;
       const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
       const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
-      if (!await ask(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`, { yes: 'bring it home', no: 'leave it' })) return;
-      const brought = store.merge(await absorbPhotos(atlas), { own: true });
-      if (brought === null) return toast('this device refused the merge; nothing changed');
-      if (brought) renderAll();
-      toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
-      sayIfDropped();
+      if (!await ask(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you back up again.`, { yes: 'bring it home', no: 'leave it' })) return;
+      const r = await bringHome(atlas);
+      if (!r.ok) {
+        if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
+        return toast('this device refused the write, so nothing changed');
+      }
+      if (r.added) renderAll();
+      toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
     } catch { toast('the vault did not answer'); }
     finally { btn.disabled = false; }
   });
@@ -3049,7 +3388,29 @@ async function clubSync() {
   const btn = $('#clubSync');
   if (btn.disabled) return;
   btn.disabled = true; btn.textContent = 'sealing…';
+  // The vault refuses a seal written over a revision this device did not read.
+  // That refusal is the whole point: two devices used to be able to read the
+  // same envelope and then overwrite one another, and the loser's records went
+  // with no trace. A refusal means someone else sealed in the seconds since
+  // this device looked, and the answer is to look again rather than to insist.
+  // One retry, then a sentence; never a blind rewrite.
   try {
+    let done = await sealOnce(phrase);
+    if (done === 'stale') done = await sealOnce(phrase);
+    if (done === 'stale') toast('another device sealed while this one was reading. nothing written; try once more', 6000);
+  } catch (e) {
+    toast(e.message === 'lapsed' ? 'the membership has lapsed. renewing lets you seal again'
+      : e.message === 'too-large' ? 'the atlas is too large for one envelope'
+      : 'the club did not answer');
+  } finally {
+    btn.disabled = false; btn.textContent = 'back it up now';
+  }
+}
+
+// one read, one merge, one seal. returns 'stale' when the club refused because
+// the envelope moved underneath, and undefined otherwise.
+async function sealOnce(phrase) {
+  {
     const c = clubClient();
     const got = await c.getVault();
     const lastSeq = Number(store.settings.clubSeq) || 0;
@@ -3087,21 +3448,21 @@ async function clubSync() {
         toast('the club returned an older envelope than this device has seen. nothing written; try again shortly');
         return;
       }
-      brought = store.merge(await absorbPhotos(atlas), { own: true });
-      if (brought === null) {
-        // the device refused the write and rolled back: sealing now would
-        // keep the poorer atlas. the promise on this panel holds.
-        toast('this device refused the merge, so nothing was sealed over the envelope');
+      const home = await bringHome(atlas);
+      if (!home.ok) {
+        // an envelope this device could not read whole must never be sealed
+        // over by one it wrote from a poorer copy. the promise on this panel
+        // is that the envelope is safer than the device, and this is where
+        // that promise is either kept or quietly broken.
+        if (home.why === 'lossy') {
+          await sayWhatWasLost(home.lost, { verb: 'come home' });
+          toast('nothing was sealed over the envelope', 6000);
+        } else {
+          toast('this device refused the write, so nothing was sealed over the envelope', 6000);
+        }
         return;
       }
-      // the same rule the photographs get below: an envelope this device read
-      // short of what it holds must never be sealed over the one that holds it
-      if (store.lastDropped) {
-        const n = store.lastDropped;
-        toast(`${n} record${n === 1 ? '' : 's'} in the envelope could not be read here, so nothing was sealed over it`, 7000);
-        if (brought) renderAll();
-        return;
-      }
+      brought = home.added;
       if (brought) renderAll();
     }
 
@@ -3115,7 +3476,9 @@ async function clubSync() {
     const sealed = await seal(JSON.stringify({
       v: 2, seq, sealedAt: new Date().toISOString(), atlas: JSON.parse(json),
     }), phrase, { bind: store.settings.clubKey });
-    const meta = await c.putVault(sealed);
+    let meta;
+    try { meta = await c.putVault(sealed); }
+    catch (e) { if (e.message === 'stale') return 'stale'; throw e; }
     store.settings.clubSeq = seq;
     store.settings.clubSealedAt = meta.at;
     store.saveSettings();
@@ -3123,12 +3486,6 @@ async function clubSync() {
     toast(brought
       ? `${brought} place${brought === 1 ? '' : 's'} came home. everything sealed and kept`
       : 'sealed and kept');
-  } catch (e) {
-    toast(e.message === 'lapsed' ? 'the membership has lapsed. renewing lets you seal again'
-      : e.message === 'too-large' ? 'the atlas is too large for one envelope'
-      : 'the club did not answer');
-  } finally {
-    btn.disabled = false; btn.textContent = 'sync now';
   }
 }
 
@@ -3141,7 +3498,7 @@ const VERBS = {
   settings: { run: () => openSurface('settingsOverlay', renderSettings), hint: 'your byline, your data, erase' },
   tags: { run: () => openSurface('tagsOverlay', renderTags), hint: 'the domains of your taste' },
   voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'the atlases you keep' },
-  club: { run: () => openSurface('clubOverlay', renderClub), hint: 'the travellers club. backup and sync, sealed' },
+  club: { run: () => openSurface('clubOverlay', renderClub), hint: 'the travellers club. an encrypted backup, off this device' },
   keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
   mark: { run: () => { const c = mapView.getCenter(); proposeAdd(c.lat, c.lng); }, hint: 'mark the middle of the field, named by you' },
   here: { run: () => { const c = mapView.getCenter(); proposeAdd(c.lat, c.lng); }, hint: 'mark the middle of the field, named by you' },
@@ -3168,6 +3525,7 @@ const VERBS = {
   all: { run: () => setStatusFilter('all'), hint: 'everything' },
   specimen: { run: seedDemo, hint: 'a sample atlas, yours to edit' },
   sample: { run: seedDemo, hint: 'a sample atlas, yours to edit' },
+  clear: { run: dropSample, hint: 'clear the sample records you never touched' },
   folio: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
   folios: { run: () => openFolioShelf(), hint: 'your kept folios, and the composer' },
   ask: { run: composeAsk, hint: 'request someone’s taste' },
@@ -3395,7 +3753,9 @@ function renderPaletteResults(q) {
 // ---------- the first evening ----------
 
 const DISSOLVE_S = 1.4;   // matches #intro.dissolve in the stylesheet
-const FILM_IN = 1.6;      // enter the evening already in motion
+// the asset is cut to its second half, so it already opens in motion and this
+// seek finds nothing to skip. it stays for a longer cut, and costs nothing.
+const FILM_IN = 1.6;
 const FILM_TAIL = 0.9;    // the dissolve opens this long before the last frame,
                           // so the face at the end of the shot is still there
 
@@ -3404,8 +3764,8 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
   const video = $('#introVideo');
   const canvas = $('#introCanvas');
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // the evening opens every visit, but only the first one plays out. someone
-  // arriving on a link came for the sender, and gets no film at all.
+  // the evening opens once. a second visit, a link, or a person who has asked
+  // their machine for less movement all go straight to the field.
   if (skip || RM) { store.settings.introSeen = true; store.saveSettings(); onDone(); return; }
   el.classList.toggle('brief', brief);
   el.hidden = false;
@@ -3516,7 +3876,8 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
     el.classList.add('has-video');
     cancelAnimationFrame(raf);
     video.muted = true;
-    // open on a frame that is already in motion, not on the first still
+    // open on a frame that is already in motion, not on the first still. a
+    // film short enough to be all middle is left where it starts.
     try { if (video.duration > FILM_IN + 2) video.currentTime = FILM_IN; } catch { /* fine */ }
     const started = video.play();
     // if the browser refuses to roll the film, the drawn scene stays rather
@@ -3565,6 +3926,13 @@ function init() {
     }, 80);
   });
   store.load();
+  // If a stored key would not parse, the store has sealed it rather than
+  // handing back an empty list, and nothing will be written over it until a
+  // person says so. This is the loudest thing the app can say, and it is said
+  // before anything else happens, because the alternative is an atlas that
+  // looks empty and becomes empty on the next keystroke.
+  const damaged = unreadableKeys();
+  if (damaged.length) setTimeout(() => tellAboutDamage(damaged), 400);
   applyWorldState();
   renderFieldWord();
 
@@ -3584,22 +3952,36 @@ function init() {
   // something was shared into the app. the worker kept it here rather than
   // putting it on the wire, so it is read out of this device's own store.
   const q = new URLSearchParams(location.search);
+  const shareFailed = q.get('shared') === '0';
   if (q.has('shared') || q.has('title') || q.has('text') || q.has('url')) {
     // an older install may still arrive by query: honour it, then wipe it
     const fromQuery = (q.has('title') || q.has('text') || q.has('url'))
       ? { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' }
       : null;
     history.replaceState(null, '', location.pathname + location.hash);
+    // the worker says plainly when it could not keep what was shared. a
+    // person who shared a place is owed that, rather than an app that opens
+    // as though nothing had happened.
+    if (shareFailed) {
+      setTimeout(() => toast('this device had no room to keep what you shared. nothing was sent anywhere; try again, or type it in', 7000), 900);
+    }
     setTimeout(async () => {
-      const waiting = await takeSharedFromWorker();
-      const item = waiting[0] || fromQuery;
-      if (item) receiveShared(item);
-      for (const rest of waiting.slice(1)) inboxWrite([...inboxRead(), rest]);
+      const waiting = await peekShared();
+      const first = waiting[0];
+      // taken only once the app has it in hand
+      if (first) { await forgetShared(first.key); receiveShared(first.item); }
+      else if (fromQuery) receiveShared(fromQuery);
+      for (const rest of waiting.slice(1)) {
+        inboxWrite([...inboxRead(), rest.item]);
+        await forgetShared(rest.key);
+      }
     }, 1000);
   } else {
     setTimeout(async () => {
-      const waiting = await takeSharedFromWorker();
-      waiting.forEach(w => inboxWrite([...inboxRead(), w]));
+      for (const w of await peekShared()) {
+        inboxWrite([...inboxRead(), w.item]);
+        await forgetShared(w.key);
+      }
       drainInbox();
     }, 3000);
   }
@@ -3671,13 +4053,21 @@ function init() {
   const payload = parseShareHash();
   if (payload) openReport(payload);
 
+  // The evening plays once.
+  //
+  // It used to open on every visit in what was called a brief form, but the
+  // cutoff that governs the film reads the film's own length and never looked
+  // at that flag, so a returning visitor got the same two and a half seconds
+  // of full-screen film as a first-time one, every time, with a slightly
+  // faster fade at the end. A film is a welcome. A welcome repeated daily is
+  // a toll. Someone arriving on a link came for the sender and gets none of it.
   runIntro(() => {
     if (store.settings.chosen || store.places.length || payload) {
       if (!payload) startWelcome();
       return;
     }
     openThreshold();
-  }, { brief: !!store.settings.introSeen, skip: !!payload });
+  }, { skip: !!payload || !!store.settings.introSeen });
 
   setHeroExit(() => {
     if (!document.body.classList.contains('hero')) return;
@@ -3740,15 +4130,18 @@ function init() {
         const reader = new FileReader();
         reader.onload = async () => {
           try {
-            const added = store.merge(await absorbPhotos(JSON.parse(reader.result)), { own: true });
-            // a refusal is not an empty file, and must never be reported as one
-            if (added === null) return toast('this device refused the merge; nothing changed');
-            if (!added) return toast('that file brought nothing in');
+            const parsed = JSON.parse(reader.result);
+            const r = await bringHome(parsed, { replace: true });
+            if (!r.ok) {
+              if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
+              if (r.why === 'unreadable') return toast('that file isn’t a resonate export');
+              return toast('this device refused the write, so nothing changed');
+            }
             done(() => {
               renderAll();
               if (store.places.length) mapView.fitAll(store.places);
-              toast(`welcome back. ${added} place${added === 1 ? '' : 's'} are home`);
-              sayIfDropped();
+              const n = r.now.places;
+              toast(`welcome back. ${n} place${n === 1 ? '' : 's'} are home`);
             });
           } catch { toast('that file isn’t a resonate export'); }
         };

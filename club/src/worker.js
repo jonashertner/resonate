@@ -12,18 +12,37 @@
 // disappears, every atlas keeps living in its browser; only the backup
 // goes quiet.
 //
-//   POST /door         a Stripe checkout session id becomes a key. shown once.
+//   POST /door         a Stripe checkout session id becomes a key. once, and
+//                      recoverable by the claim that opened it.
 //   POST /stripe       Stripe's webhook: renewals arrive, lapses arrive.
 //   GET  /membership   the key's standing: good | lapsed, and until when.
-//   PUT  /vault        the sealed envelope. the previous one is kept.
-//   GET  /vault        the envelope back. ?prev=1 for the one before.
+//   PUT  /vault        the sealed envelope, if-match the revision held.
+//   GET  /vault        the envelope back, with its revision as an etag.
+//                      ?prev=1 for the one before.
 //   DELETE /vault      both envelopes gone, now.
 //
-// KV: member:<key>, sub:<subscriptionId>, vault:<key>, vault:<key>:prev,
-//     vaultmeta:<key>. Secrets: STRIPE_SECRET, STRIPE_WEBHOOK_SECRET.
+// KV: member:<key>, sub:<subscriptionId>, claim:<hash>, vault:<key>,
+//     vault:<key>:prev, vaultmeta:<key>.
+// Secrets: STRIPE_SECRET, STRIPE_WEBHOOK_SECRET.
 
-import { LIMITS, mintKey, isKey, isSessionId, standingOf } from './validate.js';
+import { LIMITS, mintKey, isKey, isSessionId, isClaimHash, standingOf } from './validate.js';
 import { fetchSession, verifyWebhook } from './stripe.js';
+
+// how long a claim can be presented again. long enough for a flat battery, a
+// tunnel, and a night's sleep; short enough that the record is not a second
+// credential lying about.
+const CLAIM_TTL_S = 24 * 3600;
+
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+
+// the vault's revision: sixteen fresh random bytes at every seal, derived
+// from nothing. an etag that were a digest of the envelope would answer the
+// question "is this still the envelope I hold a copy of" to anyone who asks;
+// randomness answers nothing at all.
+function newRev() {
+  return hex(crypto.getRandomValues(new Uint8Array(16)));
+}
+const etagOf = rev => `"${rev}"`;
 
 const ORIGINS = new Set([
   'https://resonate.select',
@@ -34,8 +53,11 @@ function cors(req) {
   const o = req.headers.get('origin') || '';
   const h = {
     'access-control-allow-methods': 'GET,PUT,POST,DELETE,OPTIONS',
-    'access-control-allow-headers': 'authorization,content-type',
-    'access-control-expose-headers': 'x-sealed-at',
+    // the preconditions travel on if-match and if-none-match, and the
+    // revision comes back on the etag: a browser sees neither unless it is
+    // named here, and a vault whose etag is invisible cannot be written to
+    'access-control-allow-headers': 'authorization,content-type,if-match,if-none-match',
+    'access-control-expose-headers': 'x-sealed-at,etag',
     'access-control-max-age': '86400',
   };
   if (ORIGINS.has(o)) h['access-control-allow-origin'] = o;
@@ -66,6 +88,8 @@ export default {
       let body;
       try { body = await req.json(); } catch { return json({ error: 'a session id, as json' }, 400, h); }
       if (!isSessionId(body?.session)) return json({ error: 'that is not a checkout session' }, 400, h);
+      // the claim, before Stripe is troubled: a malformed one costs an api call
+      if (!isClaimHash(body?.claim)) return json({ error: 'that is not a claim' }, 400, h);
 
       const s = await fetchSession(body.session, env.STRIPE_SECRET);
       if (!s || s.payment_status !== 'paid' || s.mode !== 'subscription') {
@@ -80,6 +104,19 @@ export default {
       // membership back to whoever replays the session would make the Stripe
       // receipt a second credential for the vault, forever. The member holds
       // the key; that is the only way back in.
+      //
+      // But the client that paid must be able to ask twice. The answer to the
+      // first ask travels over a mobile network and sometimes does not arrive,
+      // and marking the subscription claimed with nobody holding the key was a
+      // paid membership lost for good. So the minted key is also filed under
+      // the claim, which is the hash of a secret only that client holds, and
+      // presenting the secret again gets the same key as often as it is asked
+      // until the window closes. A stranger with the session id has no secret,
+      // computes no claim, and still meets 409.
+      const held = await env.BOX.get(`claim:${body.claim}`, 'json');
+      if (held && held.sub === sub.id && nowS <= (Number(held.exp) || 0)) {
+        return json({ key: held.key, until: held.until, again: true }, 200, h);
+      }
       const claimed = await env.BOX.get(`sub:${sub.id}`);
       if (claimed) {
         return json({ error: 'this door has already been opened. the key you were given is the way in' }, 409, h);
@@ -90,7 +127,16 @@ export default {
       const key = mintKey(bytes);
       const until = periodEnd
         || nowS + 32 * 24 * 3600; // a month and a breath, until the webhook speaks
+      // the order of these three writes is the whole recovery. the membership
+      // exists before anything points at it; the claim that can recover it is
+      // filed before the subscription is marked claimed. a worker that dies
+      // between any two of them leaves a door that opens again.
       await env.BOX.put(`member:${key}`, JSON.stringify({ sub: sub.id, until, standing: 'good' }));
+      await env.BOX.put(
+        `claim:${body.claim}`,
+        JSON.stringify({ key, sub: sub.id, until, exp: nowS + CLAIM_TTL_S }),
+        { expirationTtl: CLAIM_TTL_S },
+      );
       await env.BOX.put(`sub:${sub.id}`, key);
       return json({ key, until }, 200, h);
     }
@@ -148,6 +194,32 @@ export default {
     if (url.pathname === '/vault') {
       if (req.method === 'PUT') {
         if (standing !== 'good') return json({ error: 'the membership has lapsed' }, 402, h);
+
+        // Compare and swap, before the body is even read. Two devices used to
+        // be able to read the same envelope and then write over one another,
+        // and the loser's records left no trace anywhere. A seal now says
+        // which envelope it believes it is replacing, and a seal that believes
+        // wrong is refused rather than obeyed.
+        //
+        // The star form of if-match is deliberately not honoured: `If-Match: *`
+        // means "whatever is there", which is a licence to clobber, which is
+        // the thing this guard exists to refuse. Only a revision matches.
+        const meta0 = await env.BOX.get(`vaultmeta:${key}`, 'json');
+        const rev = meta0?.rev || '';
+        const tag = rev ? { etag: etagOf(rev) } : {};
+        const ifMatch = req.headers.get('if-match');
+        const ifNone = req.headers.get('if-none-match');
+        if (ifMatch !== null) {
+          if (!rev || ifMatch.trim() !== etagOf(rev)) {
+            return json({ error: 'the vault has moved on. read it again and seal over what it now holds' }, 412, { ...h, ...tag });
+          }
+        } else if (ifNone !== null) {
+          if (ifNone.trim() !== '*') return json({ error: 'if-none-match takes a star and nothing else' }, 400, h);
+          if (rev) return json({ error: 'the vault already holds an envelope' }, 412, { ...h, ...tag });
+        } else {
+          return json({ error: 'a seal must say what it replaces: if-match, or if-none-match: *' }, 428, { ...h, ...tag });
+        }
+
         const buf = await req.arrayBuffer();
         if (buf.byteLength < 24) return json({ error: 'that is not a sealed envelope' }, 400, h);
         if (buf.byteLength > LIMITS.vaultBytes) {
@@ -156,19 +228,28 @@ export default {
         const prev = await env.BOX.get(`vault:${key}`, 'arrayBuffer');
         if (prev) await env.BOX.put(`vault:${key}:prev`, prev);
         await env.BOX.put(`vault:${key}`, buf);
-        const meta = { bytes: buf.byteLength, at: new Date().toISOString() };
+        const meta = { bytes: buf.byteLength, at: new Date().toISOString(), rev: newRev() };
         await env.BOX.put(`vaultmeta:${key}`, JSON.stringify(meta));
-        return json(meta, 200, h);
+        return json(meta, 200, { ...h, etag: etagOf(meta.rev) });
       }
       if (req.method === 'GET') {
-        const which = url.searchParams.get('prev') ? `vault:${key}:prev` : `vault:${key}`;
-        const buf = await env.BOX.get(which, 'arrayBuffer');
+        const wantPrev = !!url.searchParams.get('prev');
+        const buf = await env.BOX.get(wantPrev ? `vault:${key}:prev` : `vault:${key}`, 'arrayBuffer');
         if (!buf) return json({ error: 'the vault is empty' }, 404, h);
         const meta = await env.BOX.get(`vaultmeta:${key}`, 'json');
-        return new Response(buf, {
-          status: 200,
-          headers: { 'content-type': 'application/octet-stream', 'x-sealed-at': meta?.at ?? '', ...h },
-        });
+        // an etag invites a cache to hold the answer, and an envelope read
+        // from a cache is an envelope the writer would then seal over with a
+        // revision that has moved. this response is for one reader, once.
+        const headers = {
+          'content-type': 'application/octet-stream',
+          'cache-control': 'no-store',
+          'x-sealed-at': meta?.at ?? '',
+          ...h,
+        };
+        // the revision names the current envelope alone. the slot before is
+        // not writable, and an etag there would name a thing no put accepts.
+        if (!wantPrev && meta?.rev) headers.etag = etagOf(meta.rev);
+        return new Response(buf, { status: 200, headers });
       }
       if (req.method === 'DELETE') {
         await env.BOX.delete(`vault:${key}`);

@@ -402,17 +402,66 @@ body.hero .fm-nw .fm-hint { margin-top: 0.5em; font-size: 0.17em; }
 
 /* ---------- add-confirm (right-click / long-press / photo) ---------- */
 
+/* Naming a point is a moment of writing, and writing needs a page.
+   This used to be bare words laid over the map, which read well over a lake
+   and not at all over a city: black on a street grid, with the status column
+   collapsing to one word per line. The map is still visible, because where
+   you are marking is the whole context, but it is pushed back a step so the
+   words sit on something. */
 .add-confirm {
   position: fixed; z-index: 35;
-  left: 22px; right: 22px;
-  bottom: calc(var(--chrome-gap) + env(safe-area-inset-bottom) + 64px);
-  display: flex; gap: 14px; align-items: baseline;
+  left: 0; right: 0;
+  bottom: 0;
+  /* the top padding is the fade: nothing is set in it, so no word ever lands
+     where the field has not yet closed over the map */
+  padding: 54px clamp(20px, 5vw, 44px)
+           calc(var(--chrome-gap) + env(safe-area-inset-bottom) + 78px);
+  display: flex; flex-direction: column; gap: 10px;
   text-align: left;
-  font-size: clamp(16px, 2.2vw, 22px);
-  font-variation-settings: 'opsz' 40, 'wght' 560;
   color: var(--ink);
+  background: linear-gradient(180deg,
+    transparent 0,
+    color-mix(in srgb, var(--field) 78%, transparent) 9%,
+    color-mix(in srgb, var(--field) 96%, transparent) 20%,
+    color-mix(in srgb, var(--field) 98%, transparent) 100%);
+  animation: ac-in 260ms var(--e-enter) both;
 }
-.add-confirm small { font-family: var(--mono); font-size: 10px; color: var(--ink-2); }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .add-confirm {
+    /* the field shows through, softened, so the map stays legible as place
+       and stops competing as texture */
+    -webkit-backdrop-filter: blur(18px) saturate(0.7);
+    backdrop-filter: blur(18px) saturate(0.7);
+    background: linear-gradient(180deg,
+      transparent 0,
+      color-mix(in srgb, var(--field) 52%, transparent) 9%,
+      color-mix(in srgb, var(--field) 84%, transparent) 20%,
+      color-mix(in srgb, var(--field) 90%, transparent) 100%);
+    mask-image: linear-gradient(180deg, transparent 0, #000 10%, #000 100%);
+  }
+}
+@keyframes ac-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .add-confirm { animation: none; } }
+
+/* one line, in full, above the name: never a column of single words */
+.add-confirm .ac-status {
+  display: block; min-height: 1.1em;
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.add-confirm .ac-name {
+  width: 100%;
+  font-size: clamp(20px, 3.4vw, 30px);
+  font-variation-settings: 'opsz' 44, 'wght' 560;
+  border-bottom: 1.5px solid var(--edge);
+  padding-bottom: 6px;
+}
+.add-confirm .ac-foot {
+  display: flex; gap: 16px; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap;
+}
+.add-confirm small { font-family: var(--mono); font-size: 10px; color: var(--ink-2); white-space: nowrap; }
+.add-confirm .word-row { margin: 0; gap: 18px; }
 .add-confirm em { margin-left: auto; font-style: normal; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; border-bottom: 1.5px solid var(--ink); padding-bottom: 2px; }
 
 /* ---------- the command line ---------- */

@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="css/style.css?v=rf66">
+<link rel="stylesheet" href="css/style.css?v=rf67">
 </head>
 <body class="boot">
 
@@ -42,14 +42,16 @@
 
   <!-- long-press / right-click add proposal -->
   <form class="add-confirm" id="addConfirm" hidden>
-    <output class="mono" id="addConfirmStatus" aria-live="polite"></output>
+    <output class="mono ac-status" id="addConfirmStatus" aria-live="polite"></output>
     <label class="sr-only" for="addConfirmInput">Name this place</label>
-    <input id="addConfirmInput" class="text-input" maxlength="140" enterkeyhint="done"
+    <input id="addConfirmInput" class="text-input ac-name" maxlength="140" enterkeyhint="done"
       autocomplete="off" spellcheck="false" placeholder="what is this place?">
-    <small class="mono" id="addConfirmCoords"></small>
-    <div class="word-row">
-      <button class="word-btn" type="submit" id="addConfirmGo">add</button>
-      <button class="word-btn quiet" type="button" id="addConfirmCancel">never mind</button>
+    <div class="ac-foot">
+      <small class="mono" id="addConfirmCoords"></small>
+      <div class="word-row">
+        <button class="word-btn" type="submit" id="addConfirmGo">add</button>
+        <button class="word-btn quiet" type="button" id="addConfirmCancel">never mind</button>
+      </div>
     </div>
   </form>
 </div>
@@ -65,7 +67,7 @@
       <button data-go="voices"><span class="go-word">voices</span><span class="go-sub">people you trust. the atlases you keep</span></button>
       <button data-go="census"><span class="go-word">census</span><span class="go-sub">statistics. your atlas, counted</span></button>
       <button data-go="yours"><span class="go-word">yours</span><span class="go-sub">your byline, your data, erase</span></button>
-      <button data-go="club"><span class="go-word">club</span><span class="go-sub">encrypted backup and sync. the travellers club</span></button>
+      <button data-go="club"><span class="go-word">club</span><span class="go-sub">encrypted backup, off this device. the travellers club</span></button>
       <button data-go="how"><span class="go-word">how</span><span class="go-sub">what this is and what it shares</span></button>
     </nav>
   </header>
@@ -136,6 +138,7 @@
 
     <div class="sec-head">what it keeps</div>
     <p>Your places, tags, notes, photos. All of it stays on your device, in this browser, under this address. The records sit in the browser's simple store and the photographs in its database beside them, where there is room. Photos never travel in a link. If you join the club they travel only inside the sealed envelope, unreadable without your phrase. The free atlas sends us nothing; there is no analytics of any kind on this page.</p>
+    <p>If something on this device will not read, you are told before anything else happens, and nothing is written over it. A damaged store used to come back as an empty list, so the atlas looked empty and the next keystroke saved that emptiness over the damaged bytes. Now the bytes stay exactly where they are, a copy is set aside beside them under a name that says what it is, and that part of the atlas refuses every write until you choose: export what still reads, or start that part fresh. Until you choose, that part is read only, on purpose. Starting fresh deletes nothing; it means the app stops waiting and begins writing again, and the copy set aside stays on this device.</p>
 
     <div class="sec-head">how a place arrives</div>
     <p>Type it into the command line, mark the middle of the field with <b>&gt;mark</b> and name it yourself, drop a photograph with a location on the field, press long on the map, or paste a link from google maps, apple maps or openstreetmap and the app reads the point out of it. Install the app and it appears in your phone's own share sheet, so a place found anywhere can be sent straight here. Nothing is asked of you at that moment but one press: the note, the tags and the rest can wait, or never come.</p>
@@ -144,6 +147,7 @@
 
     <div class="sec-head">ways</div>
     <p>A walk is not a point. Drop a gpx from any walking app on the field and it becomes a way: the line, its distance, its climb, the hour it asks of you, and the ground drawn as a section you can run a finger along. Ways are kept, handed over and printed like everything else.</p>
+    <p>A way usually starts at a door, so a way can be asked to hide where it starts and ends. It then travels without its first and last quarter kilometre, and the distance, the climb and the hours beside it are worked out again from the shorter line, so no number describes ground the recipient was not given. A way too short to lose both ends is not handed over at all: it stays behind and is named, rather than travelling whole under a sentence promising otherwise.</p>
 
     <div class="sec-head">who else answers</div>
     <p>Every request this page makes, and who answers it. The page itself, its code and its typefaces come from GitHub Pages, which serves resonate.select and sees your address and each file it hands you, as any host does. The map tiles come from CARTO, so it sees roughly where you are looking. Place search goes to OpenStreetMap's Nominatim only when you press for it, never as you type, and it sees what you searched. The newsstand list comes from a separate GitHub address, only when you open the stand. The club, if you join, is a Cloudflare worker of ours. None of them receives your atlas; the club receives an envelope it cannot open.</p>
@@ -152,6 +156,7 @@
 
     <div class="sec-head">what it shares</div>
     <p>Nothing, until you hand someone a link. A link carries a copy of what you enclosed at that moment: the places of a folio, or your atlas without photos, under your byline if you set one. An ask carries one question and your byline. A copy cannot be recalled: erasing here does not reach a link already sent, a file already exported, or a folio already on the stand.</p>
+    <p>The same thing can go as a file instead, and a file is not a wider door. One object decides what leaves; the link encodes it and the file writes it, field for field, and the panel you read beforehand counts that same object. There is exactly one difference between the two, and it is geometry: a link has to fit in an address bar, so a way in a link carries a coarser shape than the same way in a file. Nothing else differs, and the panel says which you are about to hand over.</p>
 
     <div class="sec-head">your byline</div>
     <p>A byline is the name you type, nothing more. It is not an account and not a proof; anyone can type any name. It travels only where you hand something over.</p>
@@ -173,12 +178,15 @@
 
     <div class="sec-head">yours</div>
     <p>Export everything as a file, whenever: it carries the photographs back inside itself, so one file is the whole atlas. Print a folio, or the whole atlas, as a typeset page or a pdf. Trust is a person, not a platform.</p>
+    <p>Bringing a file in is two operations, and it asks which you mean before it does anything. <b>Bring in what is missing</b> adds the records this atlas does not have and changes nothing it already holds. <b>Make this atlas the file</b> replaces: what is here goes, and what the file holds stands in its place, which is how a backup actually comes home. You are shown the counts of both, side by side, before either word is pressed, because replacing is not something the app can undo for you. A snapshot of the atlas as it stands is taken first either way, and it stays on this device where you can bring it back.</p>
+    <p>A file that could not be read back exactly is not brought in at all, by either word. Nothing of your own is shortened to fit: the app names the record and the field it could not keep, and hands the file back to you whole.</p>
     <p>Under yours and under census, this browser says what it is holding: how many places and ways, how much room they take, whether the browser has promised to keep them, and when you last took a copy away. This device also keeps its three most recent snapshots of the records, taken quietly, and any of them can come home.</p>
 
     <div class="sec-head">the travellers club</div>
-    <p>The app is free and stays free. The club is for what needs a keeper: a backup of your whole atlas, and the same atlas on your other devices. Before anything travels it is sealed on your device with a phrase only you know. The club keeps bytes it cannot read. What it knows about you, in full: a key, a paid-until date, whether you have given notice, when the envelope was last sealed and how large it is, the envelope before the last, and the subscription id behind the payment. Your name and card live at Stripe, which processes the payment; the club never receives them, though the subscription id could connect the two if Stripe were made to answer.</p>
+    <p>The app is free and stays free. The club is for what needs a keeper: an encrypted backup of your whole atlas, photographs included, off this device. Before anything travels it is sealed on your device with a phrase only you know. The club keeps bytes it cannot read. What it knows about you, in full: a key, a paid-until date, whether you have given notice, when the envelope was last sealed and how large it is, the envelope before the last, and the subscription id behind the payment. Your name and card live at Stripe, which processes the payment; the club never receives them, though the subscription id could connect the two if Stripe were made to answer.</p>
+    <p>It is a backup, and it is not a synchronisation between devices. The word matters, so the app uses the true one. Backing up brings home what the envelope holds and this atlas lacks, then seals everything back. It only ever adds: it does not change a record this device already has, and it carries no deletions. Remove a place here and the envelope still holds it, and it comes home the next time you back up, until this device seals again. Another device with the key and the phrase brings home what the envelope holds, which is how an atlas reaches a second device; it is still an addition, never a mirror, and two devices are not kept in step. The only deletions that are true deletions are burning the envelopes and erasing each device.</p>
     <p>The plain cost of that privacy: lose the phrase and the envelope is lost with it. Nobody can open it for you, and that is the point.</p>
-    <p>None of this asks to be believed. The envelope's exact bytes are specified at <a href="SPEC.md">/SPEC.md</a>, twelve adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is written out at <a href="METHOD.md">/METHOD.md</a>, all on this address.</p>
+    <p>None of this asks to be believed. The envelope's exact bytes are specified at <a href="SPEC.md">/SPEC.md</a>, sixteen adversarial questions are answered at <a href="THREATS.md">/THREATS.md</a>, and the way two atlases are compared is written out at <a href="METHOD.md">/METHOD.md</a>, all on this address.</p>
 
     <div class="word-row" style="margin-top:34px">
       <button class="word-btn quiet" id="howOpening">see the opening again</button>
@@ -237,6 +245,7 @@
   <input id="askInput" type="text" spellcheck="false" maxlength="200" enterkeyhint="done" hidden>
   <div class="word-row">
     <button class="word-btn" id="askGo">yes</button>
+    <button class="word-btn quiet" id="askAlso" hidden></button>
     <button class="word-btn quiet" id="askNo">no</button>
   </div>
 </div>
@@ -287,6 +296,6 @@
 <script src="vendor/markercluster/leaflet.markercluster.js"></script>
 <script src="vendor/lz/lz-string.min.js"></script>
 <script src="vendor/argon2/argon2.umd.min.js" integrity="sha384-tP0Wy54CKmng7i9EoTlPySD0hBx6Octj0VS6MfwlnUu111MPa+JLm0CCbep6XJ1W"></script>
-<script type="module" src="js/app.js?v=rf66"></script>
+<script type="module" src="js/app.js?v=rf67"></script>
 </body>
 </html>

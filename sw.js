@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first, because the field should never be stale when a network exists.
 
-const V = 'v=rf66';
+const V = 'v=rf67';
 const CACHE = `resonate-shell-${V}`;
 
 // everything the first paint needs, at the exact URLs the page asks for
@@ -60,6 +60,31 @@ self.addEventListener('activate', (e) => {
 // device, not even as a request the host could log.
 const INBOX_DB = 'resonate-share';
 
+// A share is a title, a note and a link, and each of those has a real ceiling.
+// 2048 is what an address bar carries in practice; 300 outruns any page title
+// worth keeping, since the app clips a name to 140 anyway; 2000 holds a
+// generous selection of text. The sum is bounded as well, because the sum is
+// what lands in the store, and the link is served first: the coordinates live
+// there. A body past a megabyte is not a share, so it is never parsed at all.
+const CAP = { url: 2048, title: 300, text: 2000 };
+const CAP_TOTAL = 4096;
+const CAP_BODY = 1024 * 1024;
+
+// Each field cut to its own ceiling and then to whatever is left of the total.
+// `shortened` travels with the record so the app can say a share was kept in
+// part rather than pretend it arrived whole.
+function boundShare(form) {
+  const kept = { title: '', text: '', url: '', shortened: false };
+  let budget = CAP_TOTAL;
+  for (const field of ['url', 'title', 'text']) {
+    const raw = String(form.get(field) ?? '');
+    kept[field] = raw.slice(0, Math.min(CAP[field], budget));
+    if (kept[field].length < raw.length) kept.shortened = true;
+    budget -= kept[field].length;
+  }
+  return kept;
+}
+
 function inboxPut(item) {
   return new Promise((resolve) => {
     let req;
@@ -84,17 +109,24 @@ self.addEventListener('fetch', (e) => {
   const shareUrl = new URL(e.request.url);
   if (e.request.method === 'POST' && shareUrl.pathname.endsWith('/share-target')) {
     e.respondWith((async () => {
+      const home = shareUrl.origin + shareUrl.pathname.replace(/share-target$/, '');
+      let kept = false;
       try {
-        const form = await e.request.formData();
-        await inboxPut({
-          title: String(form.get('title') || ''),
-          text: String(form.get('text') || ''),
-          url: String(form.get('url') || ''),
-          at: new Date().toISOString(),
-        });
+        const size = Number(e.request.headers.get('content-length') || 0);
+        if (!(size > CAP_BODY)) {
+          const share = boundShare(await e.request.formData());
+          // three blank fields are not a share, and the write itself can fail:
+          // either way nothing is waiting, and the app must not be told it is.
+          // blank is measured the way the app's parser measures it, on the
+          // trimmed field, so the two never disagree about what arrived.
+          if (share.title.trim() || share.text.trim() || share.url.trim()) {
+            kept = await inboxPut({ ...share, at: new Date().toISOString() });
+          }
+        }
       } catch { /* nothing legible arrived */ }
-      // straight back into the app, with nothing in the address
-      return Response.redirect(shareUrl.origin + shareUrl.pathname.replace(/share-target$/, '') + '?shared=1', 303);
+      // straight back into the app, with nothing of the share in the address:
+      // one digit for whether anything is waiting, and not a word of the place
+      return Response.redirect(home + (kept ? '?shared=1' : '?shared=0'), 303);
     })());
     return;
   }

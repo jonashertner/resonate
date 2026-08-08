@@ -8,17 +8,23 @@
 //   node club/mock.mjs        (port 5179)
 
 import http from 'node:http';
-import { mintKey, isKey, standingOf, LIMITS, GRACE_S } from './src/validate.js';
+import { mintKey, isKey, isClaimHash, standingOf, LIMITS, GRACE_S } from './src/validate.js';
 
 const members = new Map(); // key -> { sub, until, standing }
 const subs = new Map();    // subId -> key
-const vaults = new Map();  // key -> { now: Buffer, prev: Buffer|null, at: string }
+const claims = new Map();  // claim hash -> { key, sub, until, exp }
+const vaults = new Map();  // key -> { now: Buffer, prev: Buffer|null, at: string, rev: string }
+
+const CLAIM_TTL_S = 24 * 3600;
+
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+const newRev = () => hex(crypto.getRandomValues(new Uint8Array(16)));
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,PUT,POST,DELETE,OPTIONS',
-  'access-control-allow-headers': 'authorization,content-type',
-  'access-control-expose-headers': 'x-sealed-at',
+  'access-control-allow-headers': 'authorization,content-type,if-match,if-none-match',
+  'access-control-expose-headers': 'x-sealed-at,etag',
 };
 
 const send = (res, status, obj, headers = {}) => {
@@ -41,14 +47,23 @@ http.createServer(async (req, res) => {
     let body; try { body = JSON.parse((await read(req)).toString()); } catch { return send(res, 400, { error: 'json' }); }
     const session = String(body?.session || '');
     if (!session.startsWith('cs_mock')) return send(res, 403, { error: 'the mock door opens on cs_mock… only' });
-    if (subs.has(session)) {
-      const key = subs.get(session);
-      return send(res, 200, { key, until: members.get(key).until, again: true });
+    const claim = String(body?.claim || '');
+    if (!isClaimHash(claim)) return send(res, 400, { error: 'that is not a claim' });
+    // the mock has no Stripe, so a session stands for its own subscription
+    const sub = `sub_${session}`;
+    // the same secret gets the same key back; the session id alone gets 409
+    const held = claims.get(claim);
+    if (held && held.sub === sub && nowS <= held.exp) {
+      return send(res, 200, { key: held.key, until: held.until, again: true });
+    }
+    if (subs.has(sub)) {
+      return send(res, 409, { error: 'this door has already been opened. the key you were given is the way in' });
     }
     const key = mintKey(crypto.getRandomValues(new Uint8Array(16)));
     const until = nowS + 30 * 24 * 3600;
-    members.set(key, { sub: session, until, standing: 'good' });
-    subs.set(session, key);
+    members.set(key, { sub, until, standing: 'good' });
+    claims.set(claim, { key, sub, until, exp: nowS + CLAIM_TTL_S });
+    subs.set(sub, key);
     return send(res, 200, { key, until });
   }
 
@@ -69,18 +84,43 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/vault') {
     if (req.method === 'PUT') {
       if (standing !== 'good') return send(res, 402, { error: 'the membership has lapsed' });
+      // the body is drained first so keep-alive stays honest, then the
+      // preconditions decide, in the same order the worker decides them
       const buf = await read(req);
+      const v = vaults.get(key);
+      const rev = v?.rev || '';
+      const tag = rev ? { etag: `"${rev}"` } : {};
+      const ifMatch = req.headers['if-match'];
+      const ifNone = req.headers['if-none-match'];
+      if (ifMatch !== undefined) {
+        if (!rev || ifMatch.trim() !== `"${rev}"`) {
+          return send(res, 412, { error: 'the vault has moved on. read it again and seal over what it now holds' }, tag);
+        }
+      } else if (ifNone !== undefined) {
+        if (ifNone.trim() !== '*') return send(res, 400, { error: 'if-none-match takes a star and nothing else' });
+        if (rev) return send(res, 412, { error: 'the vault already holds an envelope' }, tag);
+      } else {
+        return send(res, 428, { error: 'a seal must say what it replaces: if-match, or if-none-match: *' }, tag);
+      }
       if (buf.length < 24) return send(res, 400, { error: 'not sealed' });
       if (buf.length > LIMITS.vaultBytes) return send(res, 413, { error: 'too large' });
-      const v = vaults.get(key);
-      vaults.set(key, { now: buf, prev: v?.now ?? null, at: new Date().toISOString() });
-      return send(res, 200, { bytes: buf.length, at: vaults.get(key).at });
+      const meta = { bytes: buf.length, at: new Date().toISOString(), rev: newRev() };
+      vaults.set(key, { now: buf, prev: v?.now ?? null, at: meta.at, rev: meta.rev });
+      return send(res, 200, meta, { etag: `"${meta.rev}"` });
     }
     if (req.method === 'GET') {
       const v = vaults.get(key);
-      const buf = url.searchParams.get('prev') ? v?.prev : v?.now;
+      const wantPrev = !!url.searchParams.get('prev');
+      const buf = wantPrev ? v?.prev : v?.now;
       if (!buf) return send(res, 404, { error: 'empty' });
-      res.writeHead(200, { 'content-type': 'application/octet-stream', 'x-sealed-at': v.at, ...CORS });
+      const headers = {
+        'content-type': 'application/octet-stream',
+        'cache-control': 'no-store',
+        'x-sealed-at': v.at,
+        ...CORS,
+      };
+      if (!wantPrev) headers.etag = `"${v.rev}"`;
+      res.writeHead(200, headers);
       return res.end(buf);
     }
     if (req.method === 'DELETE') {
