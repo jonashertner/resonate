@@ -1379,6 +1379,17 @@ body.entering #map { animation: field-enter 2.2s var(--e-enter) both; }
   .sh-name { margin: 0; font-size: 13pt; font-variation-settings: 'opsz' 40, 'wght' 560; }
   .sh-meta { margin-top: 0.8mm; font-size: 9.5pt; font-style: italic; }
   .sh-note { margin: 1.2mm 0 0; font-size: 10pt; line-height: 1.45; max-width: 150mm; }
+
+  /* the one page a photograph is allowed on. a row, small, so the sheet stays
+     typeset rather than becoming an album; the entry holds them together so a
+     picture never opens a page its place has already left */
+  .sh-figs { display: flex; gap: 2.5mm; margin: 2mm 0 0; max-width: 150mm; }
+  .sh-fig { margin: 0; flex: 0 1 auto; }
+  .sh-fig img {
+    display: block; height: 34mm; width: auto; max-width: 46mm;
+    object-fit: cover;
+  }
+
   .sh-coords { margin-top: 1mm; font-size: 7.5pt; }
 
   .sh-colophon {

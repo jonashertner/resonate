@@ -59,8 +59,22 @@ globalThis.indexedDB = {
     return r;
   },
 };
+// A stand-in that lies is worse than no stand-in. This one used to drop the
+// options bag and have no arrayBuffer(), so the store's own "keep it as bytes
+// and a type" path could not run here at all and the test agreed with itself
+// about nothing. It carries what a Blob carries.
 globalThis.Blob = class Blob {
-  constructor(parts) { this.parts = parts; this.size = parts[0]?.length ?? 0; }
+  constructor(parts, opts = {}) {
+    this.parts = parts;
+    this.type = opts.type || '';
+    const first = parts[0];
+    this.size = first?.byteLength ?? first?.length ?? 0;
+  }
+  async arrayBuffer() {
+    const first = this.parts[0];
+    if (first?.byteLength !== undefined && !first.buffer) return first;
+    return first?.buffer ?? new Uint8Array(0).buffer;
+  }
 };
 globalThis.atob = (b64) => Buffer.from(b64, 'base64').toString('binary');
 
@@ -77,8 +91,13 @@ test('a kept picture answers to its id, and only its id', async () => {
   db.refuse = false;
   const id = await photos.put(photos.blobFromDataURL('data:image/png;base64,iVBORw0KGgo='));
   assert.ok(photos.isId(id), id);
-  assert.ok(await photos.get(id), 'it comes back');
-  assert.equal(await photos.get('ph_nothing'), undefined);
+  const back = await photos.get(id);
+  assert.ok(back, 'it comes back');
+  // it is kept as bytes and a type, because safari refuses a blob in
+  // indexeddb, and it comes back as a blob either way
+  assert.ok(back instanceof Blob, 'a caller is handed a picture, not the shape it was stored in');
+  assert.equal(back.type, 'image/png', 'and it remembers what kind of picture it is');
+  assert.equal(await photos.get('ph_nothing'), null);
   assert.equal(photos.isId('data:image/png;base64,x'), false, 'an inline picture is not an id');
 });
 
@@ -118,4 +137,26 @@ test('a write that stages and then fails to commit is reported as a failure', as
   db.abortAtCommit = false;
   assert.equal(id, null, 'a staged write is not a kept write: the caller must not destroy its copy');
   assert.equal(db.stores.photos.size, 0, 'and nothing landed');
+});
+
+test('a picture is kept as bytes and a type, because safari refuses a blob', async () => {
+  db.refuse = false;
+  const id = await photos.put(photos.blobFromDataURL('data:image/jpeg;base64,/9j/4AAQ'));
+  // what actually went into the store: not a Blob, which webkit aborts on
+  const held = db.stores.photos.get(id);
+  assert.equal(held instanceof Blob, false, 'a blob in indexeddb is what safari refuses');
+  assert.ok(held.buf, 'the bytes are there');
+  assert.equal(held.type, 'image/jpeg', 'and so is what kind of picture they are');
+  const back = await photos.get(id);
+  assert.equal(back.type, 'image/jpeg', 'and a caller still gets a picture back');
+});
+
+test('a picture kept in the older shape still comes home', async () => {
+  db.refuse = false;
+  // what releases before this wrote: the blob itself
+  const older = photos.blobFromDataURL('data:image/png;base64,iVBORw0KGgo=');
+  db.stores.photos.set('ph_older', older);
+  const back = await photos.get('ph_older');
+  assert.ok(back, 'nobody has to migrate their pictures for this');
+  assert.equal(back.type, 'image/png');
 });

@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf67';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf67';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf67';
-import * as mapView from './map.js?v=rf67';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf67';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf67';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf67';
-import { exifGPS } from './exif.js?v=rf67';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf67';
-import * as photoStore from './photos.js?v=rf67';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf67';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf68';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf68';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf68';
+import * as mapView from './map.js?v=rf68';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf68';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf68';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf68';
+import { exifGPS } from './exif.js?v=rf68';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf68';
+import * as photoStore from './photos.js?v=rf68';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf68';
 
 // ---------- helpers ----------
 
@@ -2592,7 +2592,19 @@ async function composeAsk() {
 
 const DOC_TITLE = document.title;
 
-function buildSheet({ title, dedication = '', author = store.settings.authorName, places, routes = [], tagName = null }) {
+// Photographs are typeset only here.
+//
+// They are the one thing in an atlas that never travels: not in a link, not in
+// a file, not on the stand. A printed page is the exception that costs nothing
+// to be exact about. It is handed over deliberately, one copy at a time, by a
+// person standing there; there is no address that outlives the intention and
+// nothing to ask to have taken down later. So the picture that reminds you is
+// allowed onto the paper you give away, and nowhere else.
+//
+// `pictures` is a map of photograph id to a source the browser has already
+// decoded. buildSheet stays synchronous, so print() is never called over an
+// image that has not arrived; printSheet does the waiting.
+function buildSheet({ title, dedication = '', author = store.settings.authorName, places, routes = [], tagName = null, pictures = null }) {
   const nameOf = tagName || ((id) => tagById(id)?.name);
   const groups = new Map();
   places.forEach(p => {
@@ -2619,6 +2631,7 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
       <div class="sh-line"><span class="sh-no mono">${fmtNo(no)}</span><h3 class="sh-name">${esc(p.name)}</h3></div>
       ${meta ? `<div class="sh-meta">${esc(meta)}</div>` : ''}
       ${p.note ? `<p class="sh-note">${esc(p.note).replace(/\n/g, '<br>')}</p>` : ''}
+      ${sheetFigures(p, pictures)}
       <div class="sh-coords mono">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
     </article>`;
   };
@@ -2662,14 +2675,52 @@ function atlasSheetOpts() {
   };
 }
 
-function printSheet(opts) {
+// a row of pictures under an entry, at most four, so the page stays a page
+// and does not become an album
+function sheetFigures(p, pictures) {
+  if (!pictures) return '';
+  const found = (p.photos || []).map(ph => pictures.get(ph)).filter(Boolean).slice(0, 4);
+  if (!found.length) return '';
+  return `<div class="sh-figs">${found.map(src =>
+    `<figure class="sh-fig"><img src="${esc(src)}" alt="Photograph of ${esc(p.name)}"></figure>`).join('')}</div>`;
+}
+
+// the pictures a set of places holds, resolved to something the browser can
+// draw. an id the store cannot answer for is simply absent from the map, and
+// the page is typeset without it rather than with a gap where it was.
+async function sheetPictures(places) {
+  const out = new Map();
+  for (const p of places) {
+    for (const ph of p.photos || []) {
+      if (out.has(ph)) continue;
+      if (!photoStore.isId(ph)) { out.set(ph, ph); continue; }
+      const url = await photoStore.urlFor(ph);
+      if (url) out.set(ph, url);
+    }
+  }
+  return out;
+}
+
+async function printSheet(opts) {
   if (!opts.places.length && !(opts.routes || []).length) return toast('nothing to print yet');
-  buildSheet(opts);
+  const pictures = await sheetPictures(opts.places);
+  buildSheet({ ...opts, pictures });
+  // print() does not wait for an image, so the page waits here instead. a
+  // picture that will not decode is dropped rather than printed as a hole.
+  await Promise.all([...$$('#sheet img')].map(img => img.decode().catch(() => {
+    img.closest('.sh-fig')?.remove();
+  })));
+  if (!$$('#sheet .sh-fig').length) $$('#sheet .sh-figs').forEach(el => el.remove());
   document.title = `resonate · ${opts.title}`;
   window.print();
 }
 
-// the system print command should never catch the raw map: typeset first
+// The system print command should never catch the raw map: typeset first.
+//
+// This path cannot wait for anything, because beforeprint is already the last
+// moment. So a sheet built here carries no photographs: a picture that has not
+// arrived would print as a hole, and a hole is worse than a page of words. The
+// app's own print word goes through printSheet, which does wait.
 window.addEventListener('beforeprint', () => {
   if (!$('#sheet').innerHTML) buildSheet(atlasSheetOpts());
 });
@@ -2926,7 +2977,7 @@ async function shareMap() {
       </ul>
       <div class="sec-head">what stays</div>
       <ul class="sh-list">
-        <li>your photographs. they never leave this device, by link or by file.</li>
+        <li>your photographs. nothing handed over from here carries one, by link or by file. only a page you print does.</li>
         <li>your voices, and everything under yours.</li>
       </ul>
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:

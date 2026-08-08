@@ -90,14 +90,34 @@ export function dataURLFromBlob(blob) {
   });
 }
 
-// keeps a blob and answers with its id, or null if this browser refused
+// A picture is kept as bytes and a type, never as a Blob.
+//
+// Safari refuses a Blob in IndexedDB: the transaction aborts with an
+// UnknownError, put() answers null, and the app falls back to keeping the
+// picture inline as a data url in the small store, which is the exact
+// pressure moving photographs here was meant to relieve. So every photograph
+// a person took on an iPhone quietly went nowhere useful. An ArrayBuffer
+// stores everywhere, has none of that history, and costs one line each way.
+//
+// Records written before this are plain Blobs; read() takes either, so
+// nobody's pictures need migrating.
 export async function put(blob) {
   const id = mintId();
-  const ok = await act(PHOTOS, 'readwrite', s => s.put(blob, id));
+  let value = blob;
+  try { value = { type: blob.type || 'image/jpeg', buf: await blob.arrayBuffer() }; }
+  catch { /* a browser with no arrayBuffer() keeps the older shape */ }
+  const ok = await act(PHOTOS, 'readwrite', s => s.put(value, id));
   return ok === null ? null : id;
 }
 
-export function get(id) { return act(PHOTOS, 'readonly', s => s.get(id)); }
+export async function get(id) {
+  const held = await act(PHOTOS, 'readonly', s => s.get(id));
+  if (!held) return null;
+  // the shape written before this release, and the shape written now
+  if (held instanceof Blob) return held;
+  if (held.buf) return new Blob([held.buf], { type: held.type || 'image/jpeg' });
+  return null;
+}
 export function del(id) { return act(PHOTOS, 'readwrite', s => s.delete(id)); }
 export function keys() { return act(PHOTOS, 'readonly', s => s.getAllKeys()); }
 

@@ -293,3 +293,64 @@ test('every surface can be left by keyboard', async ({ page }) => {
     await expect(page.locator('#indexOverlay')).toBeVisible();
   }
 });
+
+// A photograph is the one thing in an atlas that never travels: not in a link,
+// not in a file, not on the stand. The printed page is the deliberate
+// exception, and it is the only place the promise bends, so it is worth a test
+// on both halves: that the picture really is typeset there, and that print()
+// is never called over an image that has not arrived.
+test('a photograph is typeset on the printed page, and nowhere a link can reach', async ({ page }) => {
+  await open(page);
+
+  const out = await page.evaluate(async () => {
+    // the app imports its modules with a version query, so importing without
+    // one would hand back a second, separate instance of the store whose
+    // places the app never renders. take the app's own specifier.
+    const v = new URL(document.querySelector('script[type=module]').src).search;
+    const { store } = await import(`/js/store.js${v}`);
+    const photos = await import(`/js/photos.js${v}`);
+
+    // a real picture, drawn here so the test needs no file on disk
+    const c = document.createElement('canvas');
+    c.width = 240; c.height = 180;
+    const g = c.getContext('2d');
+    g.fillStyle = '#8a5226'; g.fillRect(0, 0, 240, 180);
+    const id = await photos.put(photos.blobFromDataURL(c.toDataURL('image/jpeg', 0.8)));
+    store.updatePlace(store.places[0].id, { photos: [id] });
+
+    // print() is stubbed so nothing opens a dialog, and so the moment it is
+    // called can be inspected: every image must have decoded by then
+    let atPrint = null;
+    const real = window.print;
+    window.print = () => {
+      atPrint = [...document.querySelectorAll('#sheet .sh-fig img')]
+        .map(img => img.naturalWidth > 0);
+    };
+    const app = document.querySelector('#fmCommand');
+    app.click();
+    const input = document.querySelector('#paletteInput');
+    input.value = '>print';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 300));
+    document.querySelector('.cmd-row')?.click();
+    await new Promise(r => setTimeout(r, 2000));
+    window.print = real;
+
+    return {
+      figuresAtPrint: atPrint ? atPrint.length : 0,
+      allDecodedAtPrint: atPrint ? atPrint.every(Boolean) : false,
+      // and the same picture must appear in nothing a stranger is handed
+      inShare: store.exportShareJSON().includes(id),
+      inKml: store.exportKML().includes(id),
+      inMarkdown: store.exportMarkdown().includes(id),
+      inGeoJSON: store.exportGeoJSON().includes(id),
+      inCsv: store.exportCSV().includes(id),
+    };
+  });
+
+  expect(out.figuresAtPrint, 'the picture never reached the page').toBeGreaterThan(0);
+  expect(out.allDecodedAtPrint, 'print was called over an image that had not arrived').toBe(true);
+  for (const where of ['inShare', 'inKml', 'inMarkdown', 'inGeoJSON', 'inCsv']) {
+    expect(out[where], `${where} carried a photograph`).toBe(false);
+  }
+});
