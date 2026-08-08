@@ -14,6 +14,13 @@ const OFF = ['**://*.cartocdn.com/**', '**://*.openstreetmap.org/**', '**://tile
 
 // arrive with an atlas already standing, past the film and the first-run door
 async function open(page, { places = 3 } = {}) {
+  // The film opens every visit now, and asking for stillness is the one thing
+  // that stops it. These tests are about what comes after it, so they ask.
+  // It is done here rather than in the config because `use: { reducedMotion }`
+  // does not reach the page fixture's context in this version: a page opened
+  // under it still reports matches=false, while emulateMedia and an explicit
+  // newContext both work. Worth knowing before trusting that setting again.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const pattern of OFF) await page.route(pattern, r => r.abort());
   await page.addInitScript((n) => {
     const now = new Date().toISOString();
@@ -353,4 +360,51 @@ test('a photograph is typeset on the printed page, and nowhere a link can reach'
   for (const where of ['inShare', 'inKml', 'inMarkdown', 'inGeoJSON', 'inCsv']) {
     expect(out[where], `${where} carried a photograph`).toBe(false);
   }
+});
+
+// The film opens every visit now, and one thing suppresses it: a device that
+// has asked for less movement. That makes the reduced-motion path the only
+// gate there is, so it is worth holding down from both sides.
+test.describe('the evening', () => {
+  const seed = async (page) => {
+    await page.addInitScript(() => {
+      const now = new Date().toISOString();
+      localStorage.setItem('resonate.places.v1', JSON.stringify([{
+        id: 'p0', name: 'Place 0', lat: 46, lng: 8, tags: [], status: 'visited',
+        note: '', photos: [], createdAt: now, updatedAt: now,
+      }]));
+      // a person who has been here before: this used to be what skipped it
+      localStorage.setItem('resonate.settings.v1', JSON.stringify({
+        chosen: true, seeded: true, introSeen: true, authorName: 'ada',
+      }));
+    });
+  };
+
+  test('a device asking for less movement gets none of it, and fetches none of it', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await seed(page);
+    await page.goto('/');
+    await expect(page.locator('#intro')).toBeHidden();
+    // the source is taken away rather than trusted to stay still: nothing is
+    // decoded, and nothing is downloaded, for a film nobody will see
+    await page.waitForTimeout(1200);
+    const still = await page.evaluate(() => {
+      const v = document.querySelector('#introVideo');
+      return { src: v.getAttribute('src'), playing: !v.paused, shown: !document.querySelector('#intro').hidden };
+    });
+    expect(still.shown, 'the evening opened for someone who asked for stillness').toBe(false);
+    expect(still.playing, 'the film was rolling behind a hidden overlay').toBe(false);
+    expect(still.src, 'the film was still being fetched').toBe(null);
+  });
+
+  test('everyone else gets it, every visit, not only the first', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await seed(page);
+    await page.goto('/');
+    // the evening opens: whether the film itself has arrived yet or the drawn
+    // scene is standing in for it is the asset's business, and both are the
+    // same promise to the person watching
+    await expect(page.locator('#intro')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
+  });
 });

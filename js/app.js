@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf72';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf72';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf72';
-import * as mapView from './map.js?v=rf72';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf72';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf72';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf72';
-import { exifGPS } from './exif.js?v=rf72';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf72';
-import * as photoStore from './photos.js?v=rf72';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf72';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf73';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf73';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf73';
+import * as mapView from './map.js?v=rf73';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf73';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf73';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf73';
+import { exifGPS } from './exif.js?v=rf73';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf73';
+import * as photoStore from './photos.js?v=rf73';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf73';
 
 // ---------- helpers ----------
 
@@ -3795,9 +3795,18 @@ function runIntro(onDone, { brief = false, skip = false } = {}) {
   const video = $('#introVideo');
   const canvas = $('#introCanvas');
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // the evening opens once. a second visit, a link, or a person who has asked
-  // their machine for less movement all go straight to the field.
-  if (skip || RM) { store.settings.introSeen = true; store.saveSettings(); onDone(); return; }
+  // one exception, and it is not ours to make: a device asking for less
+  // movement is a person telling us something, and a full screen film is
+  // exactly what they mean. `skip` stays for callers that have their own
+  // reason; nothing passes it today.
+  if (skip || RM) {
+    // the element carries autoplay, and firefox and webkit honour it whether
+    // or not the overlay was ever raised. a person who asked for stillness
+    // should not be paying to decode a film they will not see, so the source
+    // goes and the download with it.
+    try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* it was never going to play */ }
+    store.settings.introSeen = true; store.saveSettings(); onDone(); return;
+  }
   el.classList.toggle('brief', brief);
   el.hidden = false;
   let raf = 0;
@@ -4084,21 +4093,20 @@ function init() {
   const payload = parseShareHash();
   if (payload) openReport(payload);
 
-  // The evening plays once.
+  // The evening opens every visit.
   //
-  // It used to open on every visit in what was called a brief form, but the
-  // cutoff that governs the film reads the film's own length and never looked
-  // at that flag, so a returning visitor got the same two and a half seconds
-  // of full-screen film as a first-time one, every time, with a slightly
-  // faster fade at the end. A film is a welcome. A welcome repeated daily is
-  // a toll. Someone arriving on a link came for the sender and gets none of it.
+  // It is short, it is the same each time, and it is the first thing this app
+  // is: an hour at a long table, dissolving into a map. The only person who
+  // does not get it is the one whose device has asked for less movement, and
+  // that is their instruction rather than our guess. A returning visitor gets
+  // the shorter fade at the end, which is the whole of what "brief" means.
   runIntro(() => {
     if (store.settings.chosen || store.places.length || payload) {
       if (!payload) startWelcome();
       return;
     }
     openThreshold();
-  }, { skip: !!payload || !!store.settings.introSeen });
+  }, { brief: !!store.settings.introSeen });
 
   setHeroExit(() => {
     if (!document.body.classList.contains('hero')) return;

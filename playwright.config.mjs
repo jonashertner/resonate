@@ -12,9 +12,11 @@ export default defineConfig({
   reporter: process.env.CI ? 'list' : 'line',
   use: {
     baseURL: 'http://localhost:5178',
-    // the animations are stilled so a test never races a transition. the film
-    // is not: it runs, and the helper waits it out the way a person does
-    reducedMotion: 'reduce',
+    // `reducedMotion: 'reduce'` used to sit here, and it did nothing: a page
+    // opened under it still reported matches=false, while page.emulateMedia
+    // and an explicit browser.newContext both worked. So the suite believed
+    // it was running stilled for weeks and was not. The helper in the spec
+    // asks for stillness itself, where it can be seen to take effect.
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
