@@ -400,3 +400,41 @@ test('the open formats survive a hostile name', () => {
   assert.equal(lines[0].split(',')[0], 'name');
   assert.ok(csv.includes('""co""'), 'csv doubles its quotes');
 });
+
+
+// ---------- a date is a date, or it is nothing ----------
+
+test('a record arriving without dates is dated when it arrives', () => {
+  fresh();
+  // exactly what a place from a share link looks like: the diary was stripped
+  const fromLink = store.addPlace(newPlace({
+    id: undefined, name: 'From a link', lat: 46, lng: 8, createdAt: '', updatedAt: '',
+  }));
+  assert.ok(fromLink.createdAt, 'it entered this atlas at a real moment');
+  assert.ok(!Number.isNaN(new Date(fromLink.createdAt).getTime()), fromLink.createdAt);
+
+  const way = store.addRoute(newRoute({
+    name: 'A way from a link', path: [{ lat: 46, lng: 8 }, { lat: 46.1, lng: 8.1 }], createdAt: '',
+  }));
+  assert.ok(!Number.isNaN(new Date(way.createdAt).getTime()), way.createdAt);
+});
+
+test('a record that carries its own dates keeps them', () => {
+  fresh();
+  const p = store.addPlace(newPlace({ name: 'Old', lat: 46, lng: 8, createdAt: '2024-05-12T09:00:00Z' }));
+  assert.equal(p.createdAt, '2024-05-12T09:00:00Z', 'a real date is never overwritten');
+});
+
+test('a date that is not one is healed on the way in', () => {
+  fresh();
+  localStorage.setItem('resonate.places.v1', JSON.stringify([
+    { id: 'd1', name: 'Empty', lat: 46, lng: 8, tags: [], createdAt: '' },
+    { id: 'd2', name: 'Nonsense', lat: 46, lng: 8, tags: [], createdAt: 'not a date at all' },
+    { id: 'd3', name: 'Fine', lat: 46, lng: 8, tags: [], createdAt: '2024-05-12T09:00:00Z' },
+  ]));
+  store.load();
+  const ok = v => !Number.isNaN(new Date(v).getTime());
+  assert.ok(ok(store.placeById('d1').createdAt), 'an empty date becomes a real one');
+  assert.ok(ok(store.placeById('d2').createdAt), 'and so does a nonsense one');
+  assert.equal(store.placeById('d3').createdAt, '2024-05-12T09:00:00Z', 'a real one is left alone');
+});

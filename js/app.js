@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf62';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf62';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf62';
-import * as mapView from './map.js?v=rf62';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf62';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf62';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf62';
-import { exifGPS } from './exif.js?v=rf62';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf62';
-import * as photoStore from './photos.js?v=rf62';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf62';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf63';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf63';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf63';
+import * as mapView from './map.js?v=rf63';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf63';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf63';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf63';
+import { exifGPS } from './exif.js?v=rf63';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf63';
+import * as photoStore from './photos.js?v=rf63';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf63';
 
 // ---------- helpers ----------
 
@@ -57,8 +57,14 @@ function toast(msg, ms = 2800, act = null) {
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
 
+// An unparseable date does not throw: toLocaleDateString hands back the
+// string "Invalid Date", which then reads as though the app knew something.
+// It says nothing instead, and every caller must be ready for nothing.
 function fmtDate(iso) {
-  try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  try { return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
   catch { return ''; }
 }
 
@@ -763,7 +769,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     </div>
     <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="The name of this place"'}>${esc(place.name)}</h1>${place.sample && !ro ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([place.address, place.city, place.country].filter(Boolean).slice(0, 2).join(' · '))}</div>
-    ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b>${place.provenance.chain?.length ? `, who had it from ${place.provenance.chain.map(h => esc(h.name)).reverse().join(', who had it from ')}` : ''} · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
+    ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b>${place.provenance.chain?.length ? `, who had it from ${place.provenance.chain.map(h => esc(h.name)).reverse().join(', who had it from ')}` : ''} ${fmtDate(place.provenance.adoptedAt) ? `· adopted ${fmtDate(place.provenance.adoptedAt)}` : ''}</div>` : ''}
     ${place.private && !ro ? '<div class="plate-prov held-back">this one never leaves the device</div>' : ''}
 
     ${ro ? `
@@ -808,7 +814,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
         <button class="word-btn quiet" id="pPrivate">${place.private ? 'let it travel again' : 'keep it off every link'}</button>
         <button class="word-btn quiet" id="pDelete">remove</button>
       </div>
-      <div class="plate-foot">entered ${fmtDate(place.createdAt)}</div>`}
+      ${fmtDate(place.createdAt) ? `<div class="plate-foot">entered ${fmtDate(place.createdAt)}</div>` : ''}`}
   `;
 
   $('#pClose').addEventListener('click', () => closeSurface('plate'));
@@ -1469,7 +1475,7 @@ function renderVoices() {
         </svg>
         <h3 class="corr-name" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="This voice's name">${esc(c.name)}</h3>
       </div>
-      <div class="corr-meta">since ${fmtDate(c.addedAt)} · ${c.places.length} marks · ${v.word}</div>
+      <div class="corr-meta">${fmtDate(c.addedAt) ? `since ${fmtDate(c.addedAt)} · ` : ''}${c.places.length} marks · ${v.word}</div>
       <div class="corr-ev">${ev.map(l => `<div>${l}</div>`).join('')}</div>
       <div class="corr-ctl">
         <div class="hue-stations" role="group" aria-label="Their color">
@@ -1919,7 +1925,7 @@ function openFolioShelf() {
       const n = r.places.length + r.routes.length;
       return `<button class="fol-shelf-row" data-open="${esc(f.id)}">
         <span class="fs-title">${esc(f.title)}</span>
-        <span class="fs-meta mono">${n} enclosed${r.routes.length ? ` · ${r.routes.length} way${r.routes.length > 1 ? 's' : ''}` : ''} · ${fmtDate(f.updatedAt)}</span>
+        <span class="fs-meta mono">${n} enclosed${r.routes.length ? ` · ${r.routes.length} way${r.routes.length > 1 ? 's' : ''}` : ''}${fmtDate(f.updatedAt) ? ` · ${fmtDate(f.updatedAt)}` : ''}</span>
         ${names ? `<span class="fs-names">${esc(names)}${r.places.length > 3 ? ' …' : ''}</span>` : ''}
         ${f.dedication ? `<span class="fs-ded">${esc(f.dedication)}</span>` : ''}
       </button>`;

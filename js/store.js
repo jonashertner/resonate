@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf62';
-import { measure, simplify } from './route.js?v=rf62';
+import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf63';
+import { measure, simplify } from './route.js?v=rf63';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -93,11 +93,14 @@ export function newPlace(partial = {}) {
     note: '',
     url: '',
     photos: [],
-    createdAt: now,
-    updatedAt: now,
     ...partial,
     // a caller passing id: undefined must still get a real, unique id
     ...(partial.id ? {} : { id: uid() }),
+    // A link carries no diary of when, so a place arriving from one has empty
+    // dates. It was entered into THIS atlas now, which is the honest answer,
+    // and an empty date must never survive into the record.
+    createdAt: partial.createdAt || now,
+    updatedAt: partial.updatedAt || now,
   };
 }
 
@@ -117,12 +120,13 @@ export function newRoute(partial = {}) {
     note: '', url: '',
     km: m.km, ascent: m.ascent, descent: m.descent,
     high: m.high, low: m.low, hours: m.hours, loop: m.loop,
-    createdAt: now,
-    updatedAt: now,
     walkedAt: '',
     ...partial,
     path,
     ...(partial.id ? {} : { id: uid() }),
+    // a way from a link carries no dates either: it entered here, now
+    createdAt: partial.createdAt || now,
+    updatedAt: partial.updatedAt || now,
   };
 }
 
@@ -166,12 +170,23 @@ export const store = {
   settings: { ...DEFAULT_SETTINGS },
 
   load() {
-    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean);
-    this.routes = normRoutes(read(K_ROUTES, []));
+    // records adopted before this carry an empty date, which read back as
+    // "Invalid Date": give them the day they are first seen, once
+    const sane = (v) => !!v && !Number.isNaN(new Date(v).getTime());
+    const dated = (r) => (sane(r.createdAt) ? r
+      : { ...r, createdAt: sane(r.updatedAt) ? r.updatedAt : new Date().toISOString() });
+    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean).map(dated);
+    this.routes = normRoutes(read(K_ROUTES, [])).map(dated);
     this.folios = normFolioRefs(read(K_FOLIOS, []));
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
     this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
+    // whatever was healed above is written down, so it heals only once
+    if (this.places.some(p => p.createdAt) || this.routes.some(r => r.createdAt)) {
+      const needsWrite = read(K_PLACES, []).some(p => !sane(p.createdAt))
+        || read(K_ROUTES, []).some(r => !sane(r.createdAt));
+      if (needsWrite) { this.savePlaces(); this.saveRoutes(); }
+    }
     // migrate hex-era tags onto the hue wheel
     let migrated = false;
     this.tags.forEach(t => {
