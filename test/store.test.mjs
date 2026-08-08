@@ -524,7 +524,10 @@ const theLossTable = () => ({
     id: 'big', name: 'Everything at once', lat: 46, lng: 8, tags: [],
     photos: Array.from({ length: 201 }, (_, i) => 'ph_' + i.toString(36)),
     note: 'n'.repeat(200001),
-  }],
+  },
+  // the folio below names these, and an archive whose folio points at places
+  // it does not carry is refused now, so the fixture carries them
+  ...Array.from({ length: 501 }, (_, i) => ({ id: 'fp' + i, name: 'F' + i, lat: 46, lng: 8, tags: [] }))],
   routes: [{
     id: 'way', name: 'The long one', tags: [],
     path: Array.from({ length: 1475 }, (_, i) => ({
@@ -547,7 +550,10 @@ test('a person’s own archive comes home to the last photograph, character and 
   fresh();
   const file = theLossTable();
   const added = store.merge(file, { own: true });
-  assert.equal(added, 4, 'a place, a way, a folio and a voice');
+  // a place, a way, a folio, a voice, and the 501 places the folio names,
+  // which the fixture carries because an archive whose folio points at
+  // records it does not contain is refused
+  assert.equal(added, 505, 'everything in the file came in');
   assert.deepEqual(store.lastLost, [], 'and nothing at all was shortened on the way in');
 
   const p = store.placeById('big');
@@ -566,7 +572,9 @@ test('a stranger handing over that same file is clipped at every one of those de
   // a route long enough to meet the stranger’s bound, which 1475 points is not
   file.routes[0].path = Array.from({ length: 3001 }, (_, i) => ({ lat: 46 + i * 0.00001, lng: 8 }));
   const added = store.merge(file);
-  assert.equal(added, 4);
+  // the stranger's door caps places at 500, so the fixture's 502 arrive as
+  // 500, plus the way, the folio and the voice
+  assert.equal(added, 503);
   assert.deepEqual(store.lastLost, [], 'a stranger is clipped in silence, which is what a cap is for');
   assert.equal(store.placeById('big').photos.length, 12);
   assert.equal(store.placeById('big').note.length, 4000);
@@ -983,4 +991,56 @@ test('a sample record is in nothing a stranger is handed', async () => {
   const full = JSON.parse(await store.exportJSON());
   assert.equal(full.places.length, 2, 'a backup is not the place to tidy up');
   assert.ok(JSON.parse(store.recordsJSON()).places.some(p => p.sample), 'and neither is a snapshot');
+});
+
+// ---------- a file has to say what it is ----------
+
+test('a file that is not a resonate archive is refused, not read as an empty one', () => {
+  fresh();
+  const r = store.restore({ app: 'some-other-program', version: 4, places: [], tags: [] });
+  assert.equal(r.ok, false);
+  assert.match(r.lost.map(l => l.reason).join(' '), /not by resonate/);
+});
+
+test('a file from a newer resonate is refused rather than quietly narrowed', () => {
+  fresh();
+  // it carries fields this build cannot see. reading it here would drop them
+  // and then write the shorter thing back as though it were the whole atlas
+  const r = store.restore({
+    app: 'resonate', version: 99, tags: [], routes: [],
+    places: [{ id: 'p1', name: 'From the future', lat: 46, lng: 8, tags: [], mood: 'quiet' }],
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.lost.map(l => l.reason).join(' '), /newer resonate/);
+});
+
+test('two records sharing one id are refused, because only one could be reached', () => {
+  fresh();
+  const twice = { id: 'dup', name: 'Twice', lat: 46, lng: 8, tags: [] };
+  const r = store.restore({ app: 'resonate', version: 4, tags: [], routes: [], places: [twice, { ...twice }] });
+  assert.equal(r.ok, false);
+  assert.match(r.lost.map(l => l.reason).join(' '), /share one id/);
+});
+
+test('a folio naming records the file does not carry is refused', () => {
+  fresh();
+  const r = store.restore({
+    app: 'resonate', version: 4, tags: [], routes: [],
+    places: [{ id: 'p1', name: 'Here', lat: 46, lng: 8, tags: [] }],
+    folios: [{ id: 'f1', title: 'Points at nothing', placeIds: ['p1', 'gone'], routeIds: [] }],
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.lost.map(l => l.reason).join(' '), /does not contain/);
+});
+
+test('a file this build wrote is still read without complaint', async () => {
+  fresh();
+  store.addPlace(newPlace({ id: 'p1', name: 'Mine', lat: 46, lng: 8 }));
+  store.addFolio(newFolio({ id: 'f1', title: 'A folio', placeIds: ['p1'] }));
+  const file = JSON.parse(await store.exportJSON());
+  fresh();
+  const r = store.restore(file);
+  assert.equal(r.ok, true, `a round trip must not trip its own gate: ${JSON.stringify(r.lost)}`);
+  assert.equal(store.places.length, 1);
+  assert.equal(store.folios.length, 1);
 });

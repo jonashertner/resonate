@@ -1,8 +1,8 @@
 // store.js — persistence, models, demo data
 
-import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf76';
-import { measure } from './route.js?v=rf76';
-import { buildDisclosure } from './share.js?v=rf76';
+import { normImport, readArchive, readLocal, losses, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf77';
+import { measure } from './route.js?v=rf77';
+import { buildDisclosure } from './share.js?v=rf77';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -840,10 +840,13 @@ export const store = {
   // the file a member keeps for themselves carries the photographs, so the
   // ids are resolved back into data urls on the way out. inline entries from
   // before the move pass through untouched.
-  async exportJSON(inline = null) {
+  async exportJSON(inline = null, extra = null) {
     const places = inline ? await inline(this.places) : this.places;
     return JSON.stringify({
       app: 'resonate',
+      // a file that is knowingly short of something says so in itself, not
+      // only in the name it was given
+      ...(extra || {}),
       version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       tags: this.tags,

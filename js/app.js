@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf76';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf76';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf76';
-import * as mapView from './map.js?v=rf76';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf76';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf76';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf76';
-import { exifGPS } from './exif.js?v=rf76';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf76';
-import * as photoStore from './photos.js?v=rf76';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf76';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf77';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf77';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf77';
+import * as mapView from './map.js?v=rf77';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf77';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf77';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf77';
+import { exifGPS } from './exif.js?v=rf77';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf77';
+import * as photoStore from './photos.js?v=rf77';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf77';
 
 // ---------- helpers ----------
 
@@ -238,9 +238,42 @@ async function inlinePhotos(places) {
 }
 
 // { json, misses }: the caller decides what an incomplete copy is worth
-async function fullExport() {
-  const json = await store.exportJSON(inlinePhotos);
+async function fullExport(extra = null) {
+  const json = await store.exportJSON(inlinePhotos, extra);
   return { json, misses: lastInlineMisses };
+}
+
+// A backup is not a backup if part of it is missing.
+//
+// The club refuses to seal an envelope short of photographs, and rightly:
+// replacing a good copy with a poorer one is the failure that feature exists
+// to prevent. The file on this side did the opposite. It wrote the incomplete
+// file, downloaded it, recorded the day as a successful backup, and then
+// mentioned in passing that some photographs were not in it. Someone reading
+// "last backed up today" had no reason to look again, which is the worst
+// thing a line like that can do.
+async function exportEverything() {
+  const { json, misses } = await fullExport();
+  if (!misses) {
+    download('resonate-atlas.json', json, 'application/json');
+    store.settings.lastExportAt = new Date().toISOString();
+    store.saveSettings();
+    toast('your atlas is in that file, whole');
+    return true;
+  }
+  const go = await ask(
+    `This device could not read ${misses} photograph${misses === 1 ? '' : 's'}, so no backup was made.\n\n`
+    + 'A file missing part of your atlas is worse than no file, because it looks like one. A browser that is busy or short of room often answers on the second ask.\n\n'
+    + 'A rescue copy holds everything that could be read. It is named so you can tell it apart, it says inside itself that it is incomplete, and it does not count as your last backup.',
+    { yes: 'try again', also: 'take a rescue copy', no: 'not now' });
+  if (go === true) return exportEverything();
+  if (go === 'also') {
+    const day = new Date().toISOString().slice(0, 10);
+    const rescue = await fullExport({ incomplete: true, missingPhotographs: misses });
+    download(`resonate-incomplete-rescue-${day}.json`, rescue.json, 'application/json');
+    toast(`a rescue copy, without ${misses} photograph${misses === 1 ? '' : 's'}. your last backup is still the one before this`, 7000);
+  }
+  return false;
 }
 
 // ---------- the way back in ----------
@@ -376,6 +409,38 @@ async function tellAboutDamage(damaged) {
     renderAll();
     toast('writing again. the unreadable copy is still on this device', 5000);
   }
+}
+
+// A file the person chose is still a file. It is read whole into a string and
+// parsed on the thread that draws the field, so the only honest place to say
+// no is before any of that begins. Above this the tab simply stops answering
+// for a few seconds, and past a browser's own string limit the read comes
+// back empty and the app used to call a perfectly good archive "not a
+// resonate export".
+const ARCHIVE_BYTES = 96 * 1024 * 1024;
+
+function readArchiveFile(file, onParsed) {
+  if (file.size > ARCHIVE_BYTES) {
+    const mb = n => `${(n / (1024 * 1024)).toFixed(0)} MB`;
+    return ask(
+      `That file is ${mb(file.size)}, and this build reads up to ${mb(ARCHIVE_BYTES)} in one go.\n\n`
+      + 'It is not refused because anything is wrong with it. Reading it here would stop this tab answering for several seconds and could still end with the browser refusing to keep the result, which is a worse way to find out. A smaller export, or the club, will carry it.',
+      { yes: 'i see', no: '' });
+  }
+  const reader = new FileReader();
+  reader.onerror = () => toast('this device could not read that file. nothing changed');
+  reader.onload = async () => {
+    const text = String(reader.result || '');
+    if (!text) {
+      return toast('that file could not be read whole on this device. nothing changed', 6000);
+    }
+    let parsed = null;
+    try { parsed = JSON.parse(text); }
+    catch { return toast('that file isn’t a resonate export'); }
+    await onParsed(parsed);
+  };
+  reader.readAsText(file);
+  return null;
 }
 
 // ---------- an archive arrives ----------
@@ -2626,7 +2691,10 @@ const DOC_TITLE = document.title;
 // `pictures` is a map of photograph id to a source the browser has already
 // decoded. buildSheet stays synchronous, so print() is never called over an
 // image that has not arrived; printSheet does the waiting.
-function buildSheet({ title, dedication = '', author = store.settings.authorName, places, routes = [], tagName = null, pictures = null }) {
+// `spare` is the sheet a browser's own Print command gets: names, cities and
+// nothing else. That path cannot ask a question, because beforeprint is
+// already the last moment, so it must be the one that assumes least.
+function buildSheet({ title, dedication = '', author = store.settings.authorName, places, routes = [], tagName = null, pictures = null, spare = false }) {
   const nameOf = tagName || ((id) => tagById(id)?.name);
   const groups = new Map();
   places.forEach(p => {
@@ -2652,9 +2720,9 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     return `<article class="sh-entry">
       <div class="sh-line"><span class="sh-no mono">${fmtNo(no)}</span><h3 class="sh-name">${esc(p.name)}</h3></div>
       ${meta ? `<div class="sh-meta">${esc(meta)}</div>` : ''}
-      ${p.note ? `<p class="sh-note">${esc(p.note).replace(/\n/g, '<br>')}</p>` : ''}
-      ${sheetFigures(p, pictures)}
-      <div class="sh-coords mono">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
+      ${!spare && p.note ? `<p class="sh-note">${esc(p.note).replace(/\n/g, '<br>')}</p>` : ''}
+      ${spare ? '' : sheetFigures(p, pictures)}
+      ${spare ? '' : `<div class="sh-coords mono">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>`}
     </article>`;
   };
 
@@ -2688,12 +2756,19 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
     <footer class="sh-colophon mono">resonate · resonate.select</footer>`;
 }
 
-function atlasSheetOpts() {
+// A sheet is a hand-over like any other, so the same word decides what is on
+// it. This used to read the filtered lists straight, which meant a place
+// marked never leaves, and every untouched sample record, was typeset with
+// its coordinates under the person's own byline. `mayLeave` had been applied
+// to the files and the links and not to the paper.
+function atlasSheetOpts({ spare = false } = {}) {
   const author = store.settings.authorName;
   return {
     title: author ? `the atlas of ${author}` : 'an atlas',
-    places: filteredPlaces(),
-    routes: filteredRoutes(),
+    places: filteredPlaces().filter(mayLeave),
+    routes: filteredRoutes().filter(mayLeave).map(r => store.trimWay(r)).filter(Boolean),
+    author,
+    spare,
   };
 }
 
@@ -2741,7 +2816,7 @@ async function printSheet(opts) {
     (opts.routes || []).length ? `${opts.routes.length} path${opts.routes.length === 1 ? '' : 's'}` : '',
     notes ? `${notes} note${notes === 1 ? '' : 's'}, in full` : '',
     'exact coordinates',
-    opts.author ? `the byline ${opts.author}` : '',
+    (opts.author ?? store.settings.authorName) ? `the byline ${opts.author ?? store.settings.authorName}` : '',
   ].filter(Boolean).join(' · ');
 
   let withPictures = false;
@@ -2774,8 +2849,13 @@ async function printSheet(opts) {
 // moment. So a sheet built here carries no photographs: a picture that has not
 // arrived would print as a hole, and a hole is worse than a page of words. The
 // app's own print word goes through printSheet, which does wait.
+// The browser's own Print command, which arrives with no chance to ask
+// anything. It gets the spare sheet: what a person marked as travelling, by
+// name and city, with no note, no photograph, no link, no road it came by and
+// no coordinate. Anything richer than that is chosen from inside the app,
+// where there is a sentence to read first.
 window.addEventListener('beforeprint', () => {
-  if (!$('#sheet').innerHTML) buildSheet(atlasSheetOpts());
+  if (!$('#sheet').innerHTML) buildSheet(atlasSheetOpts({ spare: true }));
 });
 window.addEventListener('afterprint', () => {
   $('#sheet').innerHTML = '';
@@ -3180,7 +3260,7 @@ function renderSettings() {
     if (!keys.length) return toast('no snapshot has been taken on this device yet');
     const newest = keys.sort().reverse();
     const when = newest.map(k => fmtDate(k).toLowerCase());
-    const pick = await askText(`Snapshots on this device: ${when.map((w, i) => `${i + 1}. ${w}`).join(' · ')}. Bring home which one? Nothing is deleted.`, { value: '1', yes: 'bring it home' });
+    const pick = await askText(`Snapshots on this device: ${when.map((w, i) => `${i + 1}. ${w}`).join(' · ')}. Which one?`, { value: '1', yes: 'look at it' });
     const i = parseInt(pick, 10) - 1;
     if (!Number.isFinite(i) || i < 0 || i >= newest.length) return;
     const rec = await photoStore.snapshotGet(newest[i]);
@@ -3188,13 +3268,47 @@ function renderSettings() {
     let parsed = null;
     try { parsed = JSON.parse(rec.json); }
     catch { return toast('that snapshot could not be read'); }
-    const r = await bringHome(parsed);
+
+    // A snapshot is an archive like any other, so it gets the same two words a
+    // file does. It used to offer one operation under a word that promised the
+    // other: "bring it home" ran an additive merge, which cannot bring back an
+    // older note, an earlier shape, a photograph you removed or a place you
+    // edited by mistake. It only ever helped when a record was entirely gone,
+    // which is not what a person reaching for a snapshot is usually afraid of.
+    const seen = store.compare(parsed);
+    if (!seen) return toast('that snapshot could not be read');
+    if (seen.lost.length) return sayWhatWasLost(seen.lost, { verb: 'come home' });
+    const held = store.places.length + store.routes.length;
+    const word = await ask(
+      `The snapshot from ${when[i]}, beside this atlas:\n\n`
+      + [`${seen.fresh} record${seen.fresh === 1 ? '' : 's'} this atlas no longer has`,
+        seen.differ ? `${seen.differ} it has, differently` : '',
+        seen.identical ? `${seen.identical} already the same` : '',
+        seen.onlyHere ? `${seen.onlyHere} here that the snapshot does not have` : ''].filter(Boolean).join('\n')
+      + `\n\nBring back what is missing, and nothing you have now changes. Go back to the snapshot, and the ${held} record${held === 1 ? '' : 's'} here are replaced by what it holds. A snapshot of now is taken first either way.`,
+      { yes: 'bring back what is missing', also: 'go back to this snapshot', no: 'never mind' });
+    if (!word) return;
+
+    try { await photoStore.snapshotPut(store.recordsJSON()); await photoStore.snapshotPrune(4); }
+    catch { /* a device with no room for one more still gets the choice */ }
+
+    if (word === 'also') {
+      const sure = await ask(
+        `Replace ${held} record${held === 1 ? '' : 's'} with the snapshot from ${when[i]}? `
+        + `${seen.onlyHere} record${seen.onlyHere === 1 ? '' : 's'} made since then will be gone. The snapshot just taken holds them.`,
+        { yes: 'go back', no: 'stop' });
+      if (!sure) return;
+    }
+
+    const r = await bringHome(parsed, { replace: word === 'also' });
     if (!r.ok) {
       if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
       return toast('this device refused the write, so nothing changed');
     }
-    if (r.added) renderAll();
-    toast(r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks');
+    renderAll();
+    toast(word === 'also'
+      ? `this atlas is the snapshot from ${when[i]}. ${r.now.places} place${r.now.places === 1 ? '' : 's'}`
+      : (r.added ? `${r.added} record${r.added === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks'));
   });
 
   $('#authorName').addEventListener('change', (e) => {
@@ -3202,11 +3316,8 @@ function renderSettings() {
     store.saveSettings();
   });
   $('#expJson').addEventListener('click', async () => {
-    const { json, misses } = await fullExport();
-    download('resonate-atlas.json', json, 'application/json');
-    store.settings.lastExportAt = new Date().toISOString(); store.saveSettings();
+    await exportEverything();
     paintKept('#setKept');
-    if (misses) toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read back and are not in this file`, 6000);
   });
   $('#expGeo').addEventListener('click', () => download('resonate-atlas.geojson', store.exportGeoJSON(), 'application/geo+json'));
   $('#expKml').addEventListener('click', () => download('resonate-atlas.kml', store.exportKML(), 'application/vnd.google-earth.kml+xml'));
@@ -3219,14 +3330,7 @@ function renderSettings() {
       const f = file.files?.[0];
       file.value = '';
       if (!f) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        let parsed = null;
-        try { parsed = JSON.parse(reader.result); }
-        catch { return toast('that file isn’t a resonate export'); }
-        await openArchive(parsed);
-      };
-      reader.readAsText(f);
+      readArchiveFile(f, openArchive);
     };
     file.click();
   });
@@ -3617,12 +3721,7 @@ const VERBS = {
   walk: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
   path: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
   paths: { run: () => $('#gpxFile').click(), hint: 'a gpx from any walking app becomes a path' },
-  export: { run: async () => {
-    const { json, misses } = await fullExport();
-    download('resonate-atlas.json', json, 'application/json');
-    store.settings.lastExportAt = new Date().toISOString(); store.saveSettings();
-    if (misses) toast(`${misses} photograph${misses === 1 ? '' : 's'} could not be read back and are not in this file`, 6000);
-  }, hint: 'your data, yours' },
+  export: { run: exportEverything, hint: 'your data, yours' },
   print: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   pdf: { run: () => printSheet(atlasSheetOpts()), hint: 'the atlas typeset, to paper or pdf' },
   import: { run: () => { openSurface('settingsOverlay', renderSettings); $('#impJson').click(); }, hint: 'bring an atlas in' },
@@ -4284,25 +4383,20 @@ function init() {
         const f = file.files?.[0];
         file.value = '';
         if (!f) return;
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const parsed = JSON.parse(reader.result);
-            const r = await bringHome(parsed, { replace: true });
-            if (!r.ok) {
-              if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
-              if (r.why === 'unreadable') return toast('that file isn’t a resonate export');
-              return toast('this device refused the write, so nothing changed');
-            }
-            done(() => {
-              renderAll();
-              if (store.places.length) mapView.fitAll(store.places);
-              const n = r.now.places;
-              toast(`welcome back. ${n} place${n === 1 ? '' : 's'} are home`);
-            });
-          } catch { toast('that file isn’t a resonate export'); }
-        };
-        reader.readAsText(f);
+        readArchiveFile(f, async (parsed) => {
+          const r = await bringHome(parsed, { replace: true });
+          if (!r.ok) {
+            if (r.why === 'lossy') return sayWhatWasLost(r.lost, { verb: 'come home' });
+            if (r.why === 'unreadable') return toast('that file isn’t a resonate export');
+            return toast('this device refused the write, so nothing changed');
+          }
+          done(() => {
+            renderAll();
+            if (store.places.length) mapView.fitAll(store.places);
+            const n = r.now.places;
+            toast(`welcome back. ${n} place${n === 1 ? '' : 's'} are home`);
+          });
+        });
       };
       file.click();
     });

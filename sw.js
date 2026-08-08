@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first, because the field should never be stale when a network exists.
 
-const V = 'v=rf76';
+const V = 'v=rf77';
 const CACHE = `resonate-shell-${V}`;
 
 // everything the first paint needs, at the exact URLs the page asks for
@@ -43,7 +43,11 @@ const SHELL = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => Promise.allSettled(SHELL.map(u => c.add(u))))
+      // Promise.all, not allSettled. A shell that cannot be cached whole must not
+    // install: activate deletes every other cache, so a half filled one throws
+    // away the last copy that worked and leaves the app broken with no network.
+    // Better to keep the old worker and try again on the next visit.
+    .then(c => Promise.all(SHELL.map(u => c.add(u))))
       .then(() => self.skipWaiting())
   );
 });

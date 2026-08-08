@@ -24,7 +24,10 @@ const theLossTable = () => ({
     id: 'big', name: 'Everything at once', lat: 46, lng: 8, tags: [],
     photos: Array.from({ length: 201 }, (_, i) => 'ph_' + i.toString(36)),
     note: 'n'.repeat(200001),
-  }],
+  },
+  // the folio below names these, and an archive whose folio points at places
+  // it does not carry is refused now, so the fixture carries them
+  ...Array.from({ length: 501 }, (_, i) => ({ id: 'fp' + i, name: 'F' + i, lat: 46, lng: 8, tags: [] }))],
   routes: [{
     id: 'way', name: 'The long one', tags: [],
     path: Array.from({ length: 1475 }, (_, i) => ({

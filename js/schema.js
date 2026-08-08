@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf76';
+import { decodePath } from './route.js?v=rf77';
 
 export const SCHEMA_VERSION = 4;
 
@@ -546,10 +546,69 @@ export function normImport(raw) {
   return r ? r.value : null;
 }
 
-// a person's own archive coming home. Nothing is shortened. Whatever could
+// A person's own archive coming home. Nothing is shortened. Whatever could
 // not be kept exactly is named, and the caller refuses on any of it.
+//
+// Before any of that, the file has to say what it is. This used to accept any
+// object at all: a json file from another program restored as an empty atlas,
+// a file written by a NEWER Resonate had its unknown fields quietly dropped
+// and could then be exported back in this build's poorer shape, two records
+// sharing an id both landed and only one of them could ever be edited again,
+// and a folio could point at places the file did not contain. None of it was
+// reported, because the witness only ever hears about a KNOWN field being
+// shortened. A reader that cannot recognise a loss cannot promise there was
+// none.
 export function readArchive(raw) {
-  return readAtlas(raw, ARCHIVE_CAPS, OWN, []);
+  const r = readAtlas(raw, ARCHIVE_CAPS, OWN, []);
+  if (!r) return null;
+  const refused = [];
+  const d = isObj(raw) ? safeKeys(raw) : {};
+
+  // what it is
+  if (d.app !== undefined && d.app !== 'resonate') {
+    refused.push({ kind: 'file', id: null, field: 'app',
+      reason: `this file says it was written by ${String(d.app).slice(0, 40)}, not by resonate` });
+  }
+
+  // when it is from. a file from a later Resonate holds fields this build
+  // cannot see, and reading it here would drop them and then write the
+  // shorter thing back as though it were the whole atlas.
+  const v = Number(d.version);
+  if (Number.isFinite(v) && v > SCHEMA_VERSION) {
+    refused.push({ kind: 'file', id: null, field: 'version',
+      reason: `this file was written by a newer resonate (its form is ${v}, this one reads ${SCHEMA_VERSION}). opening it here would quietly drop what this build does not know about` });
+  }
+
+  // two records with one name between them: only the first can ever be
+  // edited again, and removing it removes them both
+  const twice = (list, kind) => {
+    const seen = new Set();
+    for (const rec of list) {
+      if (seen.has(rec.id)) {
+        refused.push({ kind, id: rec.id, field: 'id',
+          reason: 'two records in this file share one id, and only one of them could ever be reached again' });
+        return;
+      }
+      seen.add(rec.id);
+    }
+  };
+  twice(r.value.places, 'place');
+  twice(r.value.routes, 'path');
+  twice(r.value.folios, 'folio');
+  twice(r.value.tags, 'domain');
+  twice(r.value.correspondents, 'voice');
+
+  // a folio that names something the file does not carry
+  const held = new Set([...r.value.places.map(p => p.id), ...r.value.routes.map(x => x.id)]);
+  for (const f of r.value.folios) {
+    const missing = [...f.placeIds, ...f.routeIds].filter(id => !held.has(id));
+    if (missing.length) {
+      refused.push({ kind: 'folio', id: f.id, field: 'contents',
+        reason: `this folio names ${missing.length} record${missing.length === 1 ? '' : 's'} the file does not contain` });
+    }
+  }
+
+  return { ...r, refused };
 }
 
 // everything an own archive lost, in one list a person can be shown. Empty is
@@ -565,6 +624,7 @@ export function losses(read) {
   for (const c of read.clipped || []) {
     out.push({ kind: c.kind, id: c.id, field: c.field, reason: c.reason });
   }
+  for (const x of read.refused || []) out.push(x);
   return out;
 }
 
