@@ -165,6 +165,7 @@ a { color: inherit; }
 
 /* halo that lets type sit on live tiles — the only chrome allowed */
 .halo, .fm, .add-confirm, .map-label {
+#addConfirmInput { display: block; width: min(260px, 60vw); margin: 4px 0 6px; font-size: 15px; }
   text-shadow:
     -1px -1px 0 var(--field), 1px -1px 0 var(--field),
     -1px 1px 0 var(--field), 1px 1px 0 var(--field),

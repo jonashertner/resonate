@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf63';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf63';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf63';
-import * as mapView from './map.js?v=rf63';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf63';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf63';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf63';
-import { exifGPS } from './exif.js?v=rf63';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf63';
-import * as photoStore from './photos.js?v=rf63';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf63';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf64';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf64';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf64';
+import * as mapView from './map.js?v=rf64';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf64';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf64';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf64';
+import { exifGPS } from './exif.js?v=rf64';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf64';
+import * as photoStore from './photos.js?v=rf64';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf64';
 
 // ---------- helpers ----------
 
@@ -1115,29 +1115,55 @@ function addPlaceFromResult(r) {
   return place;
 }
 
+// A point the world has no name for is still a place: a trailhead, a bench, a
+// door with no sign, a spring. When nothing is found, the mark asks what it
+// is rather than filing it as unnamed.
 async function proposeAdd(lat, lng) {
   const el = $('#addConfirm');
-  state.pendingAdd = { lat, lng, name: 'this point' };
-  $('#addConfirmName').textContent = '…';
+  const nameEl = $('#addConfirmName');
+  const input = $('#addConfirmInput');
+  state.pendingAdd = { lat, lng, name: '' };
+  nameEl.hidden = false;
+  nameEl.textContent = 'looking…';
+  input.hidden = true;
+  input.value = '';
   $('#addConfirmCoords').textContent = fmtDMS(lat, lng);
   el.hidden = false;
+
+  const askForName = () => {
+    if (!state.pendingAdd) return;
+    nameEl.hidden = true;
+    input.hidden = false;
+    input.focus();
+  };
+
   try {
     const r = await reverseGeo(lat, lng);
-    if (r && state.pendingAdd && state.pendingAdd.lat === lat) {
-      state.pendingAdd.name = r.name || 'this point';
+    if (!state.pendingAdd || state.pendingAdd.lat !== lat) return;
+    if (r && r.name) {
+      state.pendingAdd.name = r.name;
       Object.assign(state.pendingAdd, { address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
-      $('#addConfirmName').textContent = state.pendingAdd.name;
+      nameEl.textContent = r.name;
+      return;
     }
-  } catch { $('#addConfirmName').textContent = 'this point'; }
+    if (r) Object.assign(state.pendingAdd, { city: r.city, country: r.country, countryCode: r.countryCode });
+    askForName();
+  } catch {
+    // offline, or the world declined to answer: the point is still good
+    askForName();
+  }
 }
 
 function commitAdd() {
   const p = state.pendingAdd;
   if (!p) return;
+  const typed = $('#addConfirmInput').hidden ? '' : $('#addConfirmInput').value.trim();
+  if (!$('#addConfirmInput').hidden && !typed) { $('#addConfirmInput').focus(); return; }
+  if (typed) p.name = typed;
   state.pendingAdd = null;
   $('#addConfirm').hidden = true;
   const place = store.addPlace(newPlace({
-    name: p.name === 'this point' ? 'Unnamed fix' : p.name,
+    name: p.name || 'a point on the field',
     lat: p.lat, lng: p.lng,
     address: p.address || '', city: p.city || '', country: p.country || '', countryCode: p.countryCode || '',
     status: 'wishlist',
@@ -3002,6 +3028,9 @@ const VERBS = {
   voices: { run: () => openSurface('corrOverlay', renderVoices), hint: 'the atlases you keep' },
   club: { run: () => openSurface('clubOverlay', renderClub), hint: 'the travellers club. backup and sync, sealed' },
   keys: { run: () => openSurface('keysOverlay', renderKeys), hint: 'the keyboard' },
+  mark: { run: () => { const c = mapView.getCenter(); proposeAdd(c.lat, c.lng); }, hint: 'mark the middle of the field, named by you' },
+  here: { run: () => { const c = mapView.getCenter(); proposeAdd(c.lat, c.lng); }, hint: 'mark the middle of the field, named by you' },
+  drop: { run: () => { const c = mapView.getCenter(); proposeAdd(c.lat, c.lng); }, hint: 'mark the middle of the field, named by you' },
   frame: { run: () => mapView.fitAll(filteredPlaces()), hint: 'fit everything in view' },
   locate: { run: () => mapView.locate(null, () => toast('location unavailable')), hint: 'find me' },
   dark: { run: () => setTheme('dark'), hint: 'night field' },
@@ -3708,7 +3737,15 @@ function init() {
   }));
 
   // add-confirm
-  $('#addConfirm').addEventListener('click', commitAdd);
+  $('#addConfirm').addEventListener('click', (e) => {
+    // the field inside is for typing, not for committing
+    if (e.target.id === 'addConfirmInput') return;
+    commitAdd();
+  });
+  $('#addConfirmInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitAdd(); }
+    if (e.key === 'Escape') { e.preventDefault(); state.pendingAdd = null; $('#addConfirm').hidden = true; }
+  });
 
   // photo capture + drop
   $('#shootFile').addEventListener('change', (e) => {
