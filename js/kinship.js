@@ -4,7 +4,7 @@
 // domains, and (3) where they diverge, the divergence is interesting — a
 // correspondent strong where you are blank expands you rather than mismatching.
 
-import { haversineKm } from './geocode.js?v=rf61';
+import { haversineKm } from './geocode.js?v=rf62';
 
 const SAME_PLACE_KM = 0.15; // within ~150m = the same place
 

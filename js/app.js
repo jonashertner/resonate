@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf61';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf61';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf61';
-import * as mapView from './map.js?v=rf61';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf61';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf61';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf61';
-import { exifGPS } from './exif.js?v=rf61';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf61';
-import * as photoStore from './photos.js?v=rf61';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf61';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf62';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf62';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf62';
+import * as mapView from './map.js?v=rf62';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf62';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf62';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf62';
+import { exifGPS } from './exif.js?v=rf62';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf62';
+import * as photoStore from './photos.js?v=rf62';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf62';
 
 // ---------- helpers ----------
 
@@ -764,6 +764,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     <h1 class="plate-name" id="pName" ${ro ? '' : 'contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="The name of this place"'}>${esc(place.name)}</h1>${place.sample && !ro ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([place.address, place.city, place.country].filter(Boolean).slice(0, 2).join(' · '))}</div>
     ${place.provenance ? `<div class="plate-prov prov">after <b>${esc(place.provenance.name)}</b>${place.provenance.chain?.length ? `, who had it from ${place.provenance.chain.map(h => esc(h.name)).reverse().join(', who had it from ')}` : ''} · adopted ${fmtDate(place.provenance.adoptedAt)}</div>` : ''}
+    ${place.private && !ro ? '<div class="plate-prov held-back">this one never leaves the device</div>' : ''}
 
     ${ro ? `
       <div class="plate-words"><button aria-pressed="true" disabled>${esc(datumWord(place))}</button></div>
@@ -776,8 +777,6 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       <div class="plate-words" id="pStatus">
         <button data-st="visited" aria-pressed="${place.status === 'visited'}">been</button>
         <button data-st="wishlist" aria-pressed="${place.status === 'wishlist'}">want to go</button>
-        <button data-private class="reco" aria-pressed="${place.private === true}"
-          title="kept out of every link, folio and publish">never leaves</button>
       </div>
 
       <div class="plate-sec">
@@ -806,6 +805,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
         <button class="word-btn" id="pDirections">directions ↗</button>
         <button class="word-btn quiet" id="pFolio">file into a folio</button>
         ${safeUrl(place.url) ? `<a class="word-btn" href="${esc(place.url)}" target="_blank" rel="noopener">website ↗</a>` : ''}
+        <button class="word-btn quiet" id="pPrivate">${place.private ? 'let it travel again' : 'keep it off every link'}</button>
         <button class="word-btn quiet" id="pDelete">remove</button>
       </div>
       <div class="plate-foot">entered ${fmtDate(place.createdAt)}</div>`}
@@ -854,16 +854,18 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
 
   $('#pStatus').addEventListener('click', (e) => {
     const st = e.target.closest('[data-st]');
-    if (st) {
-      save({ status: st.dataset.st });
-      renderPlate(placeById(place.id)); renderList(); syncMarkers();
-      return;
-    }
-    if (!e.target.closest('[data-private]')) return;
+    if (!st) return;
+    save({ status: st.dataset.st });
+    renderPlate(placeById(place.id)); renderList(); syncMarkers();
+  });
+
+  $('#pPrivate').addEventListener('click', () => {
     const now = !place.private;
     save({ private: now });
     renderPlate(placeById(place.id)); renderList();
-    toast(now ? 'this place never leaves the device' : 'this place may travel again');
+    toast(now
+      ? 'kept off every link, folio and publish'
+      : 'this place may travel again');
   });
 
 
