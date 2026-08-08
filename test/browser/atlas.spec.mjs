@@ -237,7 +237,7 @@ test('a private archive comes home whole', async ({ page }) => {
     const many = Array.from({ length: 501 }, (_, i) => ({
       id: 'big' + i, name: 'Big ' + i, lat: 46, lng: 8, tags: [], photos: [],
     }));
-    store.merge({ version: 4, places: many, tags: [] }, { own: true });
+    store.merge({ app: 'resonate', version: 4, places: many, tags: [] }, { own: true });
     return store.places.length;
   });
   expect(restored).toBeGreaterThanOrEqual(502);
@@ -522,4 +522,51 @@ test('an arriving folio is not covered by the evening', async ({ page }) => {
   // the sender's folio is what this visit is for, and it is not behind a film
   await expect(page.locator('#reportOverlay')).toBeVisible({ timeout: 8000 });
   expect(await page.locator('#intro').isHidden(), 'the film was laid over the sender').toBe(true);
+});
+
+// The browser's own Print command cannot be asked anything, so it gets the
+// spare sheet. The first version of that sheet stripped a place's note, its
+// photographs and its coordinates, and left every path untouched: distance,
+// climb, hours, the note, and the ground drawn as a section. A walk from a
+// door is a routine, and its shape is the most personal line in an atlas.
+// The earlier check used only places, which is exactly why it missed this.
+test('the sheet a browser prints unasked carries names and cities, nothing else', async ({ page }) => {
+  await open(page);
+  const sheet = await page.evaluate(async () => {
+    const v = new URL(document.querySelector('script[type=module]').src).search;
+    const { store, newPlace, newRoute } = await import(`/js/store.js${v}`);
+    store.load();
+    const line = Array.from({ length: 30 }, (_, i) => ({ lat: 46 + i * 0.004, lng: 8, ele: 900 + i }));
+
+    store.addPlace(newPlace({ id: 'shown', name: 'A Public Place', city: 'Basel', lat: 47, lng: 7,
+      note: 'PLACENOTE', tags: [] }));
+    store.addPlace(newPlace({ id: 'hidden', name: 'My Own Front Door', lat: 47.1, lng: 7.1, private: true }));
+    store.addPlace(newPlace({ id: 'lent', name: 'A Loaned Place', lat: 47.2, lng: 7.2, sample: true }));
+    store.addRoute(newRoute({ id: 'w1', name: 'A Public Path', city: 'Basel', path: line,
+      note: 'PATHNOTE', km: 13.4, ascent: 812, hours: 4.2 }));
+    store.addRoute(newRoute({ id: 'w2', name: 'The Way Home', path: line, private: true }));
+    store.addRoute(newRoute({ id: 'w3', name: 'A Loaned Path', path: line, sample: true }));
+
+    document.querySelector('#sheet').innerHTML = '';
+    window.dispatchEvent(new Event('beforeprint'));
+    await new Promise(r => setTimeout(r, 300));
+    const html = document.querySelector('#sheet').innerHTML;
+    document.querySelector('#sheet').innerHTML = '';
+    return html;
+  });
+
+  // what a person marked as staying, stays
+  for (const secret of ['My Own Front Door', 'The Way Home', 'A Loaned Place', 'A Loaned Path']) {
+    expect(sheet.includes(secret), `${secret} was printed unasked`).toBe(false);
+  }
+  // what travels, travels: a name and a city
+  expect(sheet).toContain('A Public Place');
+  expect(sheet).toContain('A Public Path');
+  expect(sheet).toContain('Basel');
+  // and nothing beyond that
+  for (const [what, needle] of [['a note', 'PLACENOTE'], ['a path note', 'PATHNOTE'],
+    ['a distance', '13.4'], ['a climb', '812'], ['coordinates', 'sh-coords'],
+    ['an elevation profile', 'sh-profile'], ['a photograph', 'sh-fig']]) {
+    expect(sheet.includes(needle), `${what} reached a sheet nobody reviewed`).toBe(false);
+  }
 });

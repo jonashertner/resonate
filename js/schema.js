@@ -5,7 +5,7 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf77';
+import { decodePath } from './route.js?v=rf78';
 
 export const SCHEMA_VERSION = 4;
 
@@ -564,19 +564,21 @@ export function readArchive(raw) {
   const refused = [];
   const d = isObj(raw) ? safeKeys(raw) : {};
 
-  // what it is
-  if (d.app !== undefined && d.app !== 'resonate') {
-    refused.push({ kind: 'file', id: null, field: 'app',
-      reason: `this file says it was written by ${String(d.app).slice(0, 40)}, not by resonate` });
-  }
-
-  // when it is from. a file from a later Resonate holds fields this build
-  // cannot see, and reading it here would drop them and then write the
-  // shorter thing back as though it were the whole atlas.
+  // What it is, said outright rather than only when it happens to be said
+  // wrong. The first version of this check refused a file that named another
+  // program and let a file that named nothing straight through, which is the
+  // wrong way round: an archive nobody can identify is exactly the one to be
+  // careful with. Everything this app has ever written carries both marks.
   const v = Number(d.version);
-  if (Number.isFinite(v) && v > SCHEMA_VERSION) {
-    refused.push({ kind: 'file', id: null, field: 'version',
-      reason: `this file was written by a newer resonate (its form is ${v}, this one reads ${SCHEMA_VERSION}). opening it here would quietly drop what this build does not know about` });
+  const named = d.app === 'resonate';
+  const dated = Number.isInteger(v) && v >= 1 && v <= SCHEMA_VERSION;
+  if (!named || !dated) {
+    refused.push({ kind: 'file', id: null, field: 'identity',
+      reason: !named && d.app !== undefined
+        ? `this file says it was written by ${String(d.app).slice(0, 40)}, not by resonate`
+        : Number.isFinite(v) && v > SCHEMA_VERSION
+          ? `this file was written by a newer resonate (its form is ${v}, this one reads ${SCHEMA_VERSION}). opening it here would quietly drop what this build does not know about`
+          : 'this file does not say that it is a resonate archive, or does not say which form it is in' });
   }
 
   // two records with one name between them: only the first can ever be
@@ -605,6 +607,33 @@ export function readArchive(raw) {
     if (missing.length) {
       refused.push({ kind: 'folio', id: f.id, field: 'contents',
         reason: `this folio names ${missing.length} record${missing.length === 1 ? '' : 's'} the file does not contain` });
+    }
+  }
+
+  // A record filed under a domain the file does not define keeps the id and
+  // loses the word: the colour, the name and the meaning all go, and the
+  // record comes back filed under nothing anyone can read. That is a loss
+  // like any other, so it is named like one.
+  const known = new Set(r.value.tags.map(t => t.id));
+  for (const rec of [...r.value.places, ...r.value.routes]) {
+    const missing = (rec.tags || []).filter(id => !known.has(id));
+    if (missing.length) {
+      refused.push({ kind: r.value.places.includes(rec) ? 'place' : 'path', id: rec.id, field: 'domains',
+        reason: `this record is filed under ${missing.length} domain${missing.length === 1 ? '' : 's'} the file does not define` });
+    }
+  }
+
+  // a voice carries its own small atlas, and it is held to the same rules
+  for (const c of r.value.correspondents) {
+    twice(c.tags, 'voice domain');
+    twice(c.places, 'voice place');
+    const theirs = new Set(c.tags.map(t => t.id));
+    for (const pl of c.places) {
+      const missing = (pl.tags || []).filter(id => !theirs.has(id));
+      if (missing.length) {
+        refused.push({ kind: 'voice place', id: pl.id, field: 'domains',
+          reason: `a place kept under ${c.name || c.id} is filed under ${missing.length} domain${missing.length === 1 ? '' : 's'} this file does not define` });
+      }
     }
   }
 

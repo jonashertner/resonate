@@ -19,6 +19,7 @@ const {
 // the same file store.test.mjs sends through the store, kept here so the two
 // levels can disagree loudly rather than pass together by accident
 const theLossTable = () => ({
+  app: 'resonate',
   version: 4,
   places: [{
     id: 'big', name: 'Everything at once', lat: 46, lng: 8, tags: [],
@@ -129,6 +130,7 @@ test('losses flattens the three ways a file comes home shorter into one list', (
 
 test('a record that cannot be read is named, so a person is told which', () => {
   const read = readArchive({
+    app: 'resonate', version: 4,
     places: [
       { id: 'ok', name: 'Fine', lat: 46, lng: 8 },
       { id: 'nowhere', name: 'No coordinates' },
@@ -146,10 +148,16 @@ test('a file that is not an object is not an archive', () => {
   assert.equal(readArchive(null), null);
   assert.equal(readArchive('an atlas'), null);
   assert.equal(readArchive([]), null);
-  // an empty archive is a different thing from no archive, and must read as one
-  const empty = readArchive({});
+});
+
+test('a file that does not say it is an archive is refused, empty or not', () => {
+  // {} used to read as a perfectly good empty atlas. an archive nobody can
+  // identify is exactly the one to be careful with, and every file this app
+  // has ever written names itself.
+  assert.match(losses(readArchive({})).map(l => l.reason).join(' '), /does not say/);
+  const empty = readArchive({ app: 'resonate', version: 4 });
   assert.deepEqual(empty.value.places, []);
-  assert.deepEqual(losses(empty), []);
+  assert.deepEqual(losses(empty), [], 'an empty atlas that names itself is still an atlas');
 });
 
 
@@ -182,7 +190,7 @@ test('a point with no elevation reading does not become a reading of sea level',
   // 0, which is finite, so an unmeasured point used to come back from every
   // reload as a measured sea level reading, and the way's climb with it.
   const raw = {
-    version: 4, tags: [], places: [],
+    app: 'resonate', version: 4, tags: [], places: [],
     routes: [{
       id: 'w1', name: 'flat', ascent: null, descent: null, high: null, low: null,
       path: [{ lat: 46, lng: 8, ele: null }, { lat: 46.01, lng: 8.01, ele: null }],
@@ -198,7 +206,7 @@ test('a point with no elevation reading does not become a reading of sea level',
 
 test('a point that really is at sea level keeps its reading', () => {
   const read = readArchive({
-    version: 4, tags: [], places: [],
+    app: 'resonate', version: 4, tags: [], places: [],
     routes: [{ id: 'w2', name: 'the shore', path: [{ lat: 46, lng: 8, ele: 0 }, { lat: 46.01, lng: 8.01, ele: 2 }] }],
   });
   assert.equal(read.value.routes[0].path[0].ele, 0, 'zero written on purpose is still zero');
@@ -208,7 +216,7 @@ test('the loss report names a record by the word a person sees', () => {
   // the kind strings in losses() are read out loud in the app, so they are
   // copy: they were "way" and the app now says "path" everywhere else
   const read = readArchive({
-    version: 4, tags: [],
+    app: 'resonate', version: 4, tags: [],
     places: [{ id: 'good', name: 'Kept', lat: 46, lng: 8, tags: [] }, { id: 'bad', name: 'No coordinates' }],
     routes: [{ id: 'stub', name: 'One point', path: [{ lat: 46, lng: 8 }] }],
   });

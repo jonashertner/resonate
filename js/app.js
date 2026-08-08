@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf77';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf77';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf77';
-import * as mapView from './map.js?v=rf77';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf77';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf77';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf77';
-import { exifGPS } from './exif.js?v=rf77';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf77';
-import * as photoStore from './photos.js?v=rf77';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf77';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable, mayLeave } from './store.js?v=rf78';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf78';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf78';
+import * as mapView from './map.js?v=rf78';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf78';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf78';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf78';
+import { exifGPS } from './exif.js?v=rf78';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf78';
+import * as photoStore from './photos.js?v=rf78';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf78';
 
 // ---------- helpers ----------
 
@@ -2713,7 +2713,10 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
   let no = 0;
   const entry = (p) => {
     no += 1;
-    const meta = [
+    // the domains a place is filed under, and whether it has been visited,
+    // are things a person told this app about themselves. a sheet nobody
+    // reviewed does not carry them either.
+    const meta = spare ? '' : [
       p.tags.map(nameOf).filter(Boolean).join(', ').toLowerCase(),
       datumWord(p),
     ].filter(Boolean).join(' · ');
@@ -2727,6 +2730,17 @@ function buildSheet({ title, dedication = '', author = store.settings.authorName
   };
 
   const ways = routes.map((r, i) => {
+    // A path told more about a person than a place did, and the spare sheet
+    // was not asking it to stop: how far, how much climbing, how long it
+    // takes, what was written about it, and the ground drawn as a section.
+    // A walk from a door is a routine, and its shape is the most personal
+    // line in the atlas. The unreviewed sheet gets a name and a city.
+    if (spare) {
+      return `<article class="sh-entry">
+        <div class="sh-line"><span class="sh-no mono">${r.loop ? 'O' : '/'}</span><h3 class="sh-name">${esc(r.name)}</h3></div>
+        ${r.city ? `<div class="sh-meta">${esc(r.city)}</div>` : ''}
+      </article>`;
+    }
     const pf = profile(r.path, { width: 1000, height: 150, columns: 96 });
     const meta = [
       fmtKm(r.km),

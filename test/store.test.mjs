@@ -145,7 +145,7 @@ test('a photo id survives a reload, exactly as an inline picture does', () => {
 test('an imported atlas keeps its photo ids too', () => {
   fresh();
   const added = store.merge({
-    version: 4,
+    app: 'resonate', version: 4,
     places: [{ id: 'ip1', name: 'Theirs', lat: 45, lng: 9, photos: ['ph_abc123'], tags: [] }],
     tags: [], settings: {},
   });
@@ -179,7 +179,7 @@ test('an atlas from the age of stars keeps its places and drops the score', () =
 test('a verdict a hostile link invents is not kept', () => {
   fresh();
   const added = store.merge({
-    version: 4,
+    app: 'resonate', version: 4,
     places: [{ id: 'h1', name: 'Theirs', lat: 45, lng: 9, tags: [], word: 'essential', relation: 'regular' }],
     tags: [], settings: {},
   });
@@ -457,7 +457,7 @@ test('a private archive comes home whole, or not at all', () => {
     id: 'p' + i, name: 'Place ' + i, lat: 46, lng: 8, tags: [],
     note: i === 0 ? 'n'.repeat(4001) : '',
   }));
-  const got = store.merge({ version: 4, places, tags: [] }, { own: true });
+  const got = store.merge({ app: 'resonate', version: 4, places, tags: [] }, { own: true });
   assert.equal(got, 501, 'every place, including the five hundred and first');
   assert.equal(store.places.length, 501);
   assert.equal(store.placeById('p0').note.length, 4001, 'and a long memory is not shortened');
@@ -468,7 +468,7 @@ test('a stranger is still held to the hard caps', () => {
   const places = Array.from({ length: 501 }, (_, i) => ({
     id: 's' + i, name: 'S' + i, lat: 46, lng: 8, tags: [], note: 'n'.repeat(4001),
   }));
-  store.merge({ version: 4, places, tags: [] });
+  store.merge({ app: 'resonate', version: 4, places, tags: [] });
   assert.equal(store.places.length, 500, 'a hostile payload may not spend this device');
   assert.equal(store.placeById('s0').note.length, 4000);
 });
@@ -481,7 +481,7 @@ test('an archive with a record that cannot be read is refused whole', () => {
     { id: 'b2', name: 'Off the globe', lat: 999, lng: 8, tags: [] },
     { id: 'g2', name: 'Also good', lat: 47, lng: 9, tags: [] },
   ];
-  const got = store.merge({ version: 4, places, tags: [] }, { own: true });
+  const got = store.merge({ app: 'resonate', version: 4, places, tags: [] }, { own: true });
   assert.equal(got, null, 'two thirds of an archive is not an archive');
   assert.equal(store.places.length, 0, 'and not one record of it was written');
   assert.deepEqual(store.lastLost.map(l => l.id), ['b1', 'b2'],
@@ -492,10 +492,10 @@ test('an archive with a record that cannot be read is refused whole', () => {
 
 test('a stranger’s payload leaves no loss list behind that belonged to an archive', () => {
   fresh();
-  const refused = store.merge({ version: 4, places: [{ id: 'x', name: 'X', tags: [] }], tags: [] }, { own: true });
+  const refused = store.merge({ app: 'resonate', version: 4, places: [{ id: 'x', name: 'X', tags: [] }], tags: [] }, { own: true });
   assert.equal(refused, null);
   assert.equal(store.lastLost.length, 1);
-  const added = store.merge({ version: 4, places: [{ id: 'y', name: 'Y', lat: 1, lng: 2, tags: [] }], tags: [] });
+  const added = store.merge({ app: 'resonate', version: 4, places: [{ id: 'y', name: 'Y', lat: 1, lng: 2, tags: [] }], tags: [] });
   assert.equal(added, 1, 'the stranger still gets in, clipped and in silence');
   assert.deepEqual(store.lastLost, [], 'a stranger’s payload never speaks for an archive');
 });
@@ -519,6 +519,7 @@ test('a load never shrinks the atlas it reads', () => {
 // fixes the top level and forgets a depth cannot pass.
 
 const theLossTable = () => ({
+  app: 'resonate', app: 'resonate',
   version: 4,
   places: [{
     id: 'big', name: 'Everything at once', lat: 46, lng: 8, tags: [],
@@ -674,7 +675,7 @@ test('a restore replaces the atlas rather than adding to it', () => {
   store.settings.clubKey = 'tc_testkey0000000000000';
 
   const out = store.restore({
-    version: 4,
+    app: 'resonate', version: 4,
     places: [{ id: 'new1', name: 'New one', lat: 45, lng: 7, tags: [] }],
     tags: [], settings: { theme: 'dark', hue: 120, authorName: 'Mira' },
   });
@@ -698,7 +699,7 @@ test('a restore the device refuses puts every record back', () => {
   const before = shape();
 
   storage.refuse = true;
-  const out = store.restore({ version: 4, places: [{ id: 'nope', name: 'Nope', lat: 45, lng: 7, tags: [] }], tags: [] });
+  const out = store.restore({ app: 'resonate', version: 4, places: [{ id: 'nope', name: 'Nope', lat: 45, lng: 7, tags: [] }], tags: [] });
   storage.refuse = false;
 
   assert.equal(out.ok, false);
@@ -711,7 +712,7 @@ test('a restore refuses an archive that lost anything in the reading', () => {
   fresh();
   store.addPlace(newPlace({ id: 'keep', name: 'Keep', lat: 46, lng: 8 }));
   const out = store.restore({
-    version: 4, tags: [],
+    app: 'resonate', version: 4, tags: [],
     places: [
       { id: 'good', name: 'Good', lat: 45, lng: 7, tags: [] },
       { id: 'bad', name: 'No coordinates', tags: [] },
@@ -778,8 +779,8 @@ test('a corrupt key is set aside, and no later edit can write over it', () => {
     'one corrupt byte must not become a blank life');
 
   // and every other road into that key is refused the same way
-  assert.equal(store.merge({ version: 4, tags: [], places: [{ id: 'm1', name: 'M', lat: 46, lng: 8 }] }), null);
-  assert.equal(store.restore({ version: 4, tags: [], places: [{ id: 'r1', name: 'R', lat: 46, lng: 8 }] }).ok, false);
+  assert.equal(store.merge({ app: 'resonate', version: 4, tags: [], places: [{ id: 'm1', name: 'M', lat: 46, lng: 8 }] }), null);
+  assert.equal(store.restore({ app: 'resonate', version: 4, tags: [], places: [{ id: 'r1', name: 'R', lat: 46, lng: 8 }] }).ok, false);
   assert.equal(localStorage.getItem('resonate.places.v1'), damaged, 'still exactly as it was found');
 
   releaseUnreadable('resonate.places.v1');
@@ -877,7 +878,7 @@ test('a merge does not repaint an atlas that already has a look', () => {
   store.settings.hue = 300;
   store.settings.theme = 'dark';
   store.addPlace(aPlace('Mine'));
-  store.merge({ version: 4, tags: [], places: [{ id: 'x', name: 'Theirs', lat: 1, lng: 2, tags: [] }],
+  store.merge({ app: 'resonate', version: 4, tags: [], places: [{ id: 'x', name: 'Theirs', lat: 1, lng: 2, tags: [] }],
     settings: { hue: 74, theme: 'light', authorName: 'someone else' } }, { own: true });
   assert.equal(store.settings.hue, 300, 'a file brought in beside your atlas does not choose its colour');
   assert.equal(store.settings.theme, 'dark');
@@ -887,7 +888,7 @@ test('a restore is the operation that does set the whole look', () => {
   fresh();
   store.settings.chosen = true;
   store.settings.hue = 300;
-  const r = store.restore({ version: 4, tags: [], routes: [],
+  const r = store.restore({ app: 'resonate', version: 4, tags: [], routes: [],
     places: [{ id: 'x', name: 'Theirs', lat: 1, lng: 2, tags: [] }],
     settings: { hue: 74, theme: 'light', authorName: 'ada' } });
   assert.equal(r.ok, true);
@@ -900,7 +901,7 @@ test('comparing counts the folios and voices a replace would also destroy', () =
   store.addPlace(newPlace({ id: 'p1', name: 'Held', lat: 46, lng: 8 }));
   store.addFolio(newFolio({ id: 'f1', title: 'Mine alone', placeIds: ['p1'] }));
   store.addCorrespondent({ id: 'c1', name: 'Marta', tags: [], places: [] });
-  const seen = store.compare({ version: 4, tags: [], routes: [], folios: [], correspondents: [],
+  const seen = store.compare({ app: 'resonate', version: 4, tags: [], routes: [], folios: [], correspondents: [],
     places: [{ id: 'p1', name: 'Held', lat: 46, lng: 8, tags: [] }] });
   assert.ok(seen.onlyHere >= 2,
     `the folio and the voice a replace would take are not counted: onlyHere is ${seen.onlyHere}`);
@@ -912,7 +913,7 @@ test('a photograph is the same photograph whether the file inlines it or this de
   store.updatePlace('ph1', { photos: ['ph_msj14t2y11u6v'] });
   // the same record as a full backup writes it, with the picture inlined
   const asFile = { ...store.placeById('ph1'), photos: ['data:image/png;base64,iVBORw0KGgo='] };
-  const seen = store.compare({ version: 4, tags: [], routes: [], places: [asFile] });
+  const seen = store.compare({ app: 'resonate', version: 4, tags: [], routes: [], places: [asFile] });
   assert.equal(seen.differ, 0, 'only the carrier differs, and a carrier is not a change');
   assert.equal(seen.identical, 1);
 });
