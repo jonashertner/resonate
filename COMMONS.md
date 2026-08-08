@@ -51,9 +51,10 @@ nothing in common is a directory, and directories already exist.
 ## Precision
 
 A folio carries coordinates. Where a place is sensitive but publishable, the
-author should say so in the note rather than sharpen the point. Any place
-marked as never leaving in an author's own atlas is already excluded from
-everything they offer.
+author should say so in the note rather than sharpen the point. Any place or
+way marked as never leaving in an author's own atlas is already excluded from
+everything they offer, in every format. A way may also be asked to give up its
+first and last quarter kilometre, which is where a person tends to live.
 
 ## How a folio arrives, and how it leaves
 

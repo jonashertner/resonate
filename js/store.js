@@ -1,7 +1,7 @@
 // store.js — persistence, models, demo data
 
-import { normImport, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf64';
-import { measure, simplify } from './route.js?v=rf64';
+import { normImport, readArchive, readLocal, normPlace, normRoute, normRoutes, normFolioRefs, SCHEMA_VERSION } from './schema.js?v=rf65';
+import { measure, simplify } from './route.js?v=rf65';
 
 const K_PLACES = 'resonate.places.v1';
 const K_TAGS = 'resonate.tags.v1';
@@ -121,6 +121,8 @@ export function newRoute(partial = {}) {
     km: m.km, ascent: m.ascent, descent: m.descent,
     high: m.high, low: m.low, hours: m.hours, loop: m.loop,
     walkedAt: '',
+    private: false,
+    trimEnds: false,
     ...partial,
     path,
     ...(partial.id ? {} : { id: uid() }),
@@ -159,6 +161,24 @@ export function newTag(partial = {}) {
   return t;
 }
 
+// a quarter of a kilometre from each end, which is enough to lose a door
+const TRIM_KM = 0.25;
+function trimWay(r) {
+  if (!r.trimEnds || !Array.isArray(r.path) || r.path.length < 8) return r;
+  const R = 6371, rad = Math.PI / 180;
+  const step = (a, b) => {
+    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  };
+  let head = 0, run = 0;
+  for (let i = 1; i < r.path.length && run < TRIM_KM; i++) { run += step(r.path[i - 1], r.path[i]); head = i; }
+  let tail = r.path.length - 1; run = 0;
+  for (let i = r.path.length - 2; i > head && run < TRIM_KM; i--) { run += step(r.path[i + 1], r.path[i]); tail = i; }
+  const path = r.path.slice(head, tail + 1);
+  return path.length >= 2 ? { ...r, path } : r;
+}
+
 const DEFAULT_SETTINGS = { theme: 'auto', hue: 300, lastView: null, seeded: false, authorName: '', clubKey: '', clubUrl: '', clubSeq: 0, clubSealedAt: '' };
 
 export const store = {
@@ -168,6 +188,9 @@ export const store = {
   tags: [],
   correspondents: [],
   settings: { ...DEFAULT_SETTINGS },
+  // set by the last merge of a person's own archive: how much of the file
+  // could not be read. zero after any other kind of merge
+  lastDropped: 0,
 
   load() {
     // records adopted before this carry an empty date, which read back as
@@ -175,9 +198,9 @@ export const store = {
     const sane = (v) => !!v && !Number.isNaN(new Date(v).getTime());
     const dated = (r) => (sane(r.createdAt) ? r
       : { ...r, createdAt: sane(r.updatedAt) ? r.updatedAt : new Date().toISOString() });
-    this.places = read(K_PLACES, []).map(p => normPlace(p)).filter(Boolean).map(dated);
-    this.routes = normRoutes(read(K_ROUTES, [])).map(dated);
-    this.folios = normFolioRefs(read(K_FOLIOS, []));
+    this.places = readLocal(read(K_PLACES, []), 'places').map(dated);
+    this.routes = readLocal(read(K_ROUTES, []), 'routes').map(dated);
+    this.folios = readLocal(read(K_FOLIOS, []), 'folios');
     this.tags = read(K_TAGS, []);
     this.correspondents = read(K_CORR, []);
     this.settings = { ...DEFAULT_SETTINGS, ...read(K_SETTINGS, {}) };
@@ -367,8 +390,17 @@ export const store = {
   },
 
   // merge imported data, deduping by id; imported fields that reach markup are normalized
-  merge(raw) {
-    const data = normImport(raw);
+  // `own` marks a person's own archive coming home: read through the generous
+  // door, never the stranger's. Returns null when the device refused the
+  // write, a count of everything that arrived otherwise.
+  merge(raw, { own = false } = {}) {
+    const read = own ? readArchive(raw) : null;
+    // records the file carried that could not be read at all. a truncation is
+    // refused outright below; this is the softer loss, and it is still a loss,
+    // so the number is kept where the caller can say it out loud
+    this.lastDropped = own ? (read?.dropped ?? 0) : 0;
+    if (own && read?.cut?.length) return null; // an archive is never truncated
+    const data = own ? read?.value : normImport(raw);
     if (!data) return 0;
     // held so the whole import can be undone if any part of it is refused
     const before = {
@@ -387,6 +419,7 @@ export const store = {
       if (tagIds.has(t.id)) return;
       const existing = byName.get(t.name.trim().toLowerCase());
       if (existing) { remap.set(t.id, existing); return; }
+      added++;
       this.tags.push(newTag(t));
       tagIds.add(t.id);
       byName.set(t.name.trim().toLowerCase(), t.id);
@@ -412,6 +445,7 @@ export const store = {
       if (!folioIds.has(f.id)) {
         this.folios.push(newFolio(f));
         folioIds.add(f.id);
+        added++;
       }
     });
     // an export carries the whole atlas back, correspondents and signature included
@@ -424,6 +458,7 @@ export const store = {
           tags: c.tags.map(t => newTag(t)),
         });
         corrIds.add(c.id);
+        added++;
       }
     });
     if (!this.settings.authorName && data.settings.authorName) {
@@ -452,6 +487,10 @@ export const store = {
   // what may be handed to someone else: the atlas without the private layer.
   // the share surface promises photographs never leave the device, and a file
   // offered in place of a link has to keep that promise.
+  // the first and last stretch of a way is where a person lives: when asked,
+  // the shape handed over begins and ends a quarter kilometre in
+  trimWay(r) { return trimWay(r); },
+
   // what a stranger may be given: never a place marked as never leaving
   exportShareJSON() {
     return JSON.stringify({
@@ -461,7 +500,7 @@ export const store = {
       exportedAt: new Date().toISOString(),
       tags: this.tags,
       places: this.places.filter(p => !p.private).map(({ photos, ...rest }) => rest),
-      routes: this.routes.map(({ walkedAt, ...rest }) => rest),
+      routes: this.routes.filter(r => !r.private).map(({ walkedAt, ...rest }) => trimWay(rest)),
     }, null, 2);
   },
 
@@ -496,7 +535,8 @@ export const store = {
   },
 
   // An atlas must be able to leave for anywhere, in formats nobody owns.
-  // Each of these carries the places that may travel, never the private ones.
+  // Each of these carries what may travel: never a place or a way marked as
+  // never leaving, and never the ends of a way whose ends are trimmed.
 
   // kml, for google earth and everything that reads it
   exportKML() {
@@ -507,7 +547,7 @@ export const store = {
       <description>${esc([p.note, [p.address, p.city, p.country].filter(Boolean).join(', ')].filter(Boolean).join('\n\n'))}</description>
       <Point><coordinates>${p.lng},${p.lat},0</coordinates></Point>
     </Placemark>`).join('\n');
-    const lines = this.routes.map(r => `    <Placemark>
+    const lines = this.routes.filter(r => !r.private).map(trimWay).map(r => `    <Placemark>
       <name>${esc(r.name)}</name>
       <LineString><tessellate>1</tessellate><coordinates>${r.path.map(pt => `${pt.lng},${pt.lat},${pt.ele ?? 0}`).join(' ')}</coordinates></LineString>
     </Placemark>`).join('\n');
@@ -564,9 +604,10 @@ ${[marks, lines].filter(Boolean).join('\n')}
         }
       });
     });
-    if (this.routes.length) {
+    const ways = this.routes.filter(r => !r.private);
+    if (ways.length) {
       out.push('## Ways', '');
-      this.routes.forEach(r => {
+      ways.forEach(r => {
         out.push(`### ${r.name}`, '');
         out.push([r.km ? `${r.km.toFixed(1)} km` : '', r.ascent ? `${r.ascent} m up` : '', r.loop ? 'a loop' : ''].filter(Boolean).join(' · '), '');
         if (r.note) out.push(r.note, '');

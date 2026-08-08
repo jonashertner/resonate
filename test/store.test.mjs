@@ -357,7 +357,10 @@ test('an import with the same domains under different ids keeps one of each', ()
     tags: [{ id: 'their-tag', name: 'restaurants' }, { id: 'their-new', name: 'Vinyl' }],
     places: [{ id: 'their-place', name: 'Theirs', lat: 45, lng: 9, tags: ['their-tag', 'their-new'] }],
   });
-  assert.equal(added, 1);
+  // one place and one genuinely new domain: an import reports everything it
+  // brought, never only the places, or it can say nothing came in while
+  // storage changed underneath
+  assert.equal(added, 2);
   assert.equal(store.tags.filter(t => t.name.toLowerCase() === 'restaurants').length, 1,
     'same name is the same domain');
   const theirs = store.placeById('their-place');
@@ -437,4 +440,60 @@ test('a date that is not one is healed on the way in', () => {
   assert.ok(ok(store.placeById('d1').createdAt), 'an empty date becomes a real one');
   assert.ok(ok(store.placeById('d2').createdAt), 'and so does a nonsense one');
   assert.equal(store.placeById('d3').createdAt, '2024-05-12T09:00:00Z', 'a real one is left alone');
+});
+
+
+// ---------- the three doors ----------
+
+test('a private archive comes home whole, or not at all', () => {
+  fresh();
+  const places = Array.from({ length: 501 }, (_, i) => ({
+    id: 'p' + i, name: 'Place ' + i, lat: 46, lng: 8, tags: [],
+    note: i === 0 ? 'n'.repeat(4001) : '',
+  }));
+  const got = store.merge({ version: 4, places, tags: [] }, { own: true });
+  assert.equal(got, 501, 'every place, including the five hundred and first');
+  assert.equal(store.places.length, 501);
+  assert.equal(store.placeById('p0').note.length, 4001, 'and a long memory is not shortened');
+});
+
+test('a stranger is still held to the hard caps', () => {
+  fresh();
+  const places = Array.from({ length: 501 }, (_, i) => ({
+    id: 's' + i, name: 'S' + i, lat: 46, lng: 8, tags: [], note: 'n'.repeat(4001),
+  }));
+  store.merge({ version: 4, places, tags: [] });
+  assert.equal(store.places.length, 500, 'a hostile payload may not spend this device');
+  assert.equal(store.placeById('s0').note.length, 4000);
+});
+
+test('an archive with unreadable records keeps the rest, and counts the loss', () => {
+  fresh();
+  const places = [
+    { id: 'g1', name: 'Good', lat: 46, lng: 8, tags: [] },
+    { id: 'b1', name: 'No coordinates', tags: [] },
+    { id: 'b2', name: 'Off the globe', lat: 999, lng: 8, tags: [] },
+    { id: 'g2', name: 'Also good', lat: 47, lng: 9, tags: [] },
+  ];
+  const got = store.merge({ version: 4, places, tags: [] }, { own: true });
+  assert.equal(got, 2, 'what could be read came home');
+  assert.equal(store.lastDropped, 2, 'and what could not is a number, not a silence');
+});
+
+test('an ordinary merge leaves no stale count behind for the next caller', () => {
+  fresh();
+  store.merge({ version: 4, places: [{ id: 'x', name: 'X', tags: [] }], tags: [] }, { own: true });
+  assert.equal(store.lastDropped, 1);
+  store.merge({ version: 4, places: [{ id: 'y', name: 'Y', lat: 1, lng: 2, tags: [] }], tags: [] });
+  assert.equal(store.lastDropped, 0, 'a stranger’s payload never speaks for an archive');
+});
+
+test('a load never shrinks the atlas it reads', () => {
+  fresh();
+  const many = Array.from({ length: 700 }, (_, i) => ({
+    id: 'L' + i, name: 'L' + i, lat: 46, lng: 8, tags: [], createdAt: '2026-01-01T00:00:00Z',
+  }));
+  localStorage.setItem('resonate.places.v1', JSON.stringify(many));
+  store.load();
+  assert.equal(store.places.length, 700, 'an atlas that loads smaller than it saved is a leak');
 });

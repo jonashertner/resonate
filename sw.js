@@ -1,7 +1,7 @@
 // sw.js — the shell, kept so the atlas opens without a network.
 // Network first, because the field should never be stale when a network exists.
 
-const V = 'v=rf64';
+const V = 'v=rf65';
 const CACHE = `resonate-shell-${V}`;
 
 // everything the first paint needs, at the exact URLs the page asks for
@@ -54,7 +54,50 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// A place shared into the app is the one thing a share target must not put on
+// the wire. The form posts to this worker, which keeps it here and answers
+// with the app itself: the title, the text and the address never leave the
+// device, not even as a request the host could log.
+const INBOX_DB = 'resonate-share';
+
+function inboxPut(item) {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(INBOX_DB, 1); } catch { return resolve(false); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('shared')) db.createObjectStore('shared', { autoIncrement: true });
+    };
+    req.onsuccess = () => {
+      try {
+        const tx = req.result.transaction('shared', 'readwrite');
+        tx.objectStore('shared').add(item);
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = tx.onerror = () => resolve(false);
+      } catch { resolve(false); }
+    };
+    req.onerror = () => resolve(false);
+  });
+}
+
 self.addEventListener('fetch', (e) => {
+  const shareUrl = new URL(e.request.url);
+  if (e.request.method === 'POST' && shareUrl.pathname.endsWith('/share-target')) {
+    e.respondWith((async () => {
+      try {
+        const form = await e.request.formData();
+        await inboxPut({
+          title: String(form.get('title') || ''),
+          text: String(form.get('text') || ''),
+          url: String(form.get('url') || ''),
+          at: new Date().toISOString(),
+        });
+      } catch { /* nothing legible arrived */ }
+      // straight back into the app, with nothing in the address
+      return Response.redirect(shareUrl.origin + shareUrl.pathname.replace(/share-target$/, '') + '?shared=1', 303);
+    })());
+    return;
+  }
   const req = e.request;
   if (req.method !== 'GET') return;
 

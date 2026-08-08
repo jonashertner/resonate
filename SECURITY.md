@@ -31,11 +31,17 @@ and a merge the device cannot write is rolled back whole.
 `publish` label to its issue. Nothing runs on arrival. The workflow passes
 arguments to git as an array, never through a shell.
 
-**The club's envelope.** Sealed on the device before it travels: PBKDF2-SHA256
-into AES-GCM under a phrase that never leaves. The envelope carries a monotonic
-count inside the authenticated payload, so a stale or hollowed vault is refused
-rather than sealed over. A merge the device refuses aborts the push. The full
-format and its refusal rules are being written into club/SPEC.md.
+**The club's envelope.** Sealed on the device before it travels: Argon2id, at
+64 MiB and three passes, into AES-GCM under a phrase that never leaves.
+PBKDF2-SHA256 at 600000 iterations is the fallback where a device cannot run
+Argon2id, and opens every envelope sealed before this format. The header and
+the membership key are bound into the seal, so neither the parameters nor the
+owner can be quietly swapped. The envelope carries a monotonic count inside
+the authenticated payload, so a stale or hollowed vault is refused rather than
+sealed over, and a merge the device refuses aborts the push. The current envelope is the second
+form, `rsnt2`, and the first is read forever and written never. The complete
+format and its refusal rules are specified in club/SPEC.md, published at
+/SPEC.md.
 
 ## Resolved
 

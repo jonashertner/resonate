@@ -5,9 +5,22 @@
 // downstream may assume a field exists, has a type, or has a sane size:
 // this is the only place that decides.
 
-import { decodePath } from './route.js?v=rf64';
+import { decodePath } from './route.js?v=rf65';
 
 export const SCHEMA_VERSION = 4;
+
+// What a person's own record may hold. Generous enough that nobody meets it,
+// so an archive never comes home shorter than it left. A stranger's payload
+// is held to LIMITS instead.
+export const OWN = {
+  note: 200_000,
+  name: 400,
+  url: 2_000,
+  photos: 200,
+  photoBytes: 12_000_000,
+  tagsPerPlace: 200,
+  routePoints: 100_000,
+};
 
 export const LIMITS = {
   folios: 120,
@@ -56,7 +69,7 @@ function id(v, fallback) {
   return s && !FORBIDDEN.has(s) ? s : fallback;
 }
 
-export function normPlace(raw, i = 0) {
+export function normPlace(raw, i = 0, caps = LIMITS) {
   if (!isObj(raw)) return null;
   const p = safeKeys(raw);
   const lat = Number(p.lat);
@@ -69,14 +82,14 @@ export function normPlace(raw, i = 0) {
   const photos = Array.isArray(p.photos)
     ? p.photos
       .filter(s => typeof s === 'string' && (
-        (s.startsWith('data:image/') && s.length <= LIMITS.photoBytes)
+        (s.startsWith('data:image/') && s.length <= caps.photoBytes)
         || PHOTO_ID.test(s)))
-      .slice(0, LIMITS.photos)
+      .slice(0, caps.photos)
     : [];
 
   const out = {
     id: id(p.id, `p${i}`),
-    name: str(p.name, LIMITS.name) || 'Untitled place',
+    name: str(p.name, caps.name) || 'Untitled place',
     lat,
     lng,
     address: str(p.address, 200),
@@ -84,7 +97,7 @@ export function normPlace(raw, i = 0) {
     country: str(p.country, 120),
     countryCode: str(p.countryCode, 8),
     tags: Array.isArray(p.tags)
-      ? p.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
+      ? p.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, caps.tagsPerPlace)
       : [],
     status: p.status === 'visited' ? 'visited' : 'wishlist',
     // a place marked this way is kept out of every link, folio and publish
@@ -92,8 +105,8 @@ export function normPlace(raw, i = 0) {
     // the number survives only so links and files from before the words still
     // open; nothing writes it, and no surface shows it
     rating: Math.max(0, Math.min(5, Math.floor(Number(p.rating) || 0))),
-    note: str(p.note, LIMITS.note),
-    url: /^https?:\/\//i.test(String(p.url ?? '')) ? str(p.url, LIMITS.url) : '',
+    note: str(p.note, caps.note),
+    url: /^https?:\/\//i.test(String(p.url ?? '')) ? str(p.url, caps.url) : '',
     photos,
     createdAt: str(p.createdAt, 40),
     updatedAt: str(p.updatedAt, 40),
@@ -133,7 +146,7 @@ export function normPlace(raw, i = 0) {
 
 // a route arrives either as a list of points or as an encoded line; both are
 // bounded here, because a line is the one thing in this app that can be long
-export function normRoute(raw, i = 0, decode = null) {
+export function normRoute(raw, i = 0, decode = null, caps = LIMITS) {
   if (!isObj(raw)) return null;
   const r = safeKeys(raw);
 
@@ -144,7 +157,7 @@ export function normRoute(raw, i = 0, decode = null) {
     path = decode(r.p);
   }
   path = (Array.isArray(path) ? path : [])
-    .slice(0, LIMITS.routePoints)
+    .slice(0, caps.routePoints)
     .map(pt => {
       if (!isObj(pt)) return null;
       const lat = Number(pt.lat), lng = Number(pt.lng);
@@ -163,17 +176,21 @@ export function normRoute(raw, i = 0, decode = null) {
   const out = {
     id: id(r.id, `r${i}`),
     kind: 'route',
-    name: str(r.name, LIMITS.name) || 'Untitled way',
+    name: str(r.name, caps.name) || 'Untitled way',
     path,
     city: str(r.city, 120),
     country: str(r.country, 120),
     tags: Array.isArray(r.tags)
-      ? r.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, LIMITS.tagsPerPlace)
+      ? r.tags.filter(t => typeof t === 'string' && !FORBIDDEN.has(t)).slice(0, caps.tagsPerPlace)
       : [],
     status: r.status === 'walked' ? 'walked' : 'wishlist',
+    // a track shows a routine, a door, an hour: it needs the same word a
+    // place has, and one more for the ends that give a home away
+    private: r.private === true,
+    trimEnds: r.trimEnds === true,
     rating: Math.max(0, Math.min(5, Math.floor(Number(r.rating) || 0))),
-    note: str(r.note, LIMITS.note),
-    url: /^https?:\/\//i.test(String(r.url ?? '')) ? str(r.url, LIMITS.url) : '',
+    note: str(r.note, caps.note),
+    url: /^https?:\/\//i.test(String(r.url ?? '')) ? str(r.url, caps.url) : '',
     km: nn(r.km, 100000),
     ascent: nn(r.ascent, 30000),
     descent: nn(r.descent, 30000),
@@ -330,17 +347,80 @@ export function normFolioRefs(arr) {
 }
 
 // an exported file, on its way back in
-export function normImport(raw) {
+// Three doors, not one.
+//
+// A share link is a stranger: it is capped hard, because a hostile payload
+// must not be able to spend this device. A private archive is the person's
+// own memory coming home: it is bounded only by honesty, and it must never
+// come back smaller than it left without saying so. They used to be the same
+// function, so restoring a backup of 501 places gave back 500 and called it
+// success. That is the one failure a keeper of memory may never have.
+
+// how many of each kind a stranger may hand over at once
+const SHARE_CAPS = {
+  places: LIMITS.places, routes: LIMITS.routes,
+  folios: LIMITS.folios, tags: LIMITS.tags, correspondents: LIMITS.correspondents,
+};
+// what a person's own archive may hold: enough that nobody meets it
+const ARCHIVE_CAPS = {
+  places: 100_000, routes: 20_000,
+  folios: 10_000, tags: 5_000, correspondents: 10_000,
+};
+
+function gather(arr, fn, cap, decode, caps) {
+  if (!Array.isArray(arr)) return { kept: [], given: 0, dropped: 0, cut: 0 };
+  const kept = [];
+  let dropped = 0;
+  for (let i = 0; i < arr.length && kept.length < cap; i++) {
+    const v = decode ? fn(arr[i], i, decode, caps) : fn(arr[i], i, caps);
+    if (v) kept.push(v); else dropped += 1;
+  }
+  return { kept, given: arr.length, dropped, cut: Math.max(0, arr.length - cap) };
+}
+
+// { value, cut: [...], dropped: n } — cut is always empty for an archive
+function readAtlas(raw, caps, fieldCaps = LIMITS) {
   if (!isObj(raw)) return null;
   const d = safeKeys(raw);
-  return {
-    tags: normTags(d.tags),
-    places: normPlaces(d.places),
-    routes: normRoutes(d.routes, decodePath),
-    folios: normFolioRefs(d.folios),
-    correspondents: normList(d.correspondents, normCorrespondent, LIMITS.correspondents),
-    settings: normSettings(d.settings),
+  const parts = {
+    tags: gather(d.tags, normTag, caps.tags),
+    places: gather(d.places, normPlace, caps.places, null, fieldCaps),
+    routes: gather(d.routes, normRoute, caps.routes, decodePath, fieldCaps),
+    folios: gather(d.folios, normFolioRef, caps.folios),
+    correspondents: gather(d.correspondents, normCorrespondent, caps.correspondents),
   };
+  const cut = Object.entries(parts).filter(([, p]) => p.cut > 0)
+    .map(([k, p]) => ({ of: k, given: p.given, kept: p.kept.length }));
+  const dropped = Object.values(parts).reduce((a, p) => a + p.dropped, 0);
+  return {
+    value: {
+      tags: parts.tags.kept, places: parts.places.kept, routes: parts.routes.kept,
+      folios: parts.folios.kept, correspondents: parts.correspondents.kept,
+      settings: normSettings(d.settings),
+    },
+    cut, dropped,
+  };
+}
+
+// a stranger's payload: capped hard, silence is fine
+export function normImport(raw) {
+  const r = readAtlas(raw, SHARE_CAPS);
+  return r ? r.value : null;
+}
+
+// a person's own archive coming home: nothing is cut, and anything that could
+// not be read at all is counted so the caller can refuse
+export function readArchive(raw) {
+  return readAtlas(raw, ARCHIVE_CAPS, OWN);
+}
+
+// what this device already holds: never capped, or an atlas would shrink
+// every time it was loaded
+export function readLocal(arr, kind) {
+  const fn = { places: normPlace, routes: normRoute, tags: normTag,
+    folios: normFolioRef, correspondents: normCorrespondent }[kind];
+  const r = gather(arr, fn, Number.MAX_SAFE_INTEGER, kind === 'routes' ? decodePath : null, OWN);
+  return r.kept;
 }
 
 // one row of the newsstand index, which the commons machine writes

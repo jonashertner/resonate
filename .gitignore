@@ -1,0 +1,5 @@
+node_modules/
+test-results/
+playwright-report/
+# the lock file is committed: CI installs from it, and a browser driver that
+# drifts version by version proves nothing

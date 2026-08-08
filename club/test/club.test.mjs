@@ -75,9 +75,9 @@ test('the door opens on a paid session, once', async (t) => {
   assert.equal(j1.until, 2_000_000_000);
 
   const r2 = await worker.fetch(req('/door', { method: 'POST', body: JSON.stringify({ session: 'cs_test_abc' }) }), env);
+  assert.equal(r2.status, 409, 'a session opens the door once, and is not a spare key afterwards');
   const j2 = await r2.json();
-  assert.equal(j2.key, j1.key, 'the same subscription gets the same key');
-  assert.equal(j2.again, true);
+  assert.ok(!j2.key, 'and it never hands the membership back');
 
   globalThis.fetch = async () => new Response(JSON.stringify({ payment_status: 'unpaid', mode: 'subscription' }), { status: 200 });
   const r3 = await worker.fetch(req('/door', { method: 'POST', body: JSON.stringify({ session: 'cs_test_xyz' }) }), env);

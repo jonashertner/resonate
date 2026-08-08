@@ -1,7 +1,9 @@
 # Resonate
 
 A personal atlas of the places that matter to you, and a quiet trust network
-around them. It lives in your browser. No account, no server, no build step.
+around them. It lives in your browser. No account, no build step, and no
+server of ours behind the free atlas; the optional travellers club adds one
+that holds a sealed envelope it cannot read.
 
 Live at [resonate.select](https://resonate.select/).
 
@@ -34,16 +36,20 @@ Then open http://localhost:5178.
 node --test test/*.test.mjs
 ```
 
-They hold the lines a hostile share link must not cross: a rating that cannot
-exceed five stars, tags that are always an array, provenance rebuilt as a
-number, ask and folio links that round-trip, and evidence that escapes what it
-is given. They run on every push, alongside a parse check and a house-style
-check.
+They hold the lines that matter: a hostile share link is capped hard while a
+private archive comes home whole or not at all, a place marked as never
+leaving is in no file a stranger is given, a photo id survives a reload, the
+envelope opens in every dialect it has ever been sealed in, and evidence
+escapes what it is given. They run on every push, alongside a parse check, a
+digest check on the vendored Argon2id, and a house-style check.
 
 ## What it does
 
-**Keep.** Type a place into the command line, drop a photo with a GPS fix on the
-map, shoot one on a phone, or press long on the field. Anything you open is
+**Keep.** Type a place into the command line, paste a link from google, apple
+or openstreetmap and the point is read out of it, share one straight in from
+the phone's own share sheet, mark the middle of the field with `>mark` and name
+it yourself, drop a photo with a GPS fix on the map, or press long on the
+field. Anything you open is
 proposed first: you decide whether to keep it. The map is paper and stays grey;
 colour on it means a mark and the domain it belongs to. Notes can be dictated.
 
@@ -60,8 +66,9 @@ address as a plain list; your device fetches it and ranks it against your own
 atlas here. Nothing about what you hold or open goes back. Offering a folio
 runs the other way and is read by a person first, today through GitHub.
 
-**Take it away.** Export the whole atlas as JSON or GeoJSON, print it or save it
-as a PDF, typeset by city. Erase everything, whenever.
+**Take it away.** Export the whole atlas as a JSON archive carrying its
+photographs, or as GeoJSON, KML, CSV or Markdown typeset by city, or a way as
+GPX. Print it or save it as a PDF. Erase everything, whenever.
 
 ## How it is built
 

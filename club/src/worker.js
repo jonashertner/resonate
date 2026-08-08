@@ -76,11 +76,13 @@ export default {
       const periodEnd = Number(sub.current_period_end)
         || (sub.items?.data ?? []).map(i => Number(i.current_period_end) || 0).reduce((a, b) => Math.max(a, b), 0);
 
-      // one key per subscription, however often the success page reloads
-      const existing = await env.BOX.get(`sub:${sub.id}`);
-      if (existing) {
-        const m = await env.BOX.get(`member:${existing}`, 'json');
-        return json({ key: existing, until: m?.until ?? null, again: true }, 200, h);
+      // A checkout session is a one-time claim, not a spare key. Handing the
+      // membership back to whoever replays the session would make the Stripe
+      // receipt a second credential for the vault, forever. The member holds
+      // the key; that is the only way back in.
+      const claimed = await env.BOX.get(`sub:${sub.id}`);
+      if (claimed) {
+        return json({ error: 'this door has already been opened. the key you were given is the way in' }, 409, h);
       }
 
       const bytes = new Uint8Array(16);

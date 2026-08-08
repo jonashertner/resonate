@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf64';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf64';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf64';
-import * as mapView from './map.js?v=rf64';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf64';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf64';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf64';
-import { exifGPS } from './exif.js?v=rf64';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf64';
-import * as photoStore from './photos.js?v=rf64';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf64';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler } from './store.js?v=rf65';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf65';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf65';
+import * as mapView from './map.js?v=rf65';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash } from './share.js?v=rf65';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf65';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf65';
+import { exifGPS } from './exif.js?v=rf65';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf65';
+import * as photoStore from './photos.js?v=rf65';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf65';
 
 // ---------- helpers ----------
 
@@ -57,6 +57,17 @@ function toast(msg, ms = 2800, act = null) {
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
 
+// An archive that came home short of what it carried says so. A file can be
+// damaged, and a record inside it can be unreadable while the rest is fine:
+// the rest is kept, and the loss is named rather than absorbed. Said after
+// the first sentence has been read, so the good news is not stepped on.
+function sayIfDropped() {
+  const n = store.lastDropped;
+  if (!n) return;
+  setTimeout(() => toast(
+    `${n} record${n === 1 ? '' : 's'} in that file could not be read, and were left out`, 6500), 3200);
+}
+
 // An unparseable date does not throw: toLocaleDateString hands back the
 // string "Invalid Date", which then reads as though the app knew something.
 // It says nothing instead, and every caller must be ready for nothing.
@@ -93,6 +104,13 @@ const state = {
 function allPlaces() { return store.places; }
 // the pool anything may be handed from: a place that never leaves is not in it
 function sharablePlaces() { return store.places.filter(p => !p.private); }
+function sharableRoutes() { return store.routes.filter(r => !r.private).map(r => store.trimWay(r)); }
+// only the domains the outgoing records actually use: an unused tag, or one
+// used solely on a place that never leaves, has no business travelling
+function tagsFor(places, routes) {
+  const used = new Set([...places, ...routes].flatMap(r => r.tags || []));
+  return allTags().filter(t => used.has(t.id));
+}
 function allTags() { return store.tags; }
 function tagById(id) { return allTags().find(t => t.id === id); }
 function placeById(id) { return allPlaces().find(p => p.id === id); }
@@ -207,6 +225,22 @@ async function migratePhotos() {
   return moved;
 }
 
+// A picture whose record is gone is a picture nobody can ever see again, and
+// it still counts against the room. This runs after the undo window has
+// closed, and only deletes what no record anywhere points at.
+async function sweepPhotos() {
+  if (!photoStore.available()) return 0;
+  const held = new Set(store.places.flatMap(p => p.photos || []).filter(photoStore.isId));
+  const kept = (await photoStore.keys()) || [];
+  let gone = 0;
+  for (const id of kept) {
+    if (held.has(id)) continue;
+    await photoStore.del(id);
+    gone += 1;
+  }
+  return gone;
+}
+
 // an img drawn with a photo id gets its picture when the store answers
 function paintPhotos(root) {
   $$('img[data-ph]', root).forEach(async (img) => {
@@ -283,6 +317,30 @@ function askText(question, { value = '', yes = 'keep', no = 'never mind', placeh
 // that the source did not already carry.
 
 const INBOX_KEY = 'resonate.inbox.v1';
+const SHARE_DB = 'resonate-share';
+
+// what the service worker caught and kept, taken and emptied in one act
+function takeSharedFromWorker() {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(SHARE_DB, 1); } catch { return resolve([]); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('shared')) db.createObjectStore('shared', { autoIncrement: true });
+    };
+    req.onsuccess = () => {
+      try {
+        const tx = req.result.transaction('shared', 'readwrite');
+        const store_ = tx.objectStore('shared');
+        const all = store_.getAll();
+        all.onsuccess = () => { store_.clear(); };
+        tx.oncomplete = () => resolve(all.result || []);
+        tx.onabort = tx.onerror = () => resolve([]);
+      } catch { resolve([]); }
+    };
+    req.onerror = () => resolve([]);
+  });
+}
 
 function inboxRead() {
   try { return JSON.parse(localStorage.getItem(INBOX_KEY) || '[]'); } catch { return []; }
@@ -318,17 +376,13 @@ async function receiveShared(raw) {
     return;
   }
 
-  // a name and no point: ask the world where it is, once, on this press
-  if (!navigator.onLine) {
-    inboxWrite([...inboxRead(), { ...found, at: null, arrivedAt: new Date().toISOString() }]);
-    return toast('kept for later. it will be placed when there is a network');
-  }
-  toast('looking for it…');
-  try {
-    const results = await searchGeo(found.name, 1);
-    if (results?.length) return proposePlace({ ...results[0], url: found.url || '' });
-  } catch { /* the world did not answer */ }
-  toast(`nothing found for “${found.name}”. try the command line`);
+  // A name and no point. The page promises that the world is asked only when
+  // a person presses for it, so a share does not quietly become a search:
+  // the name is put in the command line, and the press is theirs.
+  openPalette();
+  palette.input.value = found.name;
+  renderPaletteResults(found.name);
+  toast('press to ask the world where this is');
 }
 
 // what waited for a network, offered when there is one
@@ -1040,12 +1094,21 @@ async function addFromPhoto(file) {
     toast('no location in this photo. add the place first, then attach it');
     return;
   }
-  let dataUri = null;
-  try { dataUri = await compressImage(file); } catch { /* keep the fix anyway */ }
+  // the blob goes where the room is BEFORE the record is written: putting a
+  // three megabyte data url into the small store first fails precisely when
+  // the small store is nearly full, which is when it matters
+  let entry = null;
+  try {
+    const dataUri = await compressImage(file);
+    const blob = photoStore.blobFromDataURL(dataUri);
+    const id = blob ? await photoStore.put(blob) : null;
+    entry = id || dataUri;
+  } catch { /* keep the fix anyway */ }
   const place = store.addPlace(newPlace({
     name: 'From a photograph', lat: fix.lat, lng: fix.lng,
-    status: 'visited', photos: dataUri ? [dataUri] : [],
+    status: 'visited', photos: entry ? [entry] : [],
   }));
+  if (!place && photoStore.isId(entry)) await photoStore.del(entry);
   if (!place) return toast('this browser refused to keep it. the photograph is large; export and free some room');
   store.settings.seeded = true;
   store.saveSettings();
@@ -1116,54 +1179,69 @@ function addPlaceFromResult(r) {
 }
 
 // A point the world has no name for is still a place: a trailhead, a bench, a
-// door with no sign, a spring. When nothing is found, the mark asks what it
-// is rather than filing it as unnamed.
+// door with no sign, a spring. The field is always there and always focused,
+// so the interaction is one shape whether the world answers or not, and a
+// keyboard can finish it. What the world finds only fills a field the person
+// has not started typing into.
+let markRequest = 0;
 async function proposeAdd(lat, lng) {
+  const request = ++markRequest;
   const el = $('#addConfirm');
-  const nameEl = $('#addConfirmName');
   const input = $('#addConfirmInput');
+  const status = $('#addConfirmStatus');
+
   state.pendingAdd = { lat, lng, name: '' };
-  nameEl.hidden = false;
-  nameEl.textContent = 'looking…';
-  input.hidden = true;
   input.value = '';
+  input.dataset.typed = '';
+  status.textContent = 'asking the world what is here';
   $('#addConfirmCoords').textContent = fmtDMS(lat, lng);
   el.hidden = false;
+  input.focus();
 
-  const askForName = () => {
-    if (!state.pendingAdd) return;
-    nameEl.hidden = true;
-    input.hidden = false;
-    input.focus();
-  };
+  let r = null;
+  try { r = await reverseGeo(lat, lng); }
+  catch { /* offline, or the world declined: the point is still good */ }
 
-  try {
-    const r = await reverseGeo(lat, lng);
-    if (!state.pendingAdd || state.pendingAdd.lat !== lat) return;
-    if (r && r.name) {
-      state.pendingAdd.name = r.name;
-      Object.assign(state.pendingAdd, { address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode });
-      nameEl.textContent = r.name;
-      return;
-    }
-    if (r) Object.assign(state.pendingAdd, { city: r.city, country: r.country, countryCode: r.countryCode });
-    askForName();
-  } catch {
-    // offline, or the world declined to answer: the point is still good
-    askForName();
+  // a late answer must never touch a newer mark, or one the person has begun
+  if (request !== markRequest || !state.pendingAdd) return;
+  if (r) {
+    Object.assign(state.pendingAdd, {
+      address: r.address || r.sub || '', city: r.city, country: r.country, countryCode: r.countryCode,
+    });
   }
+  if (r?.name && !input.dataset.typed) {
+    input.value = r.name;
+    status.textContent = 'the world calls it this. change it if you like';
+  } else if (!r?.name) {
+    status.textContent = 'the world has no name for this point';
+  } else {
+    status.textContent = '';
+  }
+}
+
+function cancelAdd() {
+  markRequest += 1;
+  state.pendingAdd = null;
+  $('#addConfirm').hidden = true;
+  mapView.clearPreview?.();
 }
 
 function commitAdd() {
   const p = state.pendingAdd;
   if (!p) return;
-  const typed = $('#addConfirmInput').hidden ? '' : $('#addConfirmInput').value.trim();
-  if (!$('#addConfirmInput').hidden && !typed) { $('#addConfirmInput').focus(); return; }
-  if (typed) p.name = typed;
+  // a place is never kept under a name nobody chose
+  const typed = $('#addConfirmInput').value.trim();
+  if (!typed) {
+    $('#addConfirmStatus').textContent = 'give it a name, and it is yours';
+    $('#addConfirmInput').focus();
+    return;
+  }
+  p.name = typed;
+  markRequest += 1;
   state.pendingAdd = null;
   $('#addConfirm').hidden = true;
   const place = store.addPlace(newPlace({
-    name: p.name || 'a point on the field',
+    name: p.name,
     lat: p.lat, lng: p.lng,
     address: p.address || '', city: p.city || '', country: p.country || '', countryCode: p.countryCode || '',
     status: 'wishlist',
@@ -1240,6 +1318,8 @@ function renderRoutePlate(route) {
     ${route.sample ? '<span class="p-sample">sample</span>' : ''}
     <div class="plate-sub">${esc([route.city, route.country].filter(Boolean).join(' · '))}</div>
     ${route.provenance ? `<div class="plate-prov prov">after <b>${esc(route.provenance.name)}</b></div>` : ''}
+    ${route.private ? '<div class="plate-prov held-back">this way never leaves the device</div>' : ''}
+    ${!route.private && route.trimEnds ? '<div class="plate-prov held-back">handed over without its first and last quarter kilometre</div>' : ''}
 
     <dl class="way-measure mono">
       <div><dt>distance</dt><dd>${esc(fmtKm(m.km))}</dd></div>
@@ -1277,6 +1357,8 @@ function renderRoutePlate(route) {
 
     <div class="plate-acts">
       <button class="word-btn quiet" id="pRouteGpx">export gpx</button>
+      <button class="word-btn quiet" id="pRoutePrivate">${route.private ? 'let it travel again' : 'keep it off every link'}</button>
+      ${route.private ? '' : `<button class="word-btn quiet" id="pRouteTrim">${route.trimEnds ? 'hand over the whole line' : 'hide where it starts and ends'}</button>`}
       <button class="word-btn quiet" id="pRouteRemove">remove</button>
     </div>`;
 
@@ -1306,6 +1388,16 @@ function renderRoutePlate(route) {
   }));
   $('#pRouteNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
   $('#pRouteGpx').addEventListener('click', () => downloadGPX(route));
+  $('#pRoutePrivate').addEventListener('click', () => {
+    const now = !route.private;
+    if (save({ private: now })) renderRoutePlate(routeById(route.id));
+    toast(now ? 'kept off every link, folio and publish' : 'this way may travel again');
+  });
+  $('#pRouteTrim')?.addEventListener('click', () => {
+    const now = !route.trimEnds;
+    if (save({ trimEnds: now })) renderRoutePlate(routeById(route.id));
+    toast(now ? 'its ends stay here. the middle travels' : 'the whole line travels');
+  });
   $('#pRouteRemove').addEventListener('click', async () => {
     const wayFolios = store.folios.filter(f => f.routeIds.includes(route.id)).length;
     if (!await ask(`Remove “${route.name}” from your atlas?${wayFolios ? ` ${wayFolios === 1 ? 'One folio encloses it' : `${wayFolios} folios enclose it`} and will stop saying it.` : ''} A link already sent keeps its copy.`, { yes: 'remove it', no: 'keep it' })) return;
@@ -1970,7 +2062,7 @@ function openFolioShelf() {
 function openFolioComposer({ folioId = null, title = '', dedication = '', places = null, fresh = false, preselect = [], cap = 0 } = {}) {
   const kept = folioId ? store.folioById(folioId) : null;
   const pool = (kept || fresh ? allPlaces() : (places || filteredPlaces())).filter(p => !p.private);
-  const wayPool = allRoutes();
+  const wayPool = allRoutes().filter(r => !r.private);
   const chosen = new Set(
     kept ? kept.placeIds.filter(id => placeById(id))
       : fresh ? preselect.filter(id => placeById(id))
@@ -2069,14 +2161,15 @@ function openFolioComposer({ folioId = null, title = '', dedication = '', places
       if (!t) return;
       const author = await ensureAuthor();
       const sel = selection();
-      const tagIds = new Set(sel.flatMap(p => p.tags));
+      const ways = wraySelection().map(r => store.trimWay(r));
       const url = makeFolioUrl({
         title: t,
         dedication: $('#folDed').value.trim(),
         author,
-        tags: allTags().filter(x => tagIds.has(x.id)),
+        // a folio of ways alone still needs its vocabulary
+        tags: tagsFor(sel, ways),
         places: sel,
-        routes: wraySelection(),
+        routes: ways,
       });
       if (url.length > LINK_HARD_LIMIT) {
         return toast('this folio is too long to travel as one link. fewer places, or print it');
@@ -2479,13 +2572,18 @@ function raiseHandBar(url, what, { title = '', text = '', copied = true } = {}) 
 
 async function shareMap() {
   const places = sharablePlaces();
-  const kept = allPlaces().length - places.length;
+  const routesOut = sharableRoutes();
+  const kept = (allPlaces().length - places.length) + (allRoutes().length - routesOut.length);
   if (!places.length) return toast(kept ? 'every place here is marked as never leaving' : 'nothing to hand over yet');
   const author = await ensureAuthor();
-  const routes = allRoutes();
-  const url = makeShareUrl(allTags(), places, author, routes);
+  const routes = routesOut;
+  const url = makeShareUrl(tagsFor(places, routes), places, author, routes);
   const bytes = url.length;
   const withNotes = places.filter(p => p.note).length;
+  // a place carries the names it passed through: say so, since they are
+  // other people's names travelling on
+  const priorNames = new Set([...places, ...routes].flatMap(r => r.provenance
+    ? [...(r.provenance.chain || []).map(h => h.name), r.provenance.name] : []).filter(Boolean));
   const withLinks = places.filter(p => p.url).length;
   const tooLong = bytes > LINK_HARD_LIMIT;
   const long = bytes > LINK_SOFT_LIMIT;
@@ -2496,10 +2594,11 @@ async function shareMap() {
       <div class="sec-head">what travels</div>
       <ul class="sh-list">
         <li><b>${places.length}</b> place${places.length === 1 ? '' : 's'}: names and coordinates</li>
-        ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: the whole line walked, and its climb</li>` : ''}
+        ${routes.length ? `<li><b>${routes.length}</b> way${routes.length === 1 ? '' : 's'}: a simplified shape, its distance and its climb${routes.some(r => r.trimEnds) ? ', without the ends you hid' : ''}</li>` : ''}
         <li>addresses, cities, countries, tags, been or want to go</li>
         ${withNotes ? `<li><b>${withNotes}</b> note${withNotes === 1 ? '' : 's'}, in full</li>` : ''}
         ${withLinks ? `<li><b>${withLinks}</b> link${withLinks === 1 ? '' : 's'} you saved</li>` : ''}
+        ${priorNames.size ? `<li><b>${priorNames.size}</b> earlier byline${priorNames.size === 1 ? '' : 's'}: the road these places travelled to reach you</li>` : ''}
         <li>${author ? `byline <b>${esc(author)}</b>` : 'no byline'}</li>
       </ul>
       <div class="sec-head">what stays</div>
@@ -2509,7 +2608,7 @@ async function shareMap() {
       </ul>
       <p class="sh-warn">Anyone holding this link can read all of it. There is no undo:
       a link cannot be recalled once it is sent.</p>
-      ${kept ? `<p class="sh-warn">${kept} place${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place that way from its own plate.</p>` : ''}
+      ${kept ? `<p class="sh-warn">${kept} record${kept === 1 ? '' : 's'} marked <b>never leaves</b> stay${kept === 1 ? 's' : ''} behind. Mark any place or way that way from its own plate.</p>` : ''}
       <p class="sh-size mono">${(bytes / 1024).toFixed(1)} kB of link${long ? ' · long enough that some apps will break it' : ''}</p>
     </div>
     <div class="word-row">
@@ -2635,6 +2734,9 @@ function renderSettings() {
   paintKept('#setKept');
 
   $('#snapRestore').addEventListener('click', async () => {
+    // the undo word has long expired by now: anything unreferenced is loose
+    const swept = await sweepPhotos();
+    if (swept) console.info(`${swept} photograph${swept === 1 ? '' : 's'} no record pointed at were let go`);
     const keys = (await photoStore.snapshotKeys()) || [];
     if (!keys.length) return toast('no snapshot has been taken on this device yet');
     const newest = keys.sort().reverse();
@@ -2645,11 +2747,12 @@ function renderSettings() {
     const rec = await photoStore.snapshotGet(newest[i]);
     if (!rec?.json) return toast('that snapshot could not be read');
     let brought = null;
-    try { brought = store.merge(await absorbPhotos(JSON.parse(rec.json))); }
+    try { brought = store.merge(await absorbPhotos(JSON.parse(rec.json)), { own: true }); }
     catch { return toast('that snapshot could not be read'); }
     if (brought === null) return toast('this device refused the merge; nothing changed');
     if (brought) renderAll();
     toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from ${when[i]}` : 'that snapshot holds nothing this atlas lacks');
+    sayIfDropped();
   });
 
   $('#authorName').addEventListener('change', (e) => {
@@ -2678,10 +2781,13 @@ function renderSettings() {
       reader.onload = async () => {
         try {
           const data = await absorbPhotos(JSON.parse(reader.result));
-          const added = store.merge(data);
+          const added = store.merge(data, { own: true });
+          // a refusal is not an empty file, and must never be reported as one
+          if (added === null) return toast('this device refused the merge; nothing changed');
           renderSettings(); renderAll();
           if (store.places.length) mapView.fitAll(store.places);
           toast(added ? `${added} place${added === 1 ? '' : 's'} imported` : 'nothing new to import');
+          sayIfDropped();
         } catch { toast('that file isn’t a resonate export'); }
       };
       reader.readAsText(f);
@@ -2910,10 +3016,11 @@ function renderClub() {
       const nHeld = (atlas.places?.length ?? 0) + (atlas.routes?.length ?? 0);
       const when = wrapper.sealedAt ? fmtDate(wrapper.sealedAt).toLowerCase() : 'before the last';
       if (!await ask(`The envelope before was sealed ${when} and holds ${nHeld} record${nHeld === 1 ? '' : 's'}. Bring home what it holds and this atlas lacks? Nothing here is deleted, and nothing is sealed until you sync.`, { yes: 'bring it home', no: 'leave it' })) return;
-      const brought = store.merge(await absorbPhotos(atlas));
+      const brought = store.merge(await absorbPhotos(atlas), { own: true });
       if (brought === null) return toast('this device refused the merge; nothing changed');
       if (brought) renderAll();
       toast(brought ? `${brought} record${brought === 1 ? '' : 's'} came home from the envelope before` : 'this atlas already holds everything the envelope before does');
+      sayIfDropped();
     } catch { toast('the vault did not answer'); }
     finally { btn.disabled = false; }
   });
@@ -2980,11 +3087,19 @@ async function clubSync() {
         toast('the club returned an older envelope than this device has seen. nothing written; try again shortly');
         return;
       }
-      brought = store.merge(await absorbPhotos(atlas));
+      brought = store.merge(await absorbPhotos(atlas), { own: true });
       if (brought === null) {
         // the device refused the write and rolled back: sealing now would
         // keep the poorer atlas. the promise on this panel holds.
         toast('this device refused the merge, so nothing was sealed over the envelope');
+        return;
+      }
+      // the same rule the photographs get below: an envelope this device read
+      // short of what it holds must never be sealed over the one that holds it
+      if (store.lastDropped) {
+        const n = store.lastDropped;
+        toast(`${n} record${n === 1 ? '' : 's'} in the envelope could not be read here, so nothing was sealed over it`, 7000);
+        if (brought) renderAll();
         return;
       }
       if (brought) renderAll();
@@ -3466,14 +3581,27 @@ function init() {
     }
   }, 2500);
 
-  // something was shared into the app: read it, then wipe the url clean
+  // something was shared into the app. the worker kept it here rather than
+  // putting it on the wire, so it is read out of this device's own store.
   const q = new URLSearchParams(location.search);
-  if (q.has('title') || q.has('text') || q.has('url')) {
-    const shared = { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' };
+  if (q.has('shared') || q.has('title') || q.has('text') || q.has('url')) {
+    // an older install may still arrive by query: honour it, then wipe it
+    const fromQuery = (q.has('title') || q.has('text') || q.has('url'))
+      ? { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' }
+      : null;
     history.replaceState(null, '', location.pathname + location.hash);
-    setTimeout(() => receiveShared(shared), 1200);
+    setTimeout(async () => {
+      const waiting = await takeSharedFromWorker();
+      const item = waiting[0] || fromQuery;
+      if (item) receiveShared(item);
+      for (const rest of waiting.slice(1)) inboxWrite([...inboxRead(), rest]);
+    }, 1000);
   } else {
-    setTimeout(drainInbox, 3000);
+    setTimeout(async () => {
+      const waiting = await takeSharedFromWorker();
+      waiting.forEach(w => inboxWrite([...inboxRead(), w]));
+      drainInbox();
+    }, 3000);
   }
 
   // a member returns from the door with a checkout session on the url.
@@ -3612,12 +3740,15 @@ function init() {
         const reader = new FileReader();
         reader.onload = async () => {
           try {
-            const added = store.merge(await absorbPhotos(JSON.parse(reader.result)));
+            const added = store.merge(await absorbPhotos(JSON.parse(reader.result)), { own: true });
+            // a refusal is not an empty file, and must never be reported as one
+            if (added === null) return toast('this device refused the merge; nothing changed');
             if (!added) return toast('that file brought nothing in');
             done(() => {
               renderAll();
               if (store.places.length) mapView.fitAll(store.places);
               toast(`welcome back. ${added} place${added === 1 ? '' : 's'} are home`);
+              sayIfDropped();
             });
           } catch { toast('that file isn’t a resonate export'); }
         };
@@ -3625,6 +3756,7 @@ function init() {
       };
       file.click();
     });
+    $('#thKeys').addEventListener('click', () => openSurface('keysOverlay', renderKeys));
     $('#thHow').addEventListener('click', () => {
       // reading is not choosing: the door reopens when the reading is done
       dropDialog(th);
@@ -3693,7 +3825,7 @@ function init() {
   // tapping the open field puts the plate away
   mapView.getMap().on('click', () => {
     if (!$('#plate').hidden) closeSurface('plate');
-    if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; }
+    if (state.pendingAdd) cancelAdd();
   });
 
   // command line
@@ -3737,15 +3869,13 @@ function init() {
   }));
 
   // add-confirm
-  $('#addConfirm').addEventListener('click', (e) => {
-    // the field inside is for typing, not for committing
-    if (e.target.id === 'addConfirmInput') return;
-    commitAdd();
+  // a form submits: by its button, by enter, by whatever a person's device does
+  $('#addConfirm').addEventListener('submit', (e) => { e.preventDefault(); commitAdd(); });
+  $('#addConfirmCancel').addEventListener('click', cancelAdd);
+  $('#addConfirm').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cancelAdd(); }
   });
-  $('#addConfirmInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); commitAdd(); }
-    if (e.key === 'Escape') { e.preventDefault(); state.pendingAdd = null; $('#addConfirm').hidden = true; }
-  });
+  $('#addConfirmInput').addEventListener('input', (e) => { e.target.dataset.typed = '1'; });
 
   // photo capture + drop
   $('#shootFile').addEventListener('change', (e) => {
@@ -3806,6 +3936,12 @@ function init() {
 
   // keyboard
   document.addEventListener('keydown', (e) => {
+    // while the film stands, no key opens anything behind it. the film keeps
+    // enter, escape and space for itself; without this the others would open a
+    // surface nobody can see and hand it a keyboard nobody can use. the test is
+    // written the long way round on purpose: no film means no bar, never a
+    // keyboard that does nothing
+    if ($('#intro')?.hidden === false) return;
     const inField = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) ||
       document.activeElement?.isContentEditable;
     // the command line is a shortcut like any other: it may not open behind
@@ -3815,7 +3951,7 @@ function init() {
       e.preventDefault(); togglePalette(); return;
     }
     if (e.key === 'Escape') {
-      if (state.pendingAdd) { state.pendingAdd = null; $('#addConfirm').hidden = true; return; }
+      if (state.pendingAdd) { cancelAdd(); return; }
       if (state.visiting) { leaveVisit(); return; }
       if (!$('#reportOverlay').hidden) { dropDialog($('#reportOverlay')); applyWorldState(); clearShareHash(); return; }
       const th = $('#threshold');
@@ -3840,7 +3976,9 @@ function init() {
       0: () => mapView.fitAll(filteredPlaces()),
       t: () => setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark'),
       g: VERBS.locate.run, s: shareMap,
-      '?': () => openSurface('keysOverlay', renderKeys),
+      // the mark in the corner and this key are the same question, so they
+      // must be the same answer
+      '?': () => { closeSurface('indexOverlay'); closeSurface('howOverlay'); showOpening(); },
     };
     if (keys[e.key]) { e.preventDefault(); keys[e.key](); return; }
     if (/^[1-9]$/.test(e.key)) {

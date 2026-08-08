@@ -5,8 +5,12 @@
 // bytes it cannot read, and if the phrase is lost, the envelope is lost with
 // it. That sentence is the price of the privacy, and it is said out loud.
 //
-// Sealing: PBKDF2-SHA256, 310000 rounds, over a 16-byte salt, into AES-GCM
-// with a 12-byte nonce. The envelope is  rsnt1 | salt | iv | ciphertext.
+// Sealing: Argon2id at 64 MiB, three passes, one lane, into AES-GCM-256 with
+// a 12-byte nonce, over a 16-byte salt. PBKDF2-SHA256 at 600000 iterations is
+// the fallback where a device cannot run Argon2id. The envelope is
+//   rsnt2 | kdfId | params | kid8 | salt | iv | ciphertext
+// and the older rsnt1 | salt | iv | ciphertext is read forever, written never.
+// The exact bytes are specified in club/SPEC.md, published at /SPEC.md.
 
 // where the club stands. empty until the door is deployed; a value in
 // settings (clubUrl) overrides, which is also how the mock is reached.

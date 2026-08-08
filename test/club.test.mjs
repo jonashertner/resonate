@@ -1,9 +1,20 @@
 // The envelope: sealed here, opened here, and never mistaken for anything else.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// The page loads this library with a script tag, and the library hangs itself
+// on the global. Node reads the same file as a module or as commonjs depending
+// on what package.json says, so take whichever of the three actually answers.
+// Guessing wrong is silent: every seal falls back to pbkdf2 and the argon2
+// tests pass on the wrong dialect.
 const hw = await import('../vendor/argon2/argon2.umd.min.js');
-globalThis.hashwasm = hw.default ?? hw;
+globalThis.hashwasm = [hw.default, hw, globalThis.hashwasm]
+  .find(x => typeof x?.argon2id === 'function');
 import { seal, unseal, burnPatch, syncGuard } from '../js/club.js';
+
+test('the library under these tests is the argon2 the page gets', () => {
+  assert.equal(typeof globalThis.hashwasm?.argon2id, 'function',
+    'without it every assertion below quietly tests the fallback instead');
+});
 
 test('an envelope round-trips through its phrase', async () => {
   const text = JSON.stringify({ places: [{ name: 'Café Sabarsky', lat: 40.78, lng: -73.96 }] });

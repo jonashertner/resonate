@@ -99,6 +99,7 @@ export async function put(blob) {
 
 export function get(id) { return act(PHOTOS, 'readonly', s => s.get(id)); }
 export function del(id) { return act(PHOTOS, 'readwrite', s => s.delete(id)); }
+export function keys() { return act(PHOTOS, 'readonly', s => s.getAllKeys()); }
 
 // object urls, made once per id and revoked together when the atlas is erased
 const urls = new Map();

@@ -39,8 +39,30 @@ jobs:
             exit 1
           fi
 
+  # the same revision, driven in three engines. it runs beside the job above
+  # rather than after it, so honesty costs minutes and not a deploy window
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: the app, driven in three engines
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: what-the-browser-saw
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   deploy:
-    needs: test
+    needs: [test, browser]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -54,6 +76,10 @@ jobs:
                 --exclude '_site' --exclude 'test' --exclude 'node_modules' \
                 --exclude 'club' \
                 --exclude 'tools' \
+                --exclude '.gitignore' \
+                --exclude 'package.json' --exclude 'package-lock.json' \
+                --exclude 'playwright.config.mjs' \
+                --exclude 'playwright-report' --exclude 'test-results' \
                 ./ _site/
           cp club/SPEC.md _site/SPEC.md
       - uses: actions/upload-pages-artifact@v3
@@ -98,7 +124,8 @@ jobs:
           done
       - name: the repository's machinery is not published
         run: |
-          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json tools/dev.mjs club/src/worker.js; do
+          for p in .git/config .github/workflows/pages.yml test/atlas.test.mjs .claude/launch.json tools/dev.mjs club/src/worker.js \
+                   package.json package-lock.json playwright.config.mjs test/browser/atlas.spec.mjs; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://resonate.select/$p")
             echo "$p $code"
             [ "$code" = 404 ] || exit 1
