@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf68';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf68';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf68';
-import * as mapView from './map.js?v=rf68';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf68';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf68';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf68';
-import { exifGPS } from './exif.js?v=rf68';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf68';
-import * as photoStore from './photos.js?v=rf68';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf68';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf69';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf69';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf69';
+import * as mapView from './map.js?v=rf69';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf69';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf69';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf69';
+import { exifGPS } from './exif.js?v=rf69';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf69';
+import * as photoStore from './photos.js?v=rf69';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf69';
 
 // ---------- helpers ----------
 
@@ -1075,7 +1075,6 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   const photos = (place.photos || []).map((src, i) => `
     <figure class="fig"><img ${photoStore.isId(src) ? `data-ph="${esc(src)}"` : `src="${esc(src)}"`} alt="Photograph ${i + 1} of ${esc(place.name)}">
       ${ro ? '' : `<button class="ph-x" data-phx="${i}">remove</button>`}</figure>`).join('');
-  const canDictate = !ro && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
   wrap.innerHTML = `
     <div class="plate-eyebrow">
@@ -1107,7 +1106,7 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
       </div>
 
       <div class="plate-sec">
-        <div class="plate-sec-head"><span>notes</span>${canDictate ? '<button class="dictate" id="pDictate">◉ dictate</button>' : ''}</div>
+        <div class="plate-sec-head"><span>notes</span></div>
         <textarea class="note-input" id="pNote" aria-label="Your note on this place" placeholder="What makes it worth remembering…">${esc(place.note)}</textarea>
       </div>
 
@@ -1229,7 +1228,6 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
   $('#pNote').addEventListener('input', debounce((e) => save({ note: e.target.value }), 400));
   $('#pUrl').addEventListener('change', (e) => { save({ url: e.target.value.trim() }); renderPlate(place); });
 
-  $('#pDictate')?.addEventListener('click', () => dictateInto($('#pNote'), $('#pDictate'), (text) => save({ note: text })));
 
   $('#pAddPhoto').addEventListener('click', () => {
     const file = $('#photoFile');
@@ -1296,36 +1294,6 @@ function renderPlate(place, { edit = false, foreign = null } = {}) {
     sel.removeAllRanges();
     sel.addRange(range);
   }
-}
-
-// ---------- dictation ----------
-
-let recog = null;
-function dictateInto(textarea, btn, onFinal) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return toast('dictation is not available in this browser');
-  if (recog) { recog.stop(); return; }
-  recog = new SR();
-  recog.lang = navigator.language || 'en-US';
-  recog.interimResults = true;
-  recog.continuous = true;
-  const base = textarea.value ? textarea.value.replace(/\s*$/, '') + ' ' : '';
-  btn.classList.add('listening');
-  btn.textContent = '◉ listening…';
-  recog.onresult = (e) => {
-    let text = '';
-    for (const res of e.results) text += res[0].transcript;
-    textarea.value = base + text.trim();
-  };
-  const stop = () => {
-    btn.classList.remove('listening');
-    btn.textContent = '◉ dictate';
-    recog = null;
-    onFinal(textarea.value);
-  };
-  recog.onend = stop;
-  recog.onerror = () => { stop(); toast('dictation stopped'); };
-  recog.start();
 }
 
 // ---------- image handling ----------

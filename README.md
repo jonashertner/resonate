@@ -51,7 +51,7 @@ the phone's own share sheet, mark the middle of the field with `>mark` and name
 it yourself, drop a photo with a GPS fix on the map, or press long on the
 field. Anything you open is
 proposed first: you decide whether to keep it. The map is paper and stays grey;
-colour on it means a mark and the domain it belongs to. Notes can be dictated.
+colour on it means a mark and the domain it belongs to.
 
 **Find.** One command line answers with your own places, your voices, the
 newsstand, and, when you ask it to, the world. Prefixes: `#tag`, `>verb`,
