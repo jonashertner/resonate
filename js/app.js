@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf74';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf74';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf74';
-import * as mapView from './map.js?v=rf74';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf74';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf74';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf74';
-import { exifGPS } from './exif.js?v=rf74';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf74';
-import * as photoStore from './photos.js?v=rf74';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf74';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf75';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf75';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf75';
+import * as mapView from './map.js?v=rf75';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf75';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf75';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf75';
+import { exifGPS } from './exif.js?v=rf75';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf75';
+import * as photoStore from './photos.js?v=rf75';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf75';
 
 // ---------- helpers ----------
 
@@ -3781,6 +3781,63 @@ function renderPaletteResults(q) {
 }
 
 
+// ---------- the name walks to its corner ----------
+//
+// It used to get there by transitioning left, top, font-size and letter
+// spacing at once. Every one of those makes the browser lay the page out
+// again, and two of them make it re-shape a variable typeface, sixty times a
+// second, over a live map, under four text shadows. It arrived. It did not
+// glide.
+//
+// So it is measured instead: where the word is now, where it belongs, and
+// the difference played back as one transform, which is the only thing a
+// compositor can carry by itself. The origin is set to the word's own centre
+// so the scale happens about the letters rather than about the button's box,
+// and the scale is taken from the word's width, because the tracking is tight
+// when the name is large and open when it is small: the two states are not a
+// pure scale of one another, and width is what the eye follows.
+// A word crossing the whole field wants to be followed, not flung. The house
+// easing is a hard ease-out, which is right for a panel arriving from just
+// off screen and wrong here: it put the name eighty five percent of the way
+// home in the first third, so the eye caught a blur and then a long settle.
+// This leaves gently, spends the middle of the journey actually in the
+// middle, and comes to rest without a bump.
+const NAME_WALK_MS = 1400;
+const NAME_WALK_EASE = 'cubic-bezier(0.5, 0, 0.15, 1)';
+
+function walkNameHome() {
+  const el = $('#fmIndex');
+  const word = $('.fm-word', el);
+  const hint = $('#fmHint');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // the hint belongs to the middle of the field and does not travel
+  if (hint) hint.hidden = true;
+  const from = word?.getBoundingClientRect();
+
+  document.body.classList.remove('hero');
+
+  if (still || !from || !word || !el.animate) return;
+  const to = word.getBoundingClientRect();
+  const scale = from.width / to.width;
+  if (!Number.isFinite(scale) || scale <= 0) return;
+
+  const dx = (from.left + from.width / 2) - (to.left + to.width / 2);
+  const dy = (from.top + from.height / 2) - (to.top + to.height / 2);
+  const box = el.getBoundingClientRect();
+  el.style.transformOrigin =
+    `${to.left + to.width / 2 - box.left}px ${to.top + to.height / 2 - box.top}px`;
+
+  const walk = el.animate([
+    { transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+    { transform: 'translate(0, 0) scale(1)' },
+  ], {
+    duration: NAME_WALK_MS,
+    easing: NAME_WALK_EASE,
+  });
+  walk.finished.catch(() => {}).then(() => { el.style.transformOrigin = ''; });
+}
+
 // ---------- the first evening ----------
 
 const DISSOLVE_S = 1.4;   // matches #intro.dissolve in the stylesheet
@@ -4110,8 +4167,7 @@ function init() {
 
   setHeroExit(() => {
     if (!document.body.classList.contains('hero')) return;
-    document.body.classList.remove('hero');
-    $('#fmHint').hidden = true;
+    walkNameHome();
   });
   if (!location.hash.startsWith('#m=')) {
     document.body.classList.add('hero');

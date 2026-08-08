@@ -2,8 +2,8 @@
 
 /* global LZString */
 
-import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf74';
-import { encodePath, simplify } from './route.js?v=rf74';
+import { normPayload, SCHEMA_VERSION } from './schema.js?v=rf75';
+import { encodePath, simplify } from './route.js?v=rf75';
 
 function pack(payload) {
   return `${location.origin}${location.pathname}#m=${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;

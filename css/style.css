@@ -230,12 +230,11 @@ body.dropping::after {
   font-variation-settings: 'wght' 600;
   padding: 8px 10px; margin: -8px -10px;
   transform: translate(0, 0);
-  transition:
-    font-size 1.15s var(--e-enter),
-    left 1.15s var(--e-enter),
-    top 1.15s var(--e-enter),
-    transform 1.15s var(--e-enter),
-    letter-spacing 1.15s var(--e-enter);
+  /* the walk from the middle of the field to this corner is measured and
+     played as one transform in walkNameHome(). there is deliberately no
+     transition on left, top, font-size or letter spacing here: transitioning
+     those was the old way, and it laid the page out and re-shaped the
+     typeface on every frame of it. */
 }
 .fm-nw:hover { letter-spacing: 0.42em; }
 .fm-word {
@@ -258,7 +257,11 @@ body.dropping::after {
 .fm-count {
   margin-left: 0.9em; font-size: 10.5px; letter-spacing: 0.1em;
   color: var(--ink-2); text-transform: none;
-  transition: font-size 1.15s var(--e-enter), opacity 0.5s var(--e-enter) 0.55s;
+  /* the delay is the length of the name's walk: the tally arrives after the
+     word has come to rest, not over its shoulder on the way. no font-size
+     transition, because the walk scales the whole mark and the two would be
+     animating the same thing against each other. */
+  transition: opacity 0.45s var(--e-enter) 1.4s;
 }
 
 /* the start: the name stands in the middle of the field, and wanders to
