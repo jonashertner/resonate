@@ -401,10 +401,35 @@ test.describe('the evening', () => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await seed(page);
     await page.goto('/');
-    // the evening opens: whether the film itself has arrived yet or the drawn
-    // scene is standing in for it is the asset's business, and both are the
-    // same promise to the person watching
     await expect(page.locator('#intro')).toBeVisible({ timeout: 5000 });
+
+    // It has to actually roll, on any engine that can decode it. An earlier
+    // version of this test asked only whether the overlay appeared, and passed
+    // while the film sat frozen on its first frame: `autoplay` had been taken
+    // off the element, so the play() behind it was refused by the browser's
+    // autoplay policy, and the catch that should have fallen back to the drawn
+    // scene saw currentTime just above zero and let it stand. Nobody watching
+    // would have called that a film.
+    //
+    // Playwright's chromium is the open source build and carries no h264
+    // decoder, so there the drawn scene stands in, which is the designed
+    // answer for any browser that cannot play the file. Both are checked.
+    const canDecode = await page.evaluate(() =>
+      !!document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"'));
+
+    if (canDecode) {
+      await expect.poll(
+        () => page.evaluate(() => document.querySelector('#introVideo').currentTime),
+        { message: 'the film never rolled: it stood on its first frame', timeout: 6000 },
+      ).toBeGreaterThan(0.4);
+    } else {
+      // no film to be had: the drawn scene must be carrying the evening, and
+      // the overlay must not be sitting on a dead video element
+      const standingIn = await page.evaluate(() =>
+        !document.querySelector('#intro').classList.contains('has-video'));
+      expect(standingIn, 'no decoder, and no drawn scene either: the evening was blank').toBe(true);
+    }
+
     await expect(page.locator('#intro')).toBeHidden({ timeout: 15000 });
   });
 });

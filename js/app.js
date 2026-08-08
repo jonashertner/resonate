@@ -3,17 +3,17 @@
 // summoned posters. One field, one ink — and one counter-ink for
 // the voices of other people.
 
-import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf73';
-import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf73';
-import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf73';
-import * as mapView from './map.js?v=rf73';
-import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf73';
-import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf73';
-import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf73';
-import { exifGPS } from './exif.js?v=rf73';
-import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf73';
-import * as photoStore from './photos.js?v=rf73';
-import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf73';
+import { store, newPlace, newTag, newRoute, newFolio, demoData, baseTags, TAG_STATIONS, setWriteFailedHandler, unreadableKeys, releaseUnreadable } from './store.js?v=rf74';
+import { parseGPX, simplify, measure, profile, encodePath, fmtKm, fmtHours, effort } from './route.js?v=rf74';
+import { searchGeo, reverseGeo, fmtDMS, haversineKm, fmtDistance } from './geocode.js?v=rf74';
+import * as mapView from './map.js?v=rf74';
+import { makeShareUrl, makeFolioUrl, makeAskUrl, parseShareHash, clearShareHash, buildDisclosure, disclosureCounts, packDisclosure } from './share.js?v=rf74';
+import { normPayload, normIndex, SCHEMA_VERSION } from './schema.js?v=rf74';
+import { resonance, verdict, evidenceLines, grounds } from './kinship.js?v=rf74';
+import { exifGPS } from './exif.js?v=rf74';
+import { seal, unseal, makeClient, burnPatch, syncGuard, CLUB_URL, JOIN_URL } from './club.js?v=rf74';
+import * as photoStore from './photos.js?v=rf74';
+import { readShared, coordsIn, alreadyHeld } from './capture.js?v=rf74';
 
 // ---------- helpers ----------
 
